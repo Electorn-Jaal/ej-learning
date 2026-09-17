@@ -14,6 +14,7 @@
  */
 import { sql } from "drizzle-orm";
 import {
+  classTeachersInCore,
   classesInCore,
   db,
   gradeLevelsInCore,
@@ -146,9 +147,18 @@ try {
         .values({ userId: user.id, role: account.role });
 
       if (account.role === "TEACHER") {
-        await tx.insert(teachersInCore).values({
-          userId: user.id,
-          teacherCode: "T-001",
+        const [teacher] = await tx
+          .insert(teachersInCore)
+          .values({
+            userId: user.id,
+            teacherCode: "T-001",
+            subjectId: subject.id,
+          })
+          .returning({ id: teachersInCore.id });
+
+        await tx.insert(classTeachersInCore).values({
+          classId: klass.id,
+          teacherId: teacher.id,
           subjectId: subject.id,
         });
       }

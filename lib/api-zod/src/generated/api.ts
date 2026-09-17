@@ -470,3 +470,49 @@ export const SimulateWorkspaceIntegrationResponse = zod.object({
 })
 
 
+/**
+ * On success the session token is returned as an httpOnly cookie, never in the body. A wrong password and an unknown username give the same 401 so neither can be probed.
+ * @summary Sign in and start a session
+ */
+
+
+
+
+export const LoginBody = zod.object({
+  "username": zod.string().min(1),
+  "password": zod.string().min(1)
+})
+
+export const LoginResponse = zod.object({
+  "user": zod.object({
+  "id": zod.number().int(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "studentId": zod.number().int().nullable(),
+  "teacherId": zod.number().int().nullable(),
+  "roles": zod.array(zod.enum(['STUDENT', 'TEACHER', 'ADMIN']))
+}).describe('Roles are a list: one account can hold TEACHER and ADMIN at once. studentId and teacherId are the linked core.students / core.teachers rows, null when the account has none.\n')
+})
+
+
+/**
+ * @summary Revoke the current session
+ */
+export const LogoutResponse = zod.void()
+
+
+/**
+ * @summary The signed-in user
+ */
+export const GetSessionResponse = zod.object({
+  "user": zod.object({
+  "id": zod.number().int(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "studentId": zod.number().int().nullable(),
+  "teacherId": zod.number().int().nullable(),
+  "roles": zod.array(zod.enum(['STUDENT', 'TEACHER', 'ADMIN']))
+}).describe('Roles are a list: one account can hold TEACHER and ADMIN at once. studentId and teacherId are the linked core.students / core.teachers rows, null when the account has none.\n')
+})
+
+

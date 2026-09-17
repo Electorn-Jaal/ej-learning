@@ -1,4 +1,9 @@
 import { Router, type IRouter } from "express";
+import {
+  GetSessionResponse,
+  LoginBody,
+  LoginResponse,
+} from "@workspace/api-zod";
 import { badRequest } from "../../shared/http-error";
 import { requireAuth } from "../../middlewares/auth";
 import { SESSION_COOKIE, login, logout } from "./service";
@@ -19,14 +24,14 @@ const cookieOptions = (expiresAt?: Date) => ({
 
 router.post("/auth/login", async (req, res, next) => {
   try {
-    const { username, password } = req.body ?? {};
-    if (typeof username !== "string" || typeof password !== "string") {
+    const parsed = LoginBody.safeParse(req.body);
+    if (!parsed.success) {
       throw badRequest("Нэвтрэх нэр, нууц үгээ оруулна уу.", "MISSING_FIELDS");
     }
 
-    const session = await login(username.trim(), password);
+    const session = await login(parsed.data.username.trim(), parsed.data.password);
     res.cookie(SESSION_COOKIE, session.token, cookieOptions(session.expiresAt));
-    res.json({ user: session.user });
+    res.json(LoginResponse.parse({ user: session.user }));
   } catch (error) {
     next(error);
   }
@@ -44,7 +49,7 @@ router.post("/auth/logout", async (req, res, next) => {
 });
 
 router.get("/auth/me", requireAuth, (req, res) => {
-  res.json({ user: req.user });
+  res.json(GetSessionResponse.parse({ user: req.user }));
 });
 
 export default router;

@@ -5,6 +5,45 @@
  * EJ Learning adaptive learning API
  * OpenAPI spec version: 0.1.0
  */
+export type UserRole = typeof UserRole[keyof typeof UserRole];
+
+
+export const UserRole = {
+  STUDENT: 'STUDENT',
+  TEACHER: 'TEACHER',
+  ADMIN: 'ADMIN',
+} as const;
+
+/**
+ * Roles are a list: one account can hold TEACHER and ADMIN at once. studentId and teacherId are the linked core.students / core.teachers rows, null when the account has none.
+ */
+export interface AuthenticatedUser {
+  id: number;
+  username: string;
+  displayName: string;
+  /** @nullable */
+  studentId: number | null;
+  /** @nullable */
+  teacherId: number | null;
+  roles: UserRole[];
+}
+
+export interface SessionEnvelope {
+  user: AuthenticatedUser;
+}
+
+export interface LoginInput {
+  /** @minLength 1 */
+  username: string;
+  /** @minLength 1 */
+  password: string;
+}
+
+export interface ApiError {
+  error: string;
+  code?: string;
+}
+
 export interface HealthStatus {
   status: string;
 }
