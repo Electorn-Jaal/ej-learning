@@ -17,13 +17,6 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
-let _previewStudentId: string | null = null;
-
-/** Local read-only preview selection. This is not an authentication credential. */
-export function setPreviewStudentId(id: string | null): void {
-  _previewStudentId = id;
-}
-
 /**
  * Set a base URL that is prepended to every relative request URL
  * (i.e. paths that start with `/`).
@@ -342,7 +335,6 @@ export async function customFetch<T = unknown>(
   }
 
   const headers = mergeHeaders(isRequest(input) ? input.headers : undefined, headersInit);
-  if (_previewStudentId) headers.set('X-Preview-Student-Id', _previewStudentId);
 
   if (
     typeof init.body === "string" &&
@@ -367,7 +359,15 @@ export async function customFetch<T = unknown>(
 
   const requestInfo = { method, url: resolveUrl(input) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  // Explicit, because the session cookie is httpOnly: the browser attaching it
+  // is the whole authentication mechanism, and a caller passing its own init
+  // must not silently drop it.
+  const response = await fetch(input, {
+    credentials: "same-origin",
+    ...init,
+    method,
+    headers,
+  });
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);
