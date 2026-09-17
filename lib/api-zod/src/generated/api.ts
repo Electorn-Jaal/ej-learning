@@ -884,6 +884,43 @@ export const GetAdminMaterialsResponse = zod.array(GetAdminMaterialsResponseItem
 
 
 /**
+ * The bytes are checked, not the filename: a file is accepted because it starts with %PDF-. Versions are added rather than replaced, because outline rows and lesson alignments were made against the page numbers of the file already stored. The page offset is set separately, since it is nearly always discovered after looking at the book.
+ * @summary Upload a textbook PDF as a new version of this material
+ */
+export const UploadMaterialFileParams = zod.object({
+  "materialId": zod.coerce.number().int(),
+  "filename": zod.coerce.string().describe('The original name, recorded as a column. It never becomes part of a path on disk - the stored file is named from the material\'s own source_code.\n')
+})
+
+export const UploadMaterialFileResponse = zod.object({
+  "materialId": zod.number().int(),
+  "versionNo": zod.number().int(),
+  "filename": zod.string(),
+  "sizeBytes": zod.number().int(),
+  "totalPages": zod.number().int().nullable().describe('Counted from the file, approximate. The outline is what page numbers are read from.'),
+  "pageOffset": zod.number().int()
+})
+
+
+/**
+ * @summary Correct the gap between printed and file page numbers
+ */
+export const SetMaterialPageOffsetParams = zod.object({
+  "materialId": zod.coerce.number().int()
+})
+
+export const SetMaterialPageOffsetBody = zod.object({
+  "materialId": zod.number().int(),
+  "pageOffset": zod.number().int()
+})
+
+export const SetMaterialPageOffsetResponse = zod.object({
+  "materialId": zod.number().int(),
+  "pageOffset": zod.number().int()
+})
+
+
+/**
  * @summary A material's sections and page mapping
  */
 export const GetMaterialOutlineParams = zod.object({

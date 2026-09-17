@@ -81,11 +81,23 @@ export const outlineSections = (materialId: number) =>
     [materialId],
   );
 
+/**
+ * Moves the page offset on the newest version only.
+ *
+ * The offset describes one scan: a re-scanned book has its own front matter
+ * and its own gap between printed and file pages. Setting it across every
+ * version would make an older file's page references wrong the moment a new
+ * one is uploaded.
+ *
+ * Returns false when there is no file to correct.
+ */
 export async function setPageOffset(materialId: number, pageOffset: number) {
-  await db
-    .update(sourceVersionsInContent)
-    .set({ pageOffset })
-    .where(eq(sourceVersionsInContent.sourceMaterialId, materialId));
+  const result = await db.execute(sql`
+    UPDATE content.source_versions SET page_offset = ${pageOffset}
+    WHERE source_material_id = ${materialId}
+      AND version_no = (SELECT max(version_no) FROM content.source_versions
+                        WHERE source_material_id = ${materialId})`);
+  return (result.rowCount ?? 0) > 0;
 }
 
 export type OutlineInput = {
@@ -162,3 +174,60 @@ export const outlineCodeExists = (materialId: number, code: string) =>
       ),
     )
     .limit(1);
+
+/** The material already holding this exact file, if any. */
+export const materialWithChecksum = (checksum: string) =>
+  readRows<{ sourceCode: string; title: string | null; versionNo: number }>(
+    `SELECT sm.source_code AS "sourceCode", sm.title, sv.version_no::int AS "versionNo"
+     FROM content.source_versions sv
+     JOIN content.source_materials sm ON sm.id = sv.source_material_id
+     WHERE sv.checksum_sha256 = $1
+     LIMIT 1`,
+    [checksum],
+  );
+
+/** The identity a stored file is named after, and where the next version sits. */
+export const materialForUpload = (materialId: number) =>
+  readRows<{ sourceCode: string; title: string | null; nextVersion: number }>(
+    `SELECT sm.source_code AS "sourceCode", sm.title,
+       COALESCE(max(sv.version_no), 0)::int + 1 AS "nextVersion"
+     FROM content.source_materials sm
+     LEFT JOIN content.source_versions sv ON sv.source_material_id = sm.id
+     WHERE sm.id = $1::bigint
+     GROUP BY sm.source_code, sm.title`,
+    [materialId],
+  );
+
+/**
+ * Records an uploaded file as a new version.
+ *
+ * Versions are added, never replaced. A book that has been re-scanned leaves
+ * the old file in place because outline rows and lesson alignments were made
+ * against its page numbers, and overwriting would silently move every page
+ * reference in the database.
+ */
+export async function insertSourceVersion(row: {
+  materialId: number;
+  versionNo: number;
+  storageKey: string;
+  originalFilename: string;
+  sizeBytes: number;
+  checksum: string;
+  pageOffset: number;
+  totalPages: number | null;
+}) {
+  await db.execute(sql`
+    INSERT INTO content.source_versions
+      (source_material_id, version_no, original_filename, storage_key, mime_type,
+       file_size_bytes, checksum_sha256, status, page_offset)
+    VALUES (${row.materialId}, ${row.versionNo}, ${row.originalFilename},
+      ${row.storageKey}, 'application/pdf', ${row.sizeBytes}, ${row.checksum},
+      'APPROVED', ${row.pageOffset})`);
+
+  if (row.totalPages !== null) {
+    await db.execute(sql`
+      UPDATE content.source_materials
+      SET total_pages = ${row.totalPages}, updated_at = now()
+      WHERE id = ${row.materialId}`);
+  }
+}
