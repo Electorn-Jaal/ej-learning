@@ -41,7 +41,11 @@ export const gradeLevelsInCore = core.table("grade_levels", {
 	nameMn: varchar("name_mn", { length: 50 }).notNull(),
 }, (table) => [
 	unique("grade_levels_grade_number_key").on(table.gradeNumber),
-	check("grade_levels_grade_number_check", sql`(grade_number >= 1) AND (grade_number <= 11)`),
+	// Mongolian general education runs to 12. The original bound of 11 came from
+	// the first draft of the requirements and would have refused a whole year
+	// group - the imported workbook already contained a 12А that no import
+	// could have accepted.
+	check("grade_levels_grade_number_check", sql`(grade_number >= 1) AND (grade_number <= 12)`),
 ]);
 
 export const sourceMaterialsInContent = content.table("source_materials", {
@@ -450,6 +454,12 @@ export const classesInCore = core.table("classes", {
 	nameMn: varchar("name_mn", { length: 100 }).notNull(),
 	schoolYear: varchar("school_year", { length: 20 }).notNull(),
 	isActive: boolean("is_active").default(true).notNull(),
+	// Whether this row describes a real person or one invented to make the
+	// system demonstrable. Mock rows are going to sit beside real ones for a
+	// while, and a demo that cannot be told from a register is how invented
+	// children end up in a report. Everything imported or entered is REAL
+	// unless something says otherwise.
+	dataOrigin: varchar("data_origin", { length: 10 }).default('REAL').notNull(),
 }, (table) => [
 	foreignKey({
 			columns: [table.gradeLevelId],
@@ -457,6 +467,8 @@ export const classesInCore = core.table("classes", {
 			name: "classes_grade_level_id_fkey"
 		}),
 	unique("classes_class_code_key").on(table.classCode),
+	check("classes_data_origin_check",
+		sql`(data_origin)::text = ANY ((ARRAY['REAL'::character varying, 'MOCK'::character varying])::text[])`),
 ]);
 
 export const studentsInCore = core.table("students", {
@@ -471,8 +483,16 @@ export const studentsInCore = core.table("students", {
 	displayName: varchar("display_name", { length: 300 }).notNull(),
 	isActive: boolean("is_active").default(true).notNull(),
 	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	// Whether this row describes a real person or one invented to make the
+	// system demonstrable. Mock rows are going to sit beside real ones for a
+	// while, and a demo that cannot be told from a register is how invented
+	// children end up in a report. Everything imported or entered is REAL
+	// unless something says otherwise.
+	dataOrigin: varchar("data_origin", { length: 10 }).default('REAL').notNull(),
 }, (table) => [
 	unique("students_student_code_key").on(table.studentCode),
+	check("students_data_origin_check",
+		sql`(data_origin)::text = ANY ((ARRAY['REAL'::character varying, 'MOCK'::character varying])::text[])`),
 ]);
 
 export const diagnosticItemsInAssessment = assessment.table("diagnostic_items", {

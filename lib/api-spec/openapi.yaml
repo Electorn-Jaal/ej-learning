@@ -611,6 +611,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /teacher/item-analysis:
+    get:
+      operationId: getItemAnalysis
+      tags: [teacher]
+      summary: Which questions a class got wrong, worst first
+      description: >
+        One row per student per question, their most recent answer, so a
+        student who retook a quiz four times cannot outvote four students who
+        took it once. The most-chosen wrong answer comes with it: a distractor
+        that attracts half the class is a specific misunderstanding rather than
+        a gap, and the two need different teaching.
+      parameters:
+        - name: classId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Per-question results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemAnalysis"
+        "403":
+          description: Not a teacher of that class
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /teacher/class-skills:
     get:
       operationId: getClassSkills
@@ -2011,6 +2041,41 @@ components:
         recorded:
           type: integer
       required: [classId, skillId, recorded]
+    ItemAnalysisRow:
+      type: object
+      properties:
+        itemId:
+          type: integer
+        prompt:
+          type: string
+        skillName:
+          type: string
+        answered:
+          type: integer
+        correct:
+          type: integer
+        percentCorrect:
+          type: integer
+        commonWrongAnswer:
+          description: The wrong option chosen most often, or null where nobody got it wrong.
+          type: ["string", "null"]
+        commonWrongCount:
+          type: integer
+      required:
+        [itemId, prompt, skillName, answered, correct, percentCorrect,
+         commonWrongAnswer, commonWrongCount]
+    ItemAnalysis:
+      type: object
+      properties:
+        classId:
+          type: integer
+        className:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItemAnalysisRow"
+      required: [classId, className, items]
     WeakStudent:
       type: object
       properties:

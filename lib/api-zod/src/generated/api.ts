@@ -783,6 +783,30 @@ export const SubmitAssessmentResponse = zod.object({
 
 
 /**
+ * One row per student per question, their most recent answer, so a student who retook a quiz four times cannot outvote four students who took it once. The most-chosen wrong answer comes with it: a distractor that attracts half the class is a specific misunderstanding rather than a gap, and the two need different teaching.
+ * @summary Which questions a class got wrong, worst first
+ */
+export const GetItemAnalysisQueryParams = zod.object({
+  "classId": zod.coerce.number().int()
+})
+
+export const GetItemAnalysisResponse = zod.object({
+  "classId": zod.number().int(),
+  "className": zod.string(),
+  "items": zod.array(zod.object({
+  "itemId": zod.number().int(),
+  "prompt": zod.string(),
+  "skillName": zod.string(),
+  "answered": zod.number().int(),
+  "correct": zod.number().int(),
+  "percentCorrect": zod.number().int(),
+  "commonWrongAnswer": zod.string().nullable().describe('The wrong option chosen most often, or null where nobody got it wrong.'),
+  "commonWrongCount": zod.number().int()
+}))
+})
+
+
+/**
  * Drawn from the answers students have already given, not from a separate exam. A skill nobody has attempted is absent rather than reported as zero, so the list only ever contains skills there is evidence about.
  * @summary How a class stands on each skill it has been measured on
  */

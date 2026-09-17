@@ -772,6 +772,27 @@ export interface SubmitAssessmentResult {
   recorded: number;
 }
 
+export interface ItemAnalysisRow {
+  itemId: number;
+  prompt: string;
+  skillName: string;
+  answered: number;
+  correct: number;
+  percentCorrect: number;
+  /**
+     * The wrong option chosen most often, or null where nobody got it wrong.
+     * @nullable
+     */
+  commonWrongAnswer: string | null;
+  commonWrongCount: number;
+}
+
+export interface ItemAnalysis {
+  classId: number;
+  className: string;
+  items: ItemAnalysisRow[];
+}
+
 export interface WeakStudent {
   studentId: number;
   studentName: string;
@@ -1090,6 +1111,10 @@ limit?: number;
 export type GetAssessmentSheetParams = {
 classId: number;
 skillId?: number;
+};
+
+export type GetItemAnalysisParams = {
+classId: number;
 };
 
 export type GetClassSkillsParams = {

@@ -1,6 +1,7 @@
 import {
   bigint,
   boolean,
+  check,
   foreignKey,
   index,
   primaryKey,
@@ -8,6 +9,7 @@ import {
   unique,
   varchar,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import {
   classesInCore,
   core,
@@ -114,10 +116,17 @@ export const teachersInCore = core.table(
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
       .defaultNow()
       .notNull(),
+    // See core.students: invented rows must stay distinguishable from real
+    // staff for as long as the two sit in the same table.
+    dataOrigin: varchar("data_origin", { length: 10 }).default("REAL").notNull(),
   },
   (table) => [
     unique("teachers_user_id_key").on(table.userId),
     unique("teachers_teacher_code_key").on(table.teacherCode),
+    check(
+      "teachers_data_origin_check",
+      sql`(data_origin)::text = ANY ((ARRAY['REAL'::character varying, 'MOCK'::character varying])::text[])`,
+    ),
     index("idx_teachers_subject").using(
       "btree",
       table.subjectId.asc().nullsLast().op("int8_ops"),

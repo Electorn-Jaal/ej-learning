@@ -39,10 +39,12 @@ import type {
   GenerateScheduleResult,
   GetAssessmentSheetParams,
   GetClassSkillsParams,
+  GetItemAnalysisParams,
   GetTeacherLessonsParams,
   GetTeacherQuizAttemptsParams,
   GetTeacherScheduleParams,
   HealthStatus,
+  ItemAnalysis,
   LoginInput,
   MaterialOutline,
   MaterialOutlineInput,
@@ -2456,6 +2458,91 @@ export const useSubmitAssessment = <TError = ErrorType<ApiError>,
       > => {
       return useMutation(getSubmitAssessmentMutationOptions(options));
     }
+
+export const getGetItemAnalysisUrl = (params: GetItemAnalysisParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/teacher/item-analysis?${stringifiedParams}` : `/api/teacher/item-analysis`
+}
+
+/**
+ * One row per student per question, their most recent answer, so a student who retook a quiz four times cannot outvote four students who took it once. The most-chosen wrong answer comes with it: a distractor that attracts half the class is a specific misunderstanding rather than a gap, and the two need different teaching.
+ * @summary Which questions a class got wrong, worst first
+ */
+export const getItemAnalysis = async (params: GetItemAnalysisParams, options?: Parameters<typeof customFetch>[1]): Promise<ItemAnalysis> => {
+
+  return customFetch<ItemAnalysis>(getGetItemAnalysisUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetItemAnalysisQueryKey = (params?: GetItemAnalysisParams,) => {
+    return [
+    `/api/teacher/item-analysis`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetItemAnalysisQueryOptions = <TData = Awaited<ReturnType<typeof getItemAnalysis>>, TError = ErrorType<ApiError>>(params: GetItemAnalysisParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getItemAnalysis>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetItemAnalysisQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getItemAnalysis>>> = ({ signal }) => getItemAnalysis(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getItemAnalysis>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetItemAnalysisQueryResult = NonNullable<Awaited<ReturnType<typeof getItemAnalysis>>>
+export type GetItemAnalysisQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Which questions a class got wrong, worst first
+ */
+
+export function useGetItemAnalysis<TData = Awaited<ReturnType<typeof getItemAnalysis>>, TError = ErrorType<ApiError>>(
+ params: GetItemAnalysisParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getItemAnalysis>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetItemAnalysisQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetClassSkillsUrl = (params: GetClassSkillsParams,) => {
   const normalizedParams = new URLSearchParams();
