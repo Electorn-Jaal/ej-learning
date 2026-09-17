@@ -1,0 +1,1 @@
+ALTER TABLE "content"."source_versions" ADD COLUMN "page_offset" integer DEFAULT 0 NOT NULL;

@@ -23,6 +23,7 @@ export type LessonRow = {
   chapterTitle: string | null;
   pageFrom: number | null;
   pageTo: number | null;
+  pageOffset: number;
 };
 
 /**
@@ -47,7 +48,8 @@ export const todayLesson = (studentId: number, onDate: string) =>
        dl.estimated_minutes::int AS "estimatedMinutes",
        book.material_id::int AS "materialId", book.material_title AS "materialTitle",
        book.chapter_title AS "chapterTitle",
-       book.page_from::int AS "pageFrom", book.page_to::int AS "pageTo"
+       book.page_from::int AS "pageFrom", book.page_to::int AS "pageTo",
+       COALESCE(book.page_offset, 0)::int AS "pageOffset"
      FROM core.student_enrollments e
      JOIN core.classes c ON c.id = e.class_id AND c.is_active
      JOIN learning.class_schedule cs ON cs.class_id = c.id AND cs.scheduled_on = $2::date
@@ -55,7 +57,10 @@ export const todayLesson = (studentId: number, onDate: string) =>
      JOIN content.skills sk ON sk.id = dl.core_skill_id
      LEFT JOIN LATERAL (
        SELECT sm.id AS material_id, sm.title AS material_title,
-              son.title AS chapter_title, a.page_from, a.page_to
+              son.title AS chapter_title, a.page_from, a.page_to,
+              (SELECT sv.page_offset FROM content.source_versions sv
+               WHERE sv.source_material_id = sm.id AND sv.status = 'APPROVED'
+               ORDER BY sv.version_no DESC LIMIT 1) AS page_offset
        FROM content.content_skill_maps m
        JOIN content.content_nodes cn ON cn.id = m.content_node_id AND cn.status = 'APPROVED'
        JOIN content.content_source_alignments a ON a.content_node_id = cn.id AND a.status = 'APPROVED'
