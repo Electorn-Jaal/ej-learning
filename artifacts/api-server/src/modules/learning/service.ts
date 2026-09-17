@@ -4,6 +4,7 @@ import { badRequest, forbidden } from "../../shared/http-error";
 import type { AuthenticatedUser } from "../identity/service";
 import * as repository from "./repository";
 import { recordSkillEvidence } from "./mastery";
+import { assignRemediation } from "./remediation";
 
 /** Mongolian schooling splits at grade 6; the two teacher workflows follow it. */
 export const stageForGrade = (gradeLevel: number): "PRIMARY" | "SECONDARY" =>
@@ -582,6 +583,12 @@ export async function recordQuizAttemptScored(
     user.studentId,
     [...perSkill].map(([skillId, tally]) => ({ skillId, ...tally })),
   );
+
+  // A measurement that changes nothing is just a number. If the answers have
+  // left the student with a gap, tomorrow's extra work is booked now, walking
+  // back through what the skill stands on to find where they actually fell
+  // behind. Today's work is already in front of them, so it lands tomorrow.
+  await assignRemediation(user.studentId, shiftDays(todayInUlaanbaatar(), 1));
 
   return { ...attempt, results };
 }

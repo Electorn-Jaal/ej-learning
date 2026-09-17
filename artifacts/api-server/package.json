@@ -11,7 +11,9 @@
     "create-user": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/create-user.ts",
     "reset-dev": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/reset-dev.ts",
     "seed-content": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/seed-content.ts",
-    "rebuild-mastery": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/rebuild-mastery.ts"
+    "rebuild-mastery": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/rebuild-mastery.ts",
+    "seed-dependencies": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/seed-skill-dependencies.ts",
+    "run-remediation": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/run-remediation.ts"
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",
