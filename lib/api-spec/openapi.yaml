@@ -14,6 +14,8 @@ tags:
     description: Sign-in and the current session
   - name: content
     description: Source materials and their files
+  - name: admin
+    description: Configuration a school administrator owns
   - name: session
     description: Current authenticated identity
   - name: student
@@ -625,6 +627,96 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /admin/materials:
+    get:
+      operationId: getAdminMaterials
+      tags: [admin]
+      summary: Source materials with their file and outline state
+      responses:
+        "200":
+          description: Materials
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminMaterial"
+        "403":
+          description: Not an administrator
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /admin/materials/{materialId}/outline:
+    get:
+      operationId: getMaterialOutline
+      tags: [admin]
+      summary: A material's sections and page mapping
+      parameters:
+        - name: materialId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Outline
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaterialOutline"
+        "403":
+          description: Not an administrator
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: No such material
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    put:
+      operationId: saveMaterialOutline
+      tags: [admin]
+      summary: Save the sections and the printed-to-file page offset
+      description: >
+        Sections are matched on outlineCode: known codes are updated, new ones
+        inserted. Nothing is deleted here, because a section can already be
+        aligned to content and to lessons, and silently dropping it would
+        leave those pointing at nothing.
+      parameters:
+        - name: materialId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MaterialOutlineInput"
+      responses:
+        "200":
+          description: Saved outline
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaterialOutline"
+        "400":
+          description: A page range outside the file, or a duplicate code
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Not an administrator
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   parameters:
     AssignmentId:
@@ -640,6 +732,109 @@ components:
       schema:
         type: string
   schemas:
+    AdminMaterial:
+      type: object
+      properties:
+        id:
+          type: integer
+        sourceCode:
+          type: string
+        title:
+          type: ["string", "null"]
+        subjectName:
+          type: string
+        status:
+          type: string
+        hasFile:
+          type: boolean
+        filePages:
+          type: ["integer", "null"]
+        pageOffset:
+          type: integer
+        sectionCount:
+          type: integer
+      required:
+        - id
+        - sourceCode
+        - title
+        - subjectName
+        - status
+        - hasFile
+        - filePages
+        - pageOffset
+        - sectionCount
+    OutlineSection:
+      type: object
+      properties:
+        id:
+          type: ["integer", "null"]
+        outlineCode:
+          type: string
+        printedNumber:
+          type: ["string", "null"]
+        title:
+          type: string
+        pageFrom:
+          type: ["integer", "null"]
+        pageTo:
+          type: ["integer", "null"]
+        sequenceNo:
+          type: integer
+        usedByLessons:
+          description: How many lessons point at this section. Above zero means editing it moves real work.
+          type: integer
+      required:
+        - id
+        - outlineCode
+        - printedNumber
+        - title
+        - pageFrom
+        - pageTo
+        - sequenceNo
+        - usedByLessons
+    MaterialOutline:
+      type: object
+      properties:
+        materialId:
+          type: integer
+        title:
+          type: ["string", "null"]
+        pageOffset:
+          type: integer
+        filePages:
+          type: ["integer", "null"]
+        sections:
+          type: array
+          items:
+            $ref: "#/components/schemas/OutlineSection"
+      required: [materialId, title, pageOffset, filePages, sections]
+    MaterialOutlineInput:
+      type: object
+      properties:
+        pageOffset:
+          type: integer
+          minimum: 0
+        sections:
+          type: array
+          items:
+            type: object
+            properties:
+              outlineCode:
+                type: string
+                minLength: 1
+              printedNumber:
+                type: ["string", "null"]
+              title:
+                type: string
+                minLength: 1
+              pageFrom:
+                type: ["integer", "null"]
+              pageTo:
+                type: ["integer", "null"]
+              sequenceNo:
+                type: integer
+            required: [outlineCode, printedNumber, title, pageFrom, pageTo, sequenceNo]
+      required: [pageOffset, sections]
     SchedulableLesson:
       type: object
       properties:

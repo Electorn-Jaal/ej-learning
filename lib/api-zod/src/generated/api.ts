@@ -745,3 +745,89 @@ export const SetScheduleDayBody = zod.object({
 export const SetScheduleDayResponse = zod.void()
 
 
+/**
+ * @summary Source materials with their file and outline state
+ */
+export const GetAdminMaterialsResponseItem = zod.object({
+  "id": zod.number().int(),
+  "sourceCode": zod.string(),
+  "title": zod.string().nullable(),
+  "subjectName": zod.string(),
+  "status": zod.string(),
+  "hasFile": zod.boolean(),
+  "filePages": zod.number().int().nullable(),
+  "pageOffset": zod.number().int(),
+  "sectionCount": zod.number().int()
+})
+export const GetAdminMaterialsResponse = zod.array(GetAdminMaterialsResponseItem)
+
+
+/**
+ * @summary A material's sections and page mapping
+ */
+export const GetMaterialOutlineParams = zod.object({
+  "materialId": zod.coerce.number().int()
+})
+
+export const GetMaterialOutlineResponse = zod.object({
+  "materialId": zod.number().int(),
+  "title": zod.string().nullable(),
+  "pageOffset": zod.number().int(),
+  "filePages": zod.number().int().nullable(),
+  "sections": zod.array(zod.object({
+  "id": zod.number().int().nullable(),
+  "outlineCode": zod.string(),
+  "printedNumber": zod.string().nullable(),
+  "title": zod.string(),
+  "pageFrom": zod.number().int().nullable(),
+  "pageTo": zod.number().int().nullable(),
+  "sequenceNo": zod.number().int(),
+  "usedByLessons": zod.number().int().describe('How many lessons point at this section. Above zero means editing it moves real work.')
+}))
+})
+
+
+/**
+ * Sections are matched on outlineCode: known codes are updated, new ones inserted. Nothing is deleted here, because a section can already be aligned to content and to lessons, and silently dropping it would leave those pointing at nothing.
+ * @summary Save the sections and the printed-to-file page offset
+ */
+export const SaveMaterialOutlineParams = zod.object({
+  "materialId": zod.coerce.number().int()
+})
+
+export const saveMaterialOutlineBodyPageOffsetMin = 0;
+
+
+
+
+
+export const SaveMaterialOutlineBody = zod.object({
+  "pageOffset": zod.number().int().min(saveMaterialOutlineBodyPageOffsetMin),
+  "sections": zod.array(zod.object({
+  "outlineCode": zod.string().min(1),
+  "printedNumber": zod.string().nullable(),
+  "title": zod.string().min(1),
+  "pageFrom": zod.number().int().nullable(),
+  "pageTo": zod.number().int().nullable(),
+  "sequenceNo": zod.number().int()
+}))
+})
+
+export const SaveMaterialOutlineResponse = zod.object({
+  "materialId": zod.number().int(),
+  "title": zod.string().nullable(),
+  "pageOffset": zod.number().int(),
+  "filePages": zod.number().int().nullable(),
+  "sections": zod.array(zod.object({
+  "id": zod.number().int().nullable(),
+  "outlineCode": zod.string(),
+  "printedNumber": zod.string().nullable(),
+  "title": zod.string(),
+  "pageFrom": zod.number().int().nullable(),
+  "pageTo": zod.number().int().nullable(),
+  "sequenceNo": zod.number().int(),
+  "usedByLessons": zod.number().int().describe('How many lessons point at this section. Above zero means editing it moves real work.')
+}))
+})
+
+
