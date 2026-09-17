@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter"
 import {
   LayoutDashboard, BookOpen, TrendingUp, User, CheckSquare, Database, LogOut,
-  CalendarDays, Sun, KeyRound,
+  CalendarDays, Sun, KeyRound, ClipboardCheck,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -19,6 +19,7 @@ const STUDENT_NAV = [
 const TEACHER_NAV = [
   { href: "/teacher", label: "Хяналтын самбар", icon: LayoutDashboard },
   { href: "/teacher/schedule", label: "Хуваарь", icon: CalendarDays },
+  { href: "/teacher/results", label: "Шалгалтын үр дүн", icon: ClipboardCheck },
   { href: "/teacher/reviews", label: "Шалгах ажлууд", icon: CheckSquare },
   { href: "/teacher/catalog", label: "Сургалтын сан", icon: BookOpen },
   { href: "/teacher/integrations", label: "Холболтууд", icon: Database },

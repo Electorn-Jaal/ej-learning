@@ -1,11 +1,20 @@
 import { Router, type IRouter } from "express";
 import {
   GetStudentTodayResponse,
+  GetTeacherQuizAttemptsResponse,
   GetTeacherScheduleResponse,
+  SubmitQuizAttemptBody,
+  SubmitQuizAttemptResponse,
 } from "@workspace/api-zod";
 import { requireRole } from "../../middlewares/auth";
 import { badRequest, unauthorized } from "../../shared/http-error";
-import { materialFile, studentToday, teacherSchedule } from "./service";
+import {
+  materialFile,
+  quizAttemptsForTeacher,
+  recordQuizAttempt,
+  studentToday,
+  teacherSchedule,
+} from "./service";
 
 const router: IRouter = Router();
 
@@ -36,6 +45,43 @@ router.get(
         to: req.query.to,
       });
       res.json(GetTeacherScheduleResponse.parse(schedule));
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post(
+  "/student/quiz-attempts",
+  requireRole("STUDENT"),
+  async (req, res, next) => {
+    try {
+      const parsed = SubmitQuizAttemptBody.safeParse(req.body);
+      if (!parsed.success) {
+        throw badRequest("Хариултын бүрдэл буруу байна.", "INVALID_ATTEMPT");
+      }
+      const attempt = await recordQuizAttempt(req.user!, parsed.data);
+      res.status(201).json(SubmitQuizAttemptResponse.parse(attempt));
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
+  "/teacher/quiz-attempts",
+  requireRole("TEACHER", "ADMIN"),
+  async (req, res, next) => {
+    try {
+      const classId = Number(req.query.classId);
+      if (!Number.isInteger(classId) || classId <= 0) {
+        throw badRequest("Ангийн дугаар буруу байна.", "INVALID_CLASS_ID");
+      }
+      const raw = Number(req.query.limit);
+      const limit = Number.isInteger(raw) && raw > 0 ? Math.min(raw, 200) : 50;
+
+      const result = await quizAttemptsForTeacher(req.user!, classId, limit);
+      res.json(GetTeacherQuizAttemptsResponse.parse(result));
     } catch (error) {
       next(error);
     }

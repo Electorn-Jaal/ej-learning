@@ -41,7 +41,17 @@ const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
       ? error.status
       : 500;
   if (status === 500) {
-    logger.error({ code: error.code ?? "INTERNAL_ERROR" }, "API request failed");
+    // The message and stack go to the log, never to the response: a 500 is
+    // usually a bug, and diagnosing it from "code: INTERNAL_ERROR" alone is
+    // not possible. The client still learns nothing about the internals.
+    logger.error(
+      {
+        code: error.code ?? "INTERNAL_ERROR",
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      },
+      "API request failed",
+    );
     res.status(500).json({ error: "Өгөгдөл уншихад алдаа гарлаа." });
     return;
   }

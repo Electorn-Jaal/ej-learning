@@ -138,3 +138,65 @@ export async function materialFile(materialId: number) {
     filename: version.filename ?? path.basename(resolved),
   };
 }
+
+/**
+ * Records a practice attempt.
+ *
+ * The lesson must be one actually scheduled for the student's own class, so a
+ * student cannot post attempts against arbitrary lesson ids. The marking comes
+ * from the client, because the questions are still there; what the server owns
+ * is who the attempt belongs to and which lesson it may name.
+ */
+export async function recordQuizAttempt(
+  user: AuthenticatedUser,
+  input: {
+    lessonId: number;
+    lessonCode: string;
+    answers: repository.QuizAnswer[];
+  },
+) {
+  if (user.studentId === null) {
+    throw forbidden(
+      "Энэ бүртгэл сурагчийн бүртгэлтэй холбогдоогүй байна.",
+      "NO_STUDENT_LINK",
+    );
+  }
+  if (!(await repository.lessonBelongsToClass(input.lessonId, user.studentId))) {
+    throw forbidden(
+      "Энэ хичээл таны ангид оноогдоогүй байна.",
+      "LESSON_NOT_ASSIGNED",
+    );
+  }
+
+  return repository.insertQuizAttempt({
+    studentId: user.studentId,
+    dailyLessonId: input.lessonId,
+    lessonCode: input.lessonCode,
+    answers: input.answers,
+    score: input.answers.filter((answer) => answer.correct).length,
+    maxScore: input.answers.length,
+  });
+}
+
+export async function quizAttemptsForTeacher(
+  user: AuthenticatedUser,
+  classId: number,
+  limit: number,
+) {
+  const isAdmin = user.roles.includes("ADMIN");
+  const [klass] = isAdmin
+    ? await repository.anyClass(classId)
+    : user.teacherId === null
+      ? []
+      : await repository.teacherClass(user.teacherId, classId);
+
+  if (!klass) {
+    throw forbidden("Энэ ангийн үр дүнг харах эрхгүй байна.", "NOT_YOUR_CLASS");
+  }
+
+  return {
+    classId: klass.classId,
+    className: klass.className,
+    attempts: await repository.attemptsForClass(klass.classId, limit),
+  };
+}

@@ -29,11 +29,14 @@ import type {
   CurrentTopic,
   CurrentTopicInput,
   CurrentUser,
+  GetTeacherQuizAttemptsParams,
   GetTeacherScheduleParams,
   HealthStatus,
   LoginInput,
   PasswordChangeInput,
   PreviewStudent,
+  QuizAttempt,
+  QuizAttemptInput,
   ReviewInput,
   ReviewItem,
   ReviewResult,
@@ -45,6 +48,7 @@ import type {
   SubmissionResult,
   TeacherClass,
   TeacherDashboard,
+  TeacherQuizAttempts,
   TeacherSchedule,
   WorkspaceIntegrationDashboard,
   WorkspaceSimulationInput
@@ -2086,4 +2090,177 @@ export const useChangePassword = <TError = ErrorType<ApiError>,
       > => {
       return useMutation(getChangePasswordMutationOptions(options));
     }
+
+export const getSubmitQuizAttemptUrl = () => {
+
+
+
+
+  return `/api/student/quiz-attempts`
+}
+
+/**
+ * The server scores nothing: the questions live in the frontend for now, so it records what was answered and trusts the client's marking. That is fine for practice a student marks themselves and would not be for a graded assessment - the diagnostic block moves questions into the database and the scoring with them.
+ * @summary Record the signed-in student's run at a lesson's practice check
+ */
+export const submitQuizAttempt = async (quizAttemptInput: QuizAttemptInput, options?: Parameters<typeof customFetch>[1]): Promise<QuizAttempt> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<QuizAttempt>(getSubmitQuizAttemptUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(quizAttemptInput)
+  }
+);}
+
+
+
+
+
+export const getSubmitQuizAttemptMutationKey = () => ['submitQuizAttempt'] as const;
+
+export const getSubmitQuizAttemptMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitQuizAttempt>>, TError,SubmitQuizAttemptMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof submitQuizAttempt>>, TError,SubmitQuizAttemptMutationVariables, TContext> => {
+
+const mutationKey = getSubmitQuizAttemptMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof submitQuizAttempt>>, SubmitQuizAttemptMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  submitQuizAttempt(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SubmitQuizAttemptMutationResult = NonNullable<Awaited<ReturnType<typeof submitQuizAttempt>>>
+    export type SubmitQuizAttemptMutationBody = BodyType<QuizAttemptInput>
+    export type SubmitQuizAttemptMutationError = ErrorType<ApiError>
+    export type SubmitQuizAttemptMutationVariables = {data: BodyType<QuizAttemptInput>}
+
+    /**
+ * @summary Record the signed-in student's run at a lesson's practice check
+ */
+export const useSubmitQuizAttempt = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitQuizAttempt>>, TError,SubmitQuizAttemptMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof submitQuizAttempt>>,
+        TError,
+        SubmitQuizAttemptMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSubmitQuizAttemptMutationOptions(options));
+    }
+
+export const getGetTeacherQuizAttemptsUrl = (params: GetTeacherQuizAttemptsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/teacher/quiz-attempts?${stringifiedParams}` : `/api/teacher/quiz-attempts`
+}
+
+/**
+ * @summary What a class answered, newest first
+ */
+export const getTeacherQuizAttempts = async (params: GetTeacherQuizAttemptsParams, options?: Parameters<typeof customFetch>[1]): Promise<TeacherQuizAttempts> => {
+
+  return customFetch<TeacherQuizAttempts>(getGetTeacherQuizAttemptsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTeacherQuizAttemptsQueryKey = (params?: GetTeacherQuizAttemptsParams,) => {
+    return [
+    `/api/teacher/quiz-attempts`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetTeacherQuizAttemptsQueryOptions = <TData = Awaited<ReturnType<typeof getTeacherQuizAttempts>>, TError = ErrorType<ApiError>>(params: GetTeacherQuizAttemptsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTeacherQuizAttempts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTeacherQuizAttemptsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTeacherQuizAttempts>>> = ({ signal }) => getTeacherQuizAttempts(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTeacherQuizAttempts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTeacherQuizAttemptsQueryResult = NonNullable<Awaited<ReturnType<typeof getTeacherQuizAttempts>>>
+export type GetTeacherQuizAttemptsQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary What a class answered, newest first
+ */
+
+export function useGetTeacherQuizAttempts<TData = Awaited<ReturnType<typeof getTeacherQuizAttempts>>, TError = ErrorType<ApiError>>(
+ params: GetTeacherQuizAttemptsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTeacherQuizAttempts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTeacherQuizAttemptsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 

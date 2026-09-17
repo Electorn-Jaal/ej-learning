@@ -612,3 +612,66 @@ export const ChangePasswordBody = zod.object({
 export const ChangePasswordResponse = zod.void()
 
 
+/**
+ * The server scores nothing: the questions live in the frontend for now, so it records what was answered and trusts the client's marking. That is fine for practice a student marks themselves and would not be for a graded assessment - the diagnostic block moves questions into the database and the scoring with them.
+ * @summary Record the signed-in student's run at a lesson's practice check
+ */
+
+
+
+export const SubmitQuizAttemptBody = zod.object({
+  "lessonId": zod.number().int(),
+  "lessonCode": zod.string(),
+  "answers": zod.array(zod.object({
+  "questionId": zod.string(),
+  "prompt": zod.string(),
+  "chosenOptionId": zod.string(),
+  "chosenText": zod.string(),
+  "correct": zod.boolean()
+}).describe('The prompt and the chosen text are copied in, not referenced, so an answer still reads correctly after the questions are edited.\n')).min(1)
+})
+
+export const SubmitQuizAttemptResponse = zod.object({
+  "id": zod.number().int(),
+  "lessonCode": zod.string(),
+  "score": zod.number().int(),
+  "maxScore": zod.number().int(),
+  "submittedAt": zod.string()
+})
+
+
+/**
+ * @summary What a class answered, newest first
+ */
+export const getTeacherQuizAttemptsQueryLimitMax = 200;
+
+
+
+export const GetTeacherQuizAttemptsQueryParams = zod.object({
+  "classId": zod.coerce.number().int(),
+  "limit": zod.coerce.number().int().min(1).max(getTeacherQuizAttemptsQueryLimitMax).optional()
+})
+
+export const GetTeacherQuizAttemptsResponse = zod.object({
+  "classId": zod.number().int(),
+  "className": zod.string(),
+  "attempts": zod.array(zod.object({
+  "id": zod.number().int(),
+  "studentName": zod.string(),
+  "studentCode": zod.string(),
+  "lessonCode": zod.string(),
+  "skillName": zod.string(),
+  "score": zod.number().int(),
+  "maxScore": zod.number().int(),
+  "submittedAt": zod.string(),
+  "answers": zod.array(zod.object({
+  "questionId": zod.string(),
+  "prompt": zod.string(),
+  "chosenOptionId": zod.string(),
+  "chosenText": zod.string(),
+  "correct": zod.boolean()
+}).describe('The prompt and the chosen text are copied in, not referenced, so an answer still reads correctly after the questions are edited.\n'))
+}))
+})
+
+

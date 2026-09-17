@@ -19,6 +19,7 @@ import StudentProfile from '@/pages/student/Profile';
 import StudentAssignment from '@/pages/student/Assignment';
 import TeacherDashboard from '@/pages/teacher/Dashboard';
 import TeacherSchedule from '@/pages/teacher/Schedule';
+import TeacherQuizResults from '@/pages/teacher/QuizResults';
 import TeacherReviews from '@/pages/teacher/Reviews';
 import TeacherIntegrations from '@/pages/teacher/Integrations';
 import TeacherCatalog from '@/pages/teacher/Catalog';
@@ -54,6 +55,7 @@ function TeacherRoutes() {
     <Switch>
       <Route path="/teacher" component={TeacherDashboard} />
       <Route path="/teacher/schedule" component={TeacherSchedule} />
+      <Route path="/teacher/results" component={TeacherQuizResults} />
       <Route path="/teacher/reviews" component={TeacherReviews} />
       <Route path="/teacher/catalog" component={TeacherCatalog} />
       <Route path="/teacher/integrations" component={TeacherIntegrations} />
