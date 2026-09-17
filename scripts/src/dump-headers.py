@@ -40,6 +40,29 @@ BLOCKS: dict[str, tuple[str, ...]] = {
 # exactly what a spreadsheet mistakes for a date.
 CLASS_LIKE = re.compile(r"^\s*(\d{1,2})\s*[-–/]\s*(\d{1,2})\s*$")
 
+# The same class, three ways. "10-1", "10-A" and "10А" all mean 10А, and the
+# last two differ only by an invisible thing: U+0041 against U+0410. An import
+# that does not know this splits one class into three, which has already
+# happened here - grade 7 arrived as "7-1" with four students and "7-A" with
+# ten, and they were the same children.
+CLASS_NUMBERED = re.compile(r"^\s*(\d{1,2})\s*[-–/]\s*([1-5])\s*$")
+CLASS_LATIN = re.compile(r"^\s*(\d{1,2})\s*[-–/]?\s*([A-Ea-e])\s*$")
+CLASS_CYRILLIC = re.compile(r"^\s*(\d{1,2})\s*[-–/]?\s*([АБВГД])\s*$")
+
+MONGOLIAN_LETTERS = "АБВГД"
+
+
+def class_notation(value: str) -> tuple[str, str] | None:
+    """Returns (normalised class, which notation it was written in), or None."""
+    if match := CLASS_CYRILLIC.match(value):
+        return f"{match.group(1)}{match.group(2)}", "кирилл"
+    if match := CLASS_NUMBERED.match(value):
+        return f"{match.group(1)}{MONGOLIAN_LETTERS[int(match.group(2)) - 1]}", "дугаар"
+    if match := CLASS_LATIN.match(value):
+        index = "ABCDE".index(match.group(2).upper())
+        return f"{match.group(1)}{MONGOLIAN_LETTERS[index]}", "латин"
+    return None
+
 
 # A column label is short. Anything longer is the text of a question, and
 # matching keywords inside it produces nonsense - a listening question reading
@@ -79,6 +102,10 @@ def scan(path: Path) -> None:
         # one date under a header reading "Grade / Class" is the whole problem.
         dates_by_column: dict[int, int] = {}
         class_by_column: dict[int, int] = {}
+        # Which notations each column uses, and which normalised classes it
+        # names. Two notations in one column is the warning worth printing.
+        notations: dict[int, set[str]] = {}
+        classes: dict[int, set[str]] = {}
         body = 0
         for row in rows:
             if all(c is None or str(c).strip() == "" for c in row):
@@ -87,8 +114,13 @@ def scan(path: Path) -> None:
             for index, cell in enumerate(row):
                 if isinstance(cell, (datetime, date)):
                     dates_by_column[index] = dates_by_column.get(index, 0) + 1
-                elif isinstance(cell, str) and CLASS_LIKE.match(cell):
-                    class_by_column[index] = class_by_column.get(index, 0) + 1
+                elif isinstance(cell, str):
+                    if CLASS_LIKE.match(cell):
+                        class_by_column[index] = class_by_column.get(index, 0) + 1
+                    if found := class_notation(cell):
+                        normalised, notation = found
+                        notations.setdefault(index, set()).add(notation)
+                        classes.setdefault(index, set()).add(normalised)
 
         computed = 0
         if formulas is not None and name in formulas.sheetnames:
@@ -137,6 +169,20 @@ def scan(path: Path) -> None:
         others = [label(i) for i in sorted(dates_by_column) if not about_class(i)]
         if others:
             print(f"   · огноотой бусад багана (хэвийн): {', '.join(others[:4])}")
+
+        for index in sorted(notations):
+            if not about_class(index):
+                continue
+            used = notations[index]
+            found = ", ".join(sorted(classes[index])[:8])
+            print(f"   ⓘ '{label(index)}' — анги: {found}")
+            if len(used) > 1:
+                print(
+                    f"     ⚠ НЭГ БАГАНАД {len(used)} БИЧЛЭГ ({', '.join(sorted(used))}) — "
+                    "нэг ангийг хоёр анги болгож хуваах эрсдэлтэй"
+                )
+            if "латин" in used:
+                print("     ⚠ латин үсэг: 'B' нь Б уу В үү? эзнээс нь асуу")
 
 
 def main(argv: list[str]) -> int:
