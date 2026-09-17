@@ -23,13 +23,13 @@ export default function StudentProgress() {
     }
   }
 
+  /** Returns a dot colour. The label itself stays in the normal text colour. */
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'mastered': return 'text-success bg-success/10 border-success/20'
-      case 'developing': return 'text-primary bg-primary/10 border-primary/20'
-      case 'needs_support': return 'text-pending bg-pending/10 border-pending/20'
-      case 'unassessed': return 'text-muted-foreground bg-muted border-border'
-      default: return 'text-muted-foreground bg-muted border-border'
+      case 'mastered': return 'bg-success'
+      case 'developing': return 'bg-primary'
+      case 'needs_support': return 'bg-pending'
+      default: return 'bg-muted-foreground/40'
     }
   }
 
@@ -59,7 +59,8 @@ export default function StudentProgress() {
                   )}
                 </div>
                 <div className="flex flex-col items-start sm:items-end gap-2 flex-shrink-0">
-                   <span className={`px-3 py-1 rounded-sm text-xs font-bold border ${getStatusColor(skill.status)}`}>
+                   <span className="inline-flex items-center gap-2 text-xs font-semibold text-foreground">
+                     <span className={`h-1.5 w-1.5 rounded-full ${getStatusColor(skill.status)}`} />
                      {getStatusLabel(skill.status)}
                    </span>
                    <span className="text-sm font-bold text-foreground">

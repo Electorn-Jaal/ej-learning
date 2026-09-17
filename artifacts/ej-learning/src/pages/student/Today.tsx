@@ -1,14 +1,19 @@
 import { useGetStudentToday } from '@workspace/api-client-react'
 import { BookOpen, Clock, ExternalLink } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { LessonQuiz } from '@/components/quiz/LessonQuiz'
+import { cn } from '@/lib/utils'
 
-const LESSON_TYPE: Record<string, { label: string; className: string }> = {
-  CORE: { label: 'Үндсэн хичээл', className: 'bg-primary/10 text-primary border-primary/20' },
-  RECOVERY: { label: 'Нөхөх хичээл', className: 'bg-amber-500/10 text-amber-700 border-amber-500/20' },
-  REINFORCE: { label: 'Бататгах', className: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20' },
+/**
+ * The type is carried by a small solid dot, with the label left in the normal
+ * text colour. A tinted pill printing its own hue back as text is the pattern
+ * that makes an interface look auto-generated, and it costs legibility too.
+ */
+const LESSON_TYPE: Record<string, { label: string; dot: string }> = {
+  CORE: { label: 'Үндсэн хичээл', dot: 'bg-primary' },
+  RECOVERY: { label: 'Нөхөх хичээл', dot: 'bg-pending' },
+  REINFORCE: { label: 'Бататгах', dot: 'bg-success' },
 }
 
 function Section({ title, body }: { title: string; body: string | null }) {
@@ -61,9 +66,10 @@ export default function StudentToday() {
           <CardHeader className="space-y-3">
             <div className="flex flex-wrap items-center gap-2">
               {type ? (
-                <Badge variant="outline" className={type.className}>
+                <span className="inline-flex items-center gap-2 text-xs font-medium text-foreground">
+                  <span className={cn('h-1.5 w-1.5 rounded-full', type.dot)} />
                   {type.label}
-                </Badge>
+                </span>
               ) : null}
               {lesson.estimatedMinutes ? (
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -80,7 +86,7 @@ export default function StudentToday() {
 
           <CardContent className="space-y-6">
             {lesson.studentMessage ? (
-              <p className="rounded-md border bg-muted/40 px-4 py-3 text-sm">
+              <p className="border-l-2 border-primary/50 py-1 pl-4 text-sm italic text-foreground">
                 {lesson.studentMessage}
               </p>
             ) : null}
@@ -90,7 +96,7 @@ export default function StudentToday() {
                 href={`${lesson.book.fileUrl}#page=${lesson.book.pageFrom ?? 1}`}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center gap-3 rounded-md border p-4 transition-colors hover:bg-muted/50"
+                className="flex items-center gap-3 rounded-md border border-border bg-background p-4 transition-colors hover:border-primary/50"
               >
                 <BookOpen className="h-5 w-5 shrink-0 text-primary" />
                 <span className="min-w-0 flex-1">

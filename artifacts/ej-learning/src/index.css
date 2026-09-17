@@ -51,47 +51,51 @@
 }
 
 :root {
-  /* Calm, light gray background */
-  --background: 210 20% 98%;
-  /* Deep navy text */
-  --foreground: 222 47% 11%;
-  
-  --border: 214 32% 91%;
-  --input: 214 32% 91%;
-  --ring: 199 89% 48%;
+  /* Warm off-white paper. A cool near-white reads as "unstyled default";
+     the warmth is what makes a page look chosen rather than generated. */
+  --background: 38 24% 96%;
+  --foreground: 215 28% 15%;
 
-  /* Primary: Teal/Blue accent */
-  --primary: 199 89% 48%;
-  --primary-foreground: 0 0% 100%;
+  --border: 36 14% 86%;
+  --input: 36 14% 86%;
+  --ring: 212 44% 30%;
 
-  /* Secondary / Muted */
-  --secondary: 210 20% 96%;
-  --secondary-foreground: 222 47% 11%;
+  /* Deep ink blue, low saturation on purpose. The previous 89% cyan is what
+     made tinted-pill patterns (a 10% wash under text of the same hue) look
+     machine-made. At this saturation the colour can only be used as a solid
+     accent, which is the point. */
+  --primary: 212 44% 30%;
+  --primary-foreground: 40 30% 98%;
 
-  --muted: 210 20% 96%;
-  --muted-foreground: 215 16% 47%;
+  --secondary: 38 20% 92%;
+  --secondary-foreground: 215 28% 15%;
 
-  --accent: 199 89% 48%;
-  --accent-foreground: 0 0% 100%;
+  --muted: 38 20% 93%;
+  --muted-foreground: 215 12% 42%;
 
-  /* Green only for confirmed success */
-  --success: 142 71% 45%;
-  --success-foreground: 0 0% 100%;
+  --accent: 212 44% 30%;
+  --accent-foreground: 40 30% 98%;
 
-  /* Amber for pending states */
-  --pending: 38 92% 50%;
-  --pending-foreground: 222 47% 11%;
+  /* Muted forest, not signal green */
+  --success: 152 38% 30%;
+  --success-foreground: 40 30% 98%;
 
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 0 0% 100%;
+  /* Ochre rather than neon amber */
+  --pending: 32 58% 40%;
+  --pending-foreground: 40 30% 98%;
 
-  --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
-  --card-border: 214 32% 91%;
+  /* Brick, not fire engine */
+  --destructive: 4 52% 44%;
+  --destructive-foreground: 40 30% 98%;
 
-  --popover: 0 0% 100%;
-  --popover-foreground: 222 47% 11%;
-  --popover-border: 214 32% 91%;
+  /* Cards sit a shade lighter than the paper, so they lift without a shadow */
+  --card: 40 40% 99%;
+  --card-foreground: 215 28% 15%;
+  --card-border: 36 14% 86%;
+
+  --popover: 40 40% 99%;
+  --popover-foreground: 215 28% 15%;
+  --popover-border: 36 14% 86%;
 
   --app-font-sans: 'Plus Jakarta Sans', sans-serif;
   --app-font-serif: 'Lora', serif;
@@ -99,41 +103,43 @@
 }
 
 .dark {
-  --background: 222 47% 11%;
-  --foreground: 210 20% 98%;
-  
-  --border: 215 28% 17%;
-  --input: 215 28% 17%;
-  --ring: 199 89% 48%;
+  /* Warm-leaning charcoal, so the light and dark themes read as one product */
+  --background: 30 8% 11%;
+  --foreground: 38 20% 92%;
 
-  --primary: 199 89% 48%;
-  --primary-foreground: 0 0% 100%;
+  --border: 30 6% 21%;
+  --input: 30 6% 21%;
+  --ring: 210 45% 62%;
 
-  --secondary: 215 28% 17%;
-  --secondary-foreground: 210 20% 98%;
+  /* Lifted for contrast on a dark ground; the ink blue above is unreadable here */
+  --primary: 210 45% 62%;
+  --primary-foreground: 215 30% 12%;
 
-  --muted: 215 28% 17%;
-  --muted-foreground: 215 20% 65%;
+  --secondary: 30 6% 18%;
+  --secondary-foreground: 38 20% 92%;
 
-  --accent: 199 89% 48%;
-  --accent-foreground: 0 0% 100%;
+  --muted: 30 6% 18%;
+  --muted-foreground: 36 10% 62%;
 
-  --success: 142 71% 45%;
-  --success-foreground: 0 0% 100%;
+  --accent: 210 45% 62%;
+  --accent-foreground: 215 30% 12%;
 
-  --pending: 38 92% 50%;
-  --pending-foreground: 222 47% 11%;
+  --success: 152 32% 52%;
+  --success-foreground: 215 30% 12%;
 
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 0 0% 100%;
+  --pending: 32 52% 58%;
+  --pending-foreground: 215 30% 12%;
 
-  --card: 222 47% 11%;
-  --card-foreground: 210 20% 98%;
-  --card-border: 215 28% 17%;
+  --destructive: 4 48% 58%;
+  --destructive-foreground: 215 30% 12%;
 
-  --popover: 222 47% 11%;
-  --popover-foreground: 210 20% 98%;
-  --popover-border: 215 28% 17%;
+  --card: 30 8% 14%;
+  --card-foreground: 38 20% 92%;
+  --card-border: 30 6% 21%;
+
+  --popover: 30 8% 14%;
+  --popover-foreground: 38 20% 92%;
+  --popover-border: 30 6% 21%;
 }
 
 @layer base {

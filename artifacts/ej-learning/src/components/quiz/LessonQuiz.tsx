@@ -126,8 +126,8 @@ function Question({
               className={cn(
                 'flex items-center gap-3 rounded-md border px-3 py-2 transition-colors',
                 !checked && 'hover:bg-muted/50',
-                checked && isAnswer && 'border-emerald-500/40 bg-emerald-500/10',
-                checked && isChosen && !isAnswer && 'border-destructive/40 bg-destructive/10',
+                checked && isAnswer && 'border-success bg-success/5',
+                checked && isChosen && !isAnswer && 'border-destructive bg-destructive/5',
               )}
             >
               <RadioGroupItem value={option.id} id={inputId} />
@@ -135,7 +135,7 @@ function Question({
                 {option.text}
               </Label>
               {checked && isAnswer ? (
-                <Check className="h-4 w-4 shrink-0 text-emerald-600" />
+                <Check className="h-4 w-4 shrink-0 text-success" />
               ) : null}
               {checked && isChosen && !isAnswer ? (
                 <X className="h-4 w-4 shrink-0 text-destructive" />
@@ -148,10 +148,10 @@ function Question({
       {checked ? (
         <p
           className={cn(
-            'rounded-md px-3 py-2 text-sm',
-            isCorrect
-              ? 'bg-emerald-500/10 text-emerald-800'
-              : 'bg-muted text-muted-foreground',
+            // A rule in the semantic colour, with the explanation left legible
+            // in ordinary text - not a tinted block printing its own hue back.
+            'border-l-2 py-1 pl-3 text-sm text-muted-foreground',
+            isCorrect ? 'border-success' : 'border-destructive',
           )}
         >
           {isCorrect ? 'Зөв. ' : 'Дахин үзье. '}

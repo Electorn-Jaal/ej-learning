@@ -58,8 +58,8 @@ function ScheduleTable({ classId }: { classId: number }) {
               return (
                 <li
                   key={day.scheduledOn}
-                  className={`flex flex-wrap items-center gap-3 py-3 ${
-                    day.isToday ? 'rounded-md bg-primary/5 px-3' : ''
+                  className={`flex flex-wrap items-center gap-3 border-l-2 py-3 pl-3 ${
+                    day.isToday ? 'border-primary' : 'border-transparent'
                   }`}
                 >
                   <div className="w-24 shrink-0">
