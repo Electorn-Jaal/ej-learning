@@ -516,3 +516,82 @@ export const GetSessionResponse = zod.object({
 })
 
 
+/**
+ * @summary The lesson scheduled for the signed-in student today
+ */
+export const getStudentTodayResponseDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const GetStudentTodayResponse = zod.object({
+  "date": zod.string().regex(getStudentTodayResponseDateRegExp).describe('Calendar date, YYYY-MM-DD. Not an instant, so not format:date.'),
+  "dateLabel": zod.string(),
+  "className": zod.string(),
+  "lesson": zod.union([zod.object({
+  "id": zod.number().int(),
+  "lessonCode": zod.string(),
+  "lessonType": zod.enum(['CORE', 'RECOVERY', 'REINFORCE']),
+  "skillName": zod.string(),
+  "learningGoal": zod.string().nullable(),
+  "remember": zod.string().nullable(),
+  "workedExample": zod.string().nullable(),
+  "guidedPractice": zod.string().nullable(),
+  "independentPractice": zod.string().nullable(),
+  "studentMessage": zod.string().nullable(),
+  "estimatedMinutes": zod.number().int().nullable(),
+  "book": zod.union([zod.object({
+  "materialId": zod.number().int(),
+  "title": zod.string().nullable(),
+  "chapterTitle": zod.string().nullable(),
+  "pageFrom": zod.number().int().nullable(),
+  "pageTo": zod.number().int().nullable(),
+  "fileUrl": zod.string().nullable()
+}).describe('Where in the book this lesson sits.'),zod.null()])
+}),zod.null()]),
+  "notice": zod.string()
+})
+
+
+/**
+ * @summary A class's scheduled lessons over a date range
+ */
+export const getTeacherScheduleQueryFromRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const getTeacherScheduleQueryToRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const GetTeacherScheduleQueryParams = zod.object({
+  "classId": zod.coerce.number().int(),
+  "from": zod.coerce.string().regex(getTeacherScheduleQueryFromRegExp).optional().describe('Inclusive start date (YYYY-MM-DD). Defaults to seven days ago.'),
+  "to": zod.coerce.string().regex(getTeacherScheduleQueryToRegExp).optional().describe('Inclusive end date (YYYY-MM-DD). Defaults to fourteen days ahead.')
+})
+
+export const getTeacherScheduleResponseDaysItemScheduledOnRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const GetTeacherScheduleResponse = zod.object({
+  "classId": zod.number().int(),
+  "className": zod.string(),
+  "gradeLevel": zod.number().int(),
+  "stage": zod.enum(['PRIMARY', 'SECONDARY']).describe('Derived from the class\'s grade, not stored on the teacher: the two workflows differ per class, and one teacher may hold both.\n'),
+  "days": zod.array(zod.object({
+  "scheduledOn": zod.string().regex(getTeacherScheduleResponseDaysItemScheduledOnRegExp).describe('Calendar date, YYYY-MM-DD.'),
+  "isToday": zod.boolean(),
+  "lessonId": zod.number().int(),
+  "lessonCode": zod.string(),
+  "lessonType": zod.string(),
+  "skillName": zod.string(),
+  "note": zod.string().nullable()
+}))
+})
+
+
+/**
+ * Streams the stored file, currently always a PDF. Viewers accept a #page=N fragment, so a lesson can open the book at its own pages.
+ * @summary The approved file for a source material
+ */
+export const GetMaterialFileParams = zod.object({
+  "materialId": zod.coerce.number().int()
+})
+
+export const GetMaterialFileResponse = zod.unknown()
+
+

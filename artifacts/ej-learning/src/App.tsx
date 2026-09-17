@@ -10,12 +10,14 @@ import type { AuthenticatedUser } from '@workspace/api-client-react';
 import { Shell } from '@/components/layout/Shell';
 import { SessionProvider, hasRole, useSessionQuery } from '@/lib/session';
 import Login from '@/pages/Login';
+import StudentToday from '@/pages/student/Today';
 import StudentDashboard from '@/pages/student/Dashboard';
 import StudentSubjects from '@/pages/student/Subjects';
 import StudentProgress from '@/pages/student/Progress';
 import StudentProfile from '@/pages/student/Profile';
 import StudentAssignment from '@/pages/student/Assignment';
 import TeacherDashboard from '@/pages/teacher/Dashboard';
+import TeacherSchedule from '@/pages/teacher/Schedule';
 import TeacherReviews from '@/pages/teacher/Reviews';
 import TeacherIntegrations from '@/pages/teacher/Integrations';
 import TeacherCatalog from '@/pages/teacher/Catalog';
@@ -34,7 +36,8 @@ function NotFound() {
 function StudentRoutes() {
   return (
     <Switch>
-      <Route path="/" component={StudentDashboard} />
+      <Route path="/" component={StudentToday} />
+      <Route path="/lessons" component={StudentDashboard} />
       <Route path="/subjects" component={StudentSubjects} />
       <Route path="/progress" component={StudentProgress} />
       <Route path="/profile" component={StudentProfile} />
@@ -48,6 +51,7 @@ function TeacherRoutes() {
   return (
     <Switch>
       <Route path="/teacher" component={TeacherDashboard} />
+      <Route path="/teacher/schedule" component={TeacherSchedule} />
       <Route path="/teacher/reviews" component={TeacherReviews} />
       <Route path="/teacher/catalog" component={TeacherCatalog} />
       <Route path="/teacher/integrations" component={TeacherIntegrations} />

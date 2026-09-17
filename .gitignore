@@ -58,3 +58,7 @@ NUM-TMS-26/
 
 # Database dumps. May hold real student data; restore from these, don't commit them.
 backups/
+
+# Uploaded content files (PDFs and the like). Regenerate the mock book with
+# scripts/src/make-mock-pdf.py.
+storage/

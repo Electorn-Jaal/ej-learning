@@ -29,6 +29,13 @@
       "when": 1789616027383,
       "tag": "0003_known_proemial_gods",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789616795344,
+      "tag": "0004_gray_slyde",
+      "breakpoints": true
     }
   ]
 }

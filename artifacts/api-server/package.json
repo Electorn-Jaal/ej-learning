@@ -9,7 +9,8 @@
     "start": "node --env-file-if-exists=../../.env --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "create-user": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/create-user.ts",
-    "reset-dev": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/reset-dev.ts"
+    "reset-dev": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/reset-dev.ts",
+    "seed-content": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/seed-content.ts"
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",
