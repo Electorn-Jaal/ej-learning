@@ -35,7 +35,9 @@ export default function TeacherDashboard() {
     <div className="space-y-8">
       <PageHeader
         title="Хяналтын самбар"
-        description={`${data.teacherName} · ${data.classCount} анги`}
+        description={[data.teacherName, data.subjectName, `${data.classCount} анги`]
+          .filter(Boolean)
+          .join(" · ")}
         stats={[
           { label: "Сурагч", value: data.studentCount },
           {
@@ -55,11 +57,14 @@ export default function TeacherDashboard() {
         ]}
       />
 
+      {/* Only for a subject that is levelled at all: Mongolian runs on school
+          grades and skill mastery, where a band chart would mean nothing. */}
+      {data.levelFramework ? (
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Түвшний тархалт</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Байршуулалтын шалгалтаар тогтоосон CEFR түвшин.
+            Байршуулалтын шалгалтаар тогтоосон {data.levelFramework} түвшин.
           </p>
         </CardHeader>
         <CardContent>
@@ -89,13 +94,16 @@ export default function TeacherDashboard() {
           )}
         </CardContent>
       </Card>
+      ) : null}
 
       <Card>
         <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
           <div>
             <CardTitle className="text-lg">Анхаарах сурагчид</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Түвшингүй, оноо бага, эсвэл өнөөдөр хариулаагүй.
+              {data.levelFramework
+                ? "Түвшингүй, оноо бага, эсвэл өнөөдөр хариулаагүй."
+                : "Оноо бага, эсвэл өнөөдөр хариулаагүй."}
             </p>
           </div>
           <Link

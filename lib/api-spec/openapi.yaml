@@ -1355,6 +1355,16 @@ components:
       properties:
         teacherName:
           type: string
+        subjectName:
+          description: The subject this teacher's classes are scoped to, when there is one.
+          type: ["string", "null"]
+        levelFramework:
+          description: >
+            The proficiency framework this subject uses, or null when it has
+            none. Mongolian runs on school grades and skill mastery, so a
+            CEFR band chart would be meaningless there - the client hides the
+            panel rather than drawing empty bars.
+          type: ["string", "null"]
         classCount:
           type: integer
         studentCount:
@@ -1375,6 +1385,8 @@ components:
             $ref: "#/components/schemas/AttentionRow"
       required:
         - teacherName
+        - subjectName
+        - levelFramework
         - classCount
         - studentCount
         - placedCount

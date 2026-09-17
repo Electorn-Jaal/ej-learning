@@ -265,6 +265,8 @@ export const GetStudentProgressResponse = zod.object({
  */
 export const GetTeacherDashboardResponse = zod.object({
   "teacherName": zod.string(),
+  "subjectName": zod.string().nullable().describe('The subject this teacher\'s classes are scoped to, when there is one.'),
+  "levelFramework": zod.string().nullable().describe('The proficiency framework this subject uses, or null when it has none. Mongolian runs on school grades and skill mastery, so a CEFR band chart would be meaningless there - the client hides the panel rather than drawing empty bars.\n'),
   "classCount": zod.number().int(),
   "studentCount": zod.number().int(),
   "placedCount": zod.number().int(),

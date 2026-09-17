@@ -341,12 +341,37 @@ export const termCovering = (isoDate: string) =>
  */
 export const teacherClassIds = (teacherId: number | null, isAdmin: boolean) =>
   isAdmin
-    ? readRows<{ id: number }>(`SELECT id::int AS id FROM core.classes WHERE is_active`)
-    : readRows<{ id: number }>(
-        `SELECT c.id::int AS id FROM core.class_teachers ct
+    ? readRows<{ id: number; subjectId: number | null }>(
+        `SELECT c.id::int AS id, NULL::int AS "subjectId"
+         FROM core.classes c WHERE c.is_active`,
+      )
+    : readRows<{ id: number; subjectId: number | null }>(
+        `SELECT c.id::int AS id,
+           COALESCE(ct.subject_id, t.subject_id)::int AS "subjectId"
+         FROM core.class_teachers ct
          JOIN core.classes c ON c.id = ct.class_id AND c.is_active
+         JOIN core.teachers t ON t.id = ct.teacher_id
          WHERE ct.teacher_id = $1::bigint AND ct.is_active`,
         [teacherId ?? 0],
+      );
+
+/**
+ * The framework a subject's skills are levelled on, or null when it uses none.
+ *
+ * English runs on CEFR; Mongolian runs on school grades and skill mastery. A
+ * dashboard that shows CEFR bands to a Mongolian teacher is showing them a
+ * measurement that does not exist for their subject.
+ */
+export const subjectFramework = (subjectId: number | null) =>
+  subjectId === null
+    ? Promise.resolve([])
+    : readRows<{ subjectName: string; framework: string | null }>(
+        `SELECT s.name_mn AS "subjectName",
+           (SELECT p.framework FROM content.skills k
+            JOIN content.proficiency_levels p ON p.id = k.proficiency_level_id
+            WHERE k.subject_id = s.id LIMIT 1) AS framework
+         FROM core.subjects s WHERE s.id = $1::bigint`,
+        [subjectId],
       );
 
 export const dashboardCounts = (classIds: number[], onDate: string) =>

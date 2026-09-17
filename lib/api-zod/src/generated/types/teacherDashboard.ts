@@ -10,6 +10,16 @@ import type { LevelBand } from './levelBand';
 
 export interface TeacherDashboard {
   teacherName: string;
+  /**
+     * The subject this teacher's classes are scoped to, when there is one.
+     * @nullable
+     */
+  subjectName: string | null;
+  /**
+     * The proficiency framework this subject uses, or null when it has none. Mongolian runs on school grades and skill mastery, so a CEFR band chart would be meaningless there - the client hides the panel rather than drawing empty bars.
+     * @nullable
+     */
+  levelFramework: string | null;
   classCount: number;
   studentCount: number;
   placedCount: number;
