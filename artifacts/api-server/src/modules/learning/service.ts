@@ -65,31 +65,60 @@ export async function studentToday(user: AuthenticatedUser) {
   }
   const date = todayInUlaanbaatar();
   const [enrolment] = await repository.studentClass(user.studentId);
-  const [classRow] = await repository.todayLesson(user.studentId, date);
-  const [assignment] = await repository.assignmentForDay(user.studentId, date);
+  const classRows = await repository.todayLesson(user.studentId, date);
+  const assignments = await repository.assignmentForDay(user.studentId, date);
 
-  // A day is the class lesson plus whatever this student personally owes.
-  // Where a subject places students by level there is no class lesson at all
-  // and the personal one is the whole of it, so both are returned and the
-  // client decides what to lead with.
-  const [extraRow] = assignment
-    ? await repository.lessonById(assignment.dailyLessonId)
-    : [];
+  // A child studies several subjects in a day, so a day is a list. Within each
+  // subject it is the class lesson plus whatever that student personally owes:
+  // where a subject places students by level there is no class lesson at all
+  // and the personal one is the whole of it, which is why both are returned
+  // and the client decides what to lead with.
+  const bySubject = new Map<
+    string,
+    {
+      subjectCode: string;
+      subjectName: string;
+      lesson: ReturnType<typeof toLessonView> | null;
+      extra: {
+        lesson: ReturnType<typeof toLessonView>;
+        source: "AUTO" | "TEACHER";
+        reason: string | null;
+      } | null;
+    }
+  >();
+
+  const entryFor = (subjectCode: string, subjectName: string) => {
+    const existing = bySubject.get(subjectCode);
+    if (existing) return existing;
+    const created = { subjectCode, subjectName, lesson: null, extra: null };
+    bySubject.set(subjectCode, created);
+    return created;
+  };
+
+  for (const row of classRows) {
+    entryFor(row.subjectCode, row.subjectName).lesson = toLessonView(row);
+  }
+
+  for (const assignment of assignments) {
+    const [row] = await repository.lessonById(assignment.dailyLessonId);
+    if (!row) continue;
+    entryFor(row.subjectCode, row.subjectName).extra = {
+      lesson: toLessonView(row),
+      source: assignment.source as "AUTO" | "TEACHER",
+      reason: assignment.reason,
+    };
+  }
+
+  const subjects = [...bySubject.values()].sort((a, b) =>
+    a.subjectName.localeCompare(b.subjectName, "mn"),
+  );
 
   return {
     date,
     dateLabel: longDate(date),
     className: enrolment?.className ?? "",
-    lesson: classRow ? toLessonView(classRow) : null,
-    extra:
-      extraRow && assignment
-        ? {
-            lesson: toLessonView(extraRow),
-            source: assignment.source as "AUTO" | "TEACHER",
-            reason: assignment.reason,
-          }
-        : null,
-    notice: classRow || extraRow
+    subjects,
+    notice: subjects.length > 0
       ? "Хичээлээ дэвтэртээ гүйцэтгээд шалгах асуултад хариулна."
       : !enrolment
         ? "Та ангид бүртгэгдээгүй байна. Багштайгаа холбогдоно уу."
@@ -519,7 +548,7 @@ export async function teacherDashboard(user: AuthenticatedUser) {
       const levelled = Boolean(framework?.framework);
 
       const [[lesson], [counts], attention] = await Promise.all([
-        repository.classLessonToday(klass.classId, onDate),
+        repository.classLessonToday(klass.classId, onDate, klass.subjectId),
         repository.classCounts(klass.classId, onDate),
         repository.classAttention(klass.classId, onDate, levelled),
       ]);

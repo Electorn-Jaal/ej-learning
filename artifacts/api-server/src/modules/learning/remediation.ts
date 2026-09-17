@@ -118,8 +118,12 @@ export async function assignRemediation(studentId: number, assignedOn: string) {
 
   const result = await db.execute(sql`
     INSERT INTO learning.student_assignments
-      (student_id, daily_lesson_id, assigned_on, source, reason)
-    VALUES (${studentId}, ${pick.targetLessonId}, ${assignedOn}::date, 'AUTO', ${reasonFor(pick)})
+      (student_id, daily_lesson_id, assigned_on, subject_id, source, reason)
+    SELECT ${studentId}, ${pick.targetLessonId}, ${assignedOn}::date,
+      sk.subject_id, 'AUTO', ${reasonFor(pick)}
+    FROM learning.daily_lessons dl
+    JOIN content.skills sk ON sk.id = dl.core_skill_id
+    WHERE dl.id = ${pick.targetLessonId}
     ON CONFLICT ON CONSTRAINT student_assignments_student_day_key DO UPDATE SET
       daily_lesson_id = EXCLUDED.daily_lesson_id,
       reason = EXCLUDED.reason

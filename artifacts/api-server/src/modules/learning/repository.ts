@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   classScheduleInLearning,
   db,
@@ -9,6 +9,8 @@ import {
 
 export type LessonRow = {
   id: number;
+  subjectCode: string;
+  subjectName: string;
   lessonCode: string;
   lessonType: string;
   skillName: string;
@@ -41,6 +43,7 @@ export type LessonRow = {
 export const todayLesson = (studentId: number, onDate: string) =>
   readRows<LessonRow>(
     `SELECT dl.id::int AS id, dl.lesson_code AS "lessonCode", dl.lesson_type AS "lessonType",
+       subj.code AS "subjectCode", subj.name_mn AS "subjectName",
        sk.name_mn AS "skillName", dl.learning_goal_mn AS "learningGoal",
        dl.remember_mn AS remember, dl.worked_example_mn AS "workedExample",
        dl.guided_practice_mn AS "guidedPractice",
@@ -56,6 +59,7 @@ export const todayLesson = (studentId: number, onDate: string) =>
      JOIN learning.class_schedule cs ON cs.class_id = c.id AND cs.scheduled_on = $2::date
      JOIN learning.daily_lessons dl ON dl.id = cs.daily_lesson_id AND dl.status = 'APPROVED'
      JOIN content.skills sk ON sk.id = dl.core_skill_id
+     JOIN core.subjects subj ON subj.id = sk.subject_id
      LEFT JOIN LATERAL (
        SELECT sm.id AS material_id, sm.title AS material_title,
               son.title AS chapter_title, a.page_from, a.page_to,
@@ -72,7 +76,7 @@ export const todayLesson = (studentId: number, onDate: string) =>
        LIMIT 1
      ) book ON true
      WHERE e.student_id = $1::bigint AND e.is_active
-     LIMIT 1`,
+     ORDER BY subj.code`,
     [studentId, onDate],
   );
 
@@ -287,6 +291,14 @@ export const scheduledDates = (classId: number, from: string, to: string) =>
     [classId, from, to],
   );
 
+/**
+ * Books several days at once.
+ *
+ * The subject is read from each lesson rather than passed in. Callers know
+ * which lesson they are scheduling and would have to look the subject up the
+ * same way; doing it here means no write path can forget, and the column
+ * cannot disagree with the lesson it describes.
+ */
 export async function insertScheduleDays(
   rows: {
     classId: number;
@@ -297,7 +309,16 @@ export async function insertScheduleDays(
   }[],
 ) {
   if (rows.length === 0) return;
-  await db.insert(classScheduleInLearning).values(rows);
+  for (const row of rows) {
+    await db.execute(sql`
+      INSERT INTO learning.class_schedule
+        (class_id, term_id, daily_lesson_id, scheduled_on, subject_id, created_by)
+      SELECT ${row.classId}, ${row.termId}, ${row.dailyLessonId}, ${row.scheduledOn}::date,
+        sk.subject_id, ${row.createdBy}
+      FROM learning.daily_lessons dl
+      JOIN content.skills sk ON sk.id = dl.core_skill_id
+      WHERE dl.id = ${row.dailyLessonId}`);
+  }
 }
 
 export async function clearScheduleDay(classId: number, scheduledOn: string) {
@@ -311,7 +332,12 @@ export async function clearScheduleDay(classId: number, scheduledOn: string) {
     );
 }
 
-/** Replaces whatever the day held; the unique key is (class, day). */
+/**
+ * Replaces what that day held for that lesson's subject.
+ *
+ * The key is (class, subject, day): putting maths on Tuesday must not remove
+ * Tuesday's Mongolian.
+ */
 export async function setScheduleDay(row: {
   classId: number;
   termId: number;
@@ -319,17 +345,18 @@ export async function setScheduleDay(row: {
   scheduledOn: string;
   createdBy: number | null;
 }) {
-  await db
-    .insert(classScheduleInLearning)
-    .values(row)
-    .onConflictDoUpdate({
-      target: [classScheduleInLearning.classId, classScheduleInLearning.scheduledOn],
-      set: {
-        dailyLessonId: row.dailyLessonId,
-        termId: row.termId,
-        createdBy: row.createdBy,
-      },
-    });
+  await db.execute(sql`
+    INSERT INTO learning.class_schedule
+      (class_id, term_id, daily_lesson_id, scheduled_on, subject_id, created_by)
+    SELECT ${row.classId}, ${row.termId}, ${row.dailyLessonId}, ${row.scheduledOn}::date,
+      sk.subject_id, ${row.createdBy}
+    FROM learning.daily_lessons dl
+    JOIN content.skills sk ON sk.id = dl.core_skill_id
+    WHERE dl.id = ${row.dailyLessonId}
+    ON CONFLICT ON CONSTRAINT class_schedule_class_day_key DO UPDATE SET
+      daily_lesson_id = EXCLUDED.daily_lesson_id,
+      term_id = EXCLUDED.term_id,
+      created_by = EXCLUDED.created_by`);
 }
 
 export const termCovering = (isoDate: string) =>
@@ -399,8 +426,22 @@ export const frameworkOfSubject = (subjectId: number | null) =>
         [subjectId],
       );
 
-/** Today's scheduled lesson for one class, with the pages it covers. */
-export const classLessonToday = (classId: number, onDate: string) =>
+/**
+ * Today's scheduled lesson for one class in one subject, with its pages.
+ *
+ * Scoped by subject because a class now has a lesson in each of them, and a
+ * maths teacher opening the dashboard must not be shown the Mongolian lesson
+ * because it happened to sort first.
+ *
+ * A null subject means the viewer is not tied to one - an admin, or a teacher
+ * of record. They see whichever subject sorts first rather than nothing, since
+ * an empty row would read as "no lesson today" when there are several.
+ */
+export const classLessonToday = (
+  classId: number,
+  onDate: string,
+  subjectId: number | null,
+) =>
   readRows<{
     lessonCode: string;
     skillName: string;
@@ -412,6 +453,7 @@ export const classLessonToday = (classId: number, onDate: string) =>
      FROM learning.class_schedule cs
      JOIN learning.daily_lessons dl ON dl.id = cs.daily_lesson_id
      JOIN content.skills sk ON sk.id = dl.core_skill_id
+     JOIN core.subjects subj ON subj.id = sk.subject_id
      LEFT JOIN LATERAL (
        SELECT al.page_from, al.page_to
        FROM content.content_skill_maps m
@@ -419,8 +461,10 @@ export const classLessonToday = (classId: number, onDate: string) =>
        WHERE m.skill_id = sk.id AND m.status = 'APPROVED'
        ORDER BY m.is_primary DESC LIMIT 1
      ) a ON true
-     WHERE cs.class_id = $1::bigint AND cs.scheduled_on = $2::date`,
-    [classId, onDate],
+     WHERE cs.class_id = $1::bigint AND cs.scheduled_on = $2::date
+       AND ($3::bigint IS NULL OR cs.subject_id = $3::bigint)
+     ORDER BY subj.code`,
+    [classId, onDate, subjectId],
   );
 
 export const classCounts = (classId: number, onDate: string) =>
@@ -498,6 +542,7 @@ export const classAttention = (classId: number, onDate: string, levelled: boolea
 export const lessonById = (lessonId: number) =>
   readRows<LessonRow>(
     `SELECT dl.id::int AS id, dl.lesson_code AS "lessonCode", dl.lesson_type AS "lessonType",
+       subj.code AS "subjectCode", subj.name_mn AS "subjectName",
        sk.name_mn AS "skillName", dl.learning_goal_mn AS "learningGoal",
        dl.remember_mn AS remember, dl.worked_example_mn AS "workedExample",
        dl.guided_practice_mn AS "guidedPractice",
@@ -510,6 +555,7 @@ export const lessonById = (lessonId: number) =>
        COALESCE(book.page_offset, 0)::int AS "pageOffset"
      FROM learning.daily_lessons dl
      JOIN content.skills sk ON sk.id = dl.core_skill_id
+     JOIN core.subjects subj ON subj.id = sk.subject_id
      LEFT JOIN LATERAL (
        SELECT sm.id AS material_id, sm.title AS material_title,
               son.title AS chapter_title, a.page_from, a.page_to,
@@ -529,11 +575,20 @@ export const lessonById = (lessonId: number) =>
     [lessonId],
   );
 
+/** Everything this student personally owes today, one row per subject. */
 export const assignmentForDay = (studentId: number, onDate: string) =>
-  readRows<{ dailyLessonId: number; source: string; reason: string | null }>(
-    `SELECT daily_lesson_id::int AS "dailyLessonId", source::text AS source, reason
-     FROM learning.student_assignments
-     WHERE student_id = $1::bigint AND assigned_on = $2::date`,
+  readRows<{
+    dailyLessonId: number;
+    subjectCode: string;
+    source: string;
+    reason: string | null;
+  }>(
+    `SELECT sa.daily_lesson_id::int AS "dailyLessonId", subj.code AS "subjectCode",
+       sa.source::text AS source, sa.reason
+     FROM learning.student_assignments sa
+     JOIN core.subjects subj ON subj.id = sa.subject_id
+     WHERE sa.student_id = $1::bigint AND sa.assigned_on = $2::date
+     ORDER BY subj.code`,
     [studentId, onDate],
   );
 
@@ -549,6 +604,7 @@ export const classOfStudent = (studentId: number) =>
     [studentId],
   );
 
+/** A teacher's own pick, replacing whatever that subject held that day. */
 export async function upsertStudentAssignment(row: {
   studentId: number;
   dailyLessonId: number;
@@ -556,21 +612,19 @@ export async function upsertStudentAssignment(row: {
   assignedBy: number;
   reason: string | null;
 }) {
-  await db
-    .insert(studentAssignmentsInLearning)
-    .values({ ...row, source: "TEACHER" })
-    .onConflictDoUpdate({
-      target: [
-        studentAssignmentsInLearning.studentId,
-        studentAssignmentsInLearning.assignedOn,
-      ],
-      set: {
-        dailyLessonId: row.dailyLessonId,
-        source: "TEACHER",
-        assignedBy: row.assignedBy,
-        reason: row.reason,
-      },
-    });
+  await db.execute(sql`
+    INSERT INTO learning.student_assignments
+      (student_id, daily_lesson_id, assigned_on, subject_id, source, assigned_by, reason)
+    SELECT ${row.studentId}, ${row.dailyLessonId}, ${row.assignedOn}::date,
+      sk.subject_id, 'TEACHER', ${row.assignedBy}, ${row.reason}
+    FROM learning.daily_lessons dl
+    JOIN content.skills sk ON sk.id = dl.core_skill_id
+    WHERE dl.id = ${row.dailyLessonId}
+    ON CONFLICT ON CONSTRAINT student_assignments_student_day_key DO UPDATE SET
+      daily_lesson_id = EXCLUDED.daily_lesson_id,
+      source = 'TEACHER',
+      assigned_by = EXCLUDED.assigned_by,
+      reason = EXCLUDED.reason`);
 }
 
 export type QuizItemRow = {

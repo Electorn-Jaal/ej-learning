@@ -92,6 +92,7 @@ export * from './skillProgressStatus';
 export * from './studentDashboard';
 export * from './studentProgress';
 export * from './studentToday';
+export * from './subjectDay';
 export * from './subjectOverview';
 export * from './subjectSummary';
 export * from './submissionResult';

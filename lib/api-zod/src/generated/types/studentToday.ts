@@ -5,8 +5,7 @@
  * EJ Learning adaptive learning API
  * OpenAPI spec version: 0.1.0
  */
-import type { DailyLessonView } from './dailyLessonView';
-import type { ExtraWork } from './extraWork';
+import type { SubjectDay } from './subjectDay';
 
 export interface StudentToday {
   /**
@@ -16,9 +15,7 @@ export interface StudentToday {
   date: string;
   dateLabel: string;
   className: string;
-  /** What the class is scheduled to study today. Null when nothing is. */
-  lesson: DailyLessonView | null;
-  /** Work assigned to this student personally. For a subject where the class works through one book it is remediation on top; for one placed by level it is the whole of the day's work. */
-  extra: ExtraWork | null;
+  /** One entry per subject the student has work in today. A child studies several subjects a day, so this is a list rather than a single lesson. */
+  subjects: SubjectDay[];
   notice: string;
 }

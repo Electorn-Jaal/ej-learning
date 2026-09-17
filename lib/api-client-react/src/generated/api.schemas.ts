@@ -299,6 +299,15 @@ export interface PasswordChangeInput {
   newPassword: string;
 }
 
+export interface SubjectDay {
+  subjectCode: string;
+  subjectName: string;
+  /** What the class is scheduled to study in this subject today. */
+  lesson: DailyLessonView | null;
+  /** Work assigned to this student personally in this subject. Where the class works through one book it is remediation on top; where the subject places students by level it is the whole of the day's work. */
+  extra: ExtraWork | null;
+}
+
 export interface StudentToday {
   /**
      * Calendar date, YYYY-MM-DD. Not an instant, so not format:date.
@@ -307,10 +316,8 @@ export interface StudentToday {
   date: string;
   dateLabel: string;
   className: string;
-  /** What the class is scheduled to study today. Null when nothing is. */
-  lesson: DailyLessonView | null;
-  /** Work assigned to this student personally. For a subject where the class works through one book it is remediation on top; for one placed by level it is the whole of the day's work. */
-  extra: ExtraWork | null;
+  /** One entry per subject the student has work in today. A child studies several subjects a day, so this is a list rather than a single lesson. */
+  subjects: SubjectDay[];
   notice: string;
 }
 

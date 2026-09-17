@@ -543,6 +543,9 @@ export const GetStudentTodayResponse = zod.object({
   "date": zod.string().regex(getStudentTodayResponseDateRegExp).describe('Calendar date, YYYY-MM-DD. Not an instant, so not format:date.'),
   "dateLabel": zod.string(),
   "className": zod.string(),
+  "subjects": zod.array(zod.object({
+  "subjectCode": zod.string(),
+  "subjectName": zod.string(),
   "lesson": zod.union([zod.object({
   "id": zod.number().int(),
   "lessonCode": zod.string(),
@@ -564,7 +567,7 @@ export const GetStudentTodayResponse = zod.object({
   "filePage": zod.number().int().nullable().describe('Which page of the file to open at. Not the same as pageFrom: a scanned book carries covers and front matter the printed numbering does not count, so printed page 3 can be file page 9. The student is shown the printed numbers and the viewer opens the file page.\n'),
   "fileUrl": zod.string().nullable()
 }).describe('Where in the book this lesson sits.'),zod.null()])
-}),zod.null()]).describe('What the class is scheduled to study today. Null when nothing is.'),
+}),zod.null()]).describe('What the class is scheduled to study in this subject today.'),
   "extra": zod.union([zod.object({
   "lesson": zod.object({
   "id": zod.number().int(),
@@ -590,7 +593,8 @@ export const GetStudentTodayResponse = zod.object({
 }),
   "source": zod.enum(['AUTO', 'TEACHER']),
   "reason": zod.string().nullable()
-}),zod.null()]).describe('Work assigned to this student personally. For a subject where the class works through one book it is remediation on top; for one placed by level it is the whole of the day\'s work.\n'),
+}),zod.null()]).describe('Work assigned to this student personally in this subject. Where the class works through one book it is remediation on top; where the subject places students by level it is the whole of the day\'s work.\n')
+})).describe('One entry per subject the student has work in today. A child studies several subjects a day, so this is a list rather than a single lesson.\n'),
   "notice": zod.string()
 })
 
