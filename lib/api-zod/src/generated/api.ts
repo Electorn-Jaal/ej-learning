@@ -265,28 +265,29 @@ export const GetStudentProgressResponse = zod.object({
  */
 export const GetTeacherDashboardResponse = zod.object({
   "teacherName": zod.string(),
-  "subjectName": zod.string().nullable().describe('The subject this teacher\'s classes are scoped to, when there is one.'),
-  "levelFramework": zod.string().nullable().describe('The proficiency framework this subject uses, or null when it has none. Mongolian runs on school grades and skill mastery, so a CEFR band chart would be meaningless there - the client hides the panel rather than drawing empty bars.\n'),
-  "classCount": zod.number().int(),
+  "dateLabel": zod.string(),
+  "classes": zod.array(zod.object({
+  "classId": zod.number().int(),
+  "className": zod.string(),
+  "gradeLevel": zod.number().int(),
+  "subjectName": zod.string(),
+  "levelFramework": zod.string().nullable().describe('The proficiency ladder this subject uses, or null where it uses none.'),
+  "lessonCode": zod.string().nullable(),
+  "skillName": zod.string().nullable(),
+  "pageFrom": zod.number().int().nullable(),
+  "pageTo": zod.number().int().nullable(),
   "studentCount": zod.number().int(),
-  "placedCount": zod.number().int(),
-  "assignedToday": zod.number().int(),
   "answeredToday": zod.number().int(),
-  "levels": zod.array(zod.object({
-  "code": zod.string(),
-  "nameMn": zod.string(),
-  "studentCount": zod.number().int()
-})),
   "attention": zod.array(zod.object({
   "studentId": zod.number().int(),
   "studentCode": zod.string(),
   "studentName": zod.string(),
-  "className": zod.string(),
   "level": zod.string().nullable(),
   "reason": zod.enum(['NO_PLACEMENT', 'LOW_SCORE', 'NOT_ANSWERED']),
   "detail": zod.string()
-}).describe('A student the teacher should look at, with why.'))
-})
+}).describe('A student in this class worth a second look. Reasons are limited to what the subject can actually say: a class that works through a textbook has no placement, so NO_PLACEMENT is only ever emitted for a subject that is levelled.\n'))
+}))
+}).describe('Organised by class rather than by teacher. A teacher holds several classes and often more than one subject, so totals across all of them answer no question anybody asks.\n')
 
 
 /**

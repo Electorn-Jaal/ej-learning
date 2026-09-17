@@ -615,12 +615,6 @@ export interface StudentProgress {
   dataNotice: string;
 }
 
-export interface LevelBand {
-  code: string;
-  nameMn: string;
-  studentCount: number;
-}
-
 export type AttentionRowReason = typeof AttentionRowReason[keyof typeof AttentionRowReason];
 
 
@@ -631,38 +625,48 @@ export const AttentionRowReason = {
 } as const;
 
 /**
- * A student the teacher should look at, with why.
+ * A student in this class worth a second look. Reasons are limited to what the subject can actually say: a class that works through a textbook has no placement, so NO_PLACEMENT is only ever emitted for a subject that is levelled.
  */
 export interface AttentionRow {
   studentId: number;
   studentCode: string;
   studentName: string;
-  className: string;
   /** @nullable */
   level: string | null;
   reason: AttentionRowReason;
   detail: string;
 }
 
-export interface TeacherDashboard {
-  teacherName: string;
+export interface TeacherClassToday {
+  classId: number;
+  className: string;
+  gradeLevel: number;
+  subjectName: string;
   /**
-     * The subject this teacher's classes are scoped to, when there is one.
-     * @nullable
-     */
-  subjectName: string | null;
-  /**
-     * The proficiency framework this subject uses, or null when it has none. Mongolian runs on school grades and skill mastery, so a CEFR band chart would be meaningless there - the client hides the panel rather than drawing empty bars.
+     * The proficiency ladder this subject uses, or null where it uses none.
      * @nullable
      */
   levelFramework: string | null;
-  classCount: number;
+  /** @nullable */
+  lessonCode: string | null;
+  /** @nullable */
+  skillName: string | null;
+  /** @nullable */
+  pageFrom: number | null;
+  /** @nullable */
+  pageTo: number | null;
   studentCount: number;
-  placedCount: number;
-  assignedToday: number;
   answeredToday: number;
-  levels: LevelBand[];
   attention: AttentionRow[];
+}
+
+/**
+ * Organised by class rather than by teacher. A teacher holds several classes and often more than one subject, so totals across all of them answer no question anybody asks.
+ */
+export interface TeacherDashboard {
+  teacherName: string;
+  dateLabel: string;
+  classes: TeacherClassToday[];
 }
 
 export interface TeacherClass {

@@ -1,14 +1,126 @@
 import { Link } from "wouter"
-import { useGetTeacherDashboard } from "@workspace/api-client-react"
+import { useGetTeacherDashboard, type TeacherClassToday } from "@workspace/api-client-react"
+import { BookOpen } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { PageHeader } from "@/components/ui/page-header"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 
-const REASON: Record<string, { label: string; dot: string }> = {
-  NO_PLACEMENT: { label: "Түвшин тогтоогоогүй", dot: "bg-destructive" },
-  LOW_SCORE: { label: "Оноо бага", dot: "bg-pending" },
-  NOT_ANSWERED: { label: "Хариулаагүй", dot: "bg-muted-foreground/50" },
+const REASON_DOT: Record<string, string> = {
+  NO_PLACEMENT: "bg-destructive",
+  LOW_SCORE: "bg-pending",
+  NOT_ANSWERED: "bg-muted-foreground/50",
+}
+
+function ClassCard({ klass }: { klass: TeacherClassToday }) {
+  const pages =
+    klass.pageFrom === null
+      ? null
+      : klass.pageTo && klass.pageTo !== klass.pageFrom
+        ? `${klass.pageFrom}–${klass.pageTo} х.`
+        : `${klass.pageFrom} х.`
+
+  // A levelled subject gives each student their own work, so an empty class
+  // schedule is the normal state there rather than a gap in the timetable.
+  const perStudent = klass.levelFramework !== null
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <CardTitle className="text-lg">{klass.className}</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            {klass.subjectName} · {klass.gradeLevel}-р анги
+            {klass.levelFramework ? ` · ${klass.levelFramework}` : ""}
+          </p>
+        </div>
+        <div className="text-right">
+          <div className="text-2xl font-semibold tabular-nums">
+            {klass.answeredToday}
+            <span className="text-base font-normal text-muted-foreground">
+              /{klass.studentCount}
+            </span>
+          </div>
+          <div className="text-xs text-muted-foreground">өнөөдөр хариулсан</div>
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-4">
+        <div className="flex items-start gap-3 border-l-2 border-primary py-1 pl-4">
+          <BookOpen className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+          <div className="min-w-0">
+            {klass.skillName ? (
+              <>
+                <p className="text-sm font-medium">{klass.skillName}</p>
+                <p className="text-xs text-muted-foreground">
+                  {klass.lessonCode}
+                  {pages ? ` · ${pages}` : ""}
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {perStudent
+                  ? "Сурагч бүр өөрийн түвшний ажилтай."
+                  : "Өнөөдөр хуваарьт хичээл алга."}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {klass.attention.length > 0 ? (
+          <div className="space-y-2">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Анхаарах — {klass.attention.length}
+            </p>
+            <ul className="divide-y">
+              {klass.attention.slice(0, 8).map((row) => (
+                <li
+                  key={row.studentId}
+                  className="flex flex-wrap items-center gap-3 py-1.5 text-sm"
+                >
+                  <span className="min-w-0 flex-1 truncate">
+                    {row.studentName}
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {row.studentCode}
+                    </span>
+                  </span>
+                  {row.level ? (
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      {row.level}
+                    </span>
+                  ) : null}
+                  <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span
+                      className={cn(
+                        "h-1.5 w-1.5 shrink-0 rounded-full",
+                        REASON_DOT[row.reason] ?? REASON_DOT.NOT_ANSWERED,
+                      )}
+                    />
+                    {row.detail}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {klass.attention.length > 8 ? (
+              <p className="text-xs text-muted-foreground">
+                … бас {klass.attention.length - 8} сурагч
+              </p>
+            ) : null}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">Бүгд хийсэн байна.</p>
+        )}
+
+        <div className="flex flex-wrap gap-4 border-t pt-3 text-sm">
+          <Link href="/teacher/results" className="underline underline-offset-4">
+            Үр дүн
+          </Link>
+          <Link href="/teacher/schedule" className="underline underline-offset-4">
+            Хуваарь
+          </Link>
+        </div>
+      </CardContent>
+    </Card>
+  )
 }
 
 export default function TeacherDashboard() {
@@ -17,7 +129,7 @@ export default function TeacherDashboard() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <Skeleton className="h-28 w-full" />
+        <Skeleton className="h-16 w-full" />
         <Skeleton className="h-64 w-full" />
       </div>
     )
@@ -26,139 +138,25 @@ export default function TeacherDashboard() {
     return <p role="alert">Хяналтын самбарыг уншиж чадсангүй.</p>
   }
 
-  const placedShare = data.studentCount
-    ? Math.round((data.placedCount / data.studentCount) * 100)
-    : 0
-  const peak = Math.max(1, ...data.levels.map((level) => level.studentCount))
-
   return (
-    <div className="space-y-8">
-      <PageHeader
-        title="Хяналтын самбар"
-        description={[data.teacherName, data.subjectName, `${data.classCount} анги`]
-          .filter(Boolean)
-          .join(" · ")}
-        stats={[
-          { label: "Сурагч", value: data.studentCount },
-          {
-            label: "Түвшин тогтоосон",
-            value: data.placedCount,
-            hint: `${placedShare}%`,
-          },
-          { label: "Өнөөдөр оногдсон", value: data.assignedToday },
-          {
-            label: "Өнөөдөр хариулсан",
-            value: data.answeredToday,
-            hint:
-              data.assignedToday > 0
-                ? `${data.assignedToday - data.answeredToday} хүлээгдэж байна`
-                : undefined,
-          },
-        ]}
-      />
+    <div className="space-y-6">
+      <header className="space-y-1">
+        <p className="text-sm text-muted-foreground">{data.dateLabel}</p>
+        <h1 className="text-2xl font-bold">Өнөөдрийн хичээл</h1>
+        <p className="text-sm text-muted-foreground">
+          {data.teacherName} · {data.classes.length} анги
+        </p>
+      </header>
 
-      {/* Only for a subject that is levelled at all: Mongolian runs on school
-          grades and skill mastery, where a band chart would mean nothing. */}
-      {data.levelFramework ? (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Түвшний тархалт</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Байршуулалтын шалгалтаар тогтоосон {data.levelFramework} түвшин.
-          </p>
-        </CardHeader>
-        <CardContent>
-          {data.levels.every((level) => level.studentCount === 0) ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              Хараахан хэний ч түвшинг тогтоогоогүй байна.
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {data.levels.map((level) => (
-                <li key={level.code} className="flex items-center gap-3">
-                  <span className="w-16 shrink-0 text-sm font-medium tabular-nums">
-                    {level.code}
-                  </span>
-                  <span className="h-5 flex-1 overflow-hidden rounded-sm bg-secondary">
-                    <span
-                      className="block h-full bg-primary"
-                      style={{ width: `${(level.studentCount / peak) * 100}%` }}
-                    />
-                  </span>
-                  <span className="w-10 shrink-0 text-right text-sm tabular-nums text-muted-foreground">
-                    {level.studentCount}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
-      ) : null}
-
-      <Card>
-        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
-          <div>
-            <CardTitle className="text-lg">Анхаарах сурагчид</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              {data.levelFramework
-                ? "Түвшингүй, оноо бага, эсвэл өнөөдөр хариулаагүй."
-                : "Оноо бага, эсвэл өнөөдөр хариулаагүй."}
-            </p>
-          </div>
-          <Link
-            href="/teacher/results"
-            className="text-sm font-medium underline underline-offset-4"
-          >
-            Бүх үр дүн
-          </Link>
-        </CardHeader>
-        <CardContent>
-          {data.attention.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              Одоогоор анхаарах зүйл алга.
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
-                    <th className="py-2 pr-3 font-medium">Сурагч</th>
-                    <th className="py-2 pr-3 font-medium">Анги</th>
-                    <th className="py-2 pr-3 font-medium">Түвшин</th>
-                    <th className="py-2 font-medium">Шалтгаан</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.attention.map((row) => {
-                    const reason = REASON[row.reason] ?? REASON.NOT_ANSWERED
-                    return (
-                      <tr key={row.studentId} className="border-b last:border-0">
-                        <td className="py-2 pr-3">
-                          <span className="font-medium">{row.studentName}</span>
-                          <span className="ml-2 text-xs text-muted-foreground">
-                            {row.studentCode}
-                          </span>
-                        </td>
-                        <td className="py-2 pr-3 text-muted-foreground">{row.className}</td>
-                        <td className="py-2 pr-3 tabular-nums">{row.level ?? "—"}</td>
-                        <td className="py-2">
-                          <span className="flex items-center gap-2">
-                            <span
-                              className={cn("h-1.5 w-1.5 shrink-0 rounded-full", reason.dot)}
-                            />
-                            <span>{row.detail}</span>
-                          </span>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {data.classes.length === 0 ? (
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-muted-foreground">
+            Танд оногдсон анги алга. Админаас анги холбуулна уу.
+          </CardContent>
+        </Card>
+      ) : (
+        data.classes.map((klass) => <ClassCard key={klass.classId} klass={klass} />)
+      )}
     </div>
   )
 }

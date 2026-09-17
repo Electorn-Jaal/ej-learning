@@ -386,45 +386,53 @@ export async function setScheduleDay(
   });
 }
 
+/**
+ * What a teacher is teaching today, class by class.
+ *
+ * Organised by class rather than by teacher, because a teacher holds several
+ * and often more than one subject: totalling students across a Mongolian class
+ * and a maths class answers no question anybody asks, and labelling the lot
+ * with whichever subject came first is simply wrong.
+ */
 export async function teacherDashboard(user: AuthenticatedUser) {
   const isAdmin = user.roles.includes("ADMIN");
-  const classes = await repository.teacherClassIds(user.teacherId, isAdmin);
-  const classIds = classes.map((row) => row.id);
+  const classes = await repository.teacherClasses(user.teacherId, isAdmin);
   const onDate = todayInUlaanbaatar();
-  // A teacher teaches one subject across their classes in this data; take the
-  // first non-null rather than pretending to handle several until it happens.
-  const subjectId = classes.find((row) => row.subjectId !== null)?.subjectId ?? null;
-  const [subject] = await repository.subjectFramework(subjectId);
 
-  if (classIds.length === 0) {
-    return {
-      teacherName: user.displayName,
-      subjectName: subject?.subjectName ?? null,
-      levelFramework: null,
-      classCount: 0,
-      studentCount: 0,
-      placedCount: 0,
-      assignedToday: 0,
-      answeredToday: 0,
-      levels: [],
-      attention: [],
-    };
-  }
+  const rows = await Promise.all(
+    classes.map(async (klass) => {
+      const [framework] = await repository.frameworkOfSubject(klass.subjectId);
+      const levelled = Boolean(framework?.framework);
 
-  const [[counts], levels, attention] = await Promise.all([
-    repository.dashboardCounts(classIds, onDate),
-    repository.levelBands(classIds),
-    repository.attentionRows(classIds, onDate),
-  ]);
+      const [[lesson], [counts], attention] = await Promise.all([
+        repository.classLessonToday(klass.classId, onDate),
+        repository.classCounts(klass.classId, onDate),
+        repository.classAttention(klass.classId, onDate, levelled),
+      ]);
+
+      return {
+        classId: klass.classId,
+        className: klass.className,
+        gradeLevel: klass.gradeLevel,
+        subjectName: klass.subjectName,
+        levelFramework: framework?.framework ?? null,
+        lessonCode: lesson?.lessonCode ?? null,
+        skillName: lesson?.skillName ?? null,
+        pageFrom: lesson?.pageFrom ?? null,
+        pageTo: lesson?.pageTo ?? null,
+        studentCount: counts?.studentCount ?? 0,
+        answeredToday: counts?.answeredToday ?? 0,
+        attention,
+      };
+    }),
+  );
 
   return {
     teacherName: user.displayName,
-    subjectName: subject?.subjectName ?? null,
-    levelFramework: subject?.framework ?? null,
-    classCount: classIds.length,
-    ...counts,
-    // Bands are only meaningful for a subject that is actually levelled.
-    levels: subject?.framework ? levels : [],
-    attention,
+    dateLabel: new Intl.DateTimeFormat("mn-MN", {
+      dateStyle: "long",
+      timeZone: "Asia/Ulaanbaatar",
+    }).format(new Date(`${onDate}T00:00:00Z`)),
+    classes: rows,
   };
 }
