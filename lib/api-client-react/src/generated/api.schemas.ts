@@ -514,13 +514,44 @@ export interface StudentProgress {
   dataNotice: string;
 }
 
+export interface LevelBand {
+  code: string;
+  nameMn: string;
+  studentCount: number;
+}
+
+export type AttentionRowReason = typeof AttentionRowReason[keyof typeof AttentionRowReason];
+
+
+export const AttentionRowReason = {
+  NO_PLACEMENT: 'NO_PLACEMENT',
+  LOW_SCORE: 'LOW_SCORE',
+  NOT_ANSWERED: 'NOT_ANSWERED',
+} as const;
+
+/**
+ * A student the teacher should look at, with why.
+ */
+export interface AttentionRow {
+  studentId: number;
+  studentCode: string;
+  studentName: string;
+  className: string;
+  /** @nullable */
+  level: string | null;
+  reason: AttentionRowReason;
+  detail: string;
+}
+
 export interface TeacherDashboard {
   teacherName: string;
   classCount: number;
   studentCount: number;
-  awaitingReview: number;
-  currentTopic: string;
-  insight: string;
+  placedCount: number;
+  assignedToday: number;
+  answeredToday: number;
+  levels: LevelBand[];
+  attention: AttentionRow[];
 }
 
 export interface TeacherClass {

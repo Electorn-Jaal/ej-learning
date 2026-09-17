@@ -5,12 +5,16 @@
  * EJ Learning adaptive learning API
  * OpenAPI spec version: 0.1.0
  */
+import type { AttentionRow } from './attentionRow';
+import type { LevelBand } from './levelBand';
 
 export interface TeacherDashboard {
   teacherName: string;
   classCount: number;
   studentCount: number;
-  awaitingReview: number;
-  currentTopic: string;
-  insight: string;
+  placedCount: number;
+  assignedToday: number;
+  answeredToday: number;
+  levels: LevelBand[];
+  attention: AttentionRow[];
 }

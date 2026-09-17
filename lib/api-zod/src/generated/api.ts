@@ -267,9 +267,23 @@ export const GetTeacherDashboardResponse = zod.object({
   "teacherName": zod.string(),
   "classCount": zod.number().int(),
   "studentCount": zod.number().int(),
-  "awaitingReview": zod.number().int(),
-  "currentTopic": zod.string(),
-  "insight": zod.string()
+  "placedCount": zod.number().int(),
+  "assignedToday": zod.number().int(),
+  "answeredToday": zod.number().int(),
+  "levels": zod.array(zod.object({
+  "code": zod.string(),
+  "nameMn": zod.string(),
+  "studentCount": zod.number().int()
+})),
+  "attention": zod.array(zod.object({
+  "studentId": zod.number().int(),
+  "studentCode": zod.string(),
+  "studentName": zod.string(),
+  "className": zod.string(),
+  "level": zod.string().nullable(),
+  "reason": zod.enum(['NO_PLACEMENT', 'LOW_SCORE', 'NOT_ANSWERED']),
+  "detail": zod.string()
+}).describe('A student the teacher should look at, with why.'))
 })
 
 
