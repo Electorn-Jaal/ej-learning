@@ -1,7 +1,8 @@
+import { useState } from "react"
 import { Link } from "wouter"
 import { useGetTeacherDashboard, type TeacherClassToday } from "@workspace/api-client-react"
-import { BookOpen } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { BookOpen, ChevronDown, ChevronUp } from "lucide-react"
+import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 
@@ -11,7 +12,23 @@ const REASON_DOT: Record<string, string> = {
   NOT_ANSWERED: "bg-muted-foreground/50",
 }
 
-function ClassCard({ klass }: { klass: TeacherClassToday }) {
+/**
+ * One class, closed by default.
+ *
+ * A teacher with ten classes needs the list to fit on a screen before it needs
+ * the detail: the summary row carries what is decided at a glance - today's
+ * topic, how many have answered, how many need looking at - and the breakdown
+ * waits until it is asked for.
+ */
+function ClassRow({
+  klass,
+  open,
+  onToggle,
+}: {
+  klass: TeacherClassToday
+  open: boolean
+  onToggle: () => void
+}) {
   const pages =
     klass.pageFrom === null
       ? null
@@ -24,27 +41,63 @@ function ClassCard({ klass }: { klass: TeacherClassToday }) {
   const perStudent = klass.levelFramework !== null
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
-          <CardTitle className="text-lg">{klass.className}</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            {klass.subjectName} · {klass.gradeLevel}-р анги
-            {klass.levelFramework ? ` · ${klass.levelFramework}` : ""}
-          </p>
-        </div>
-        <div className="text-right">
-          <div className="text-2xl font-semibold tabular-nums">
-            {klass.answeredToday}
-            <span className="text-base font-normal text-muted-foreground">
-              /{klass.studentCount}
-            </span>
-          </div>
-          <div className="text-xs text-muted-foreground">өнөөдөр хариулсан</div>
-        </div>
-      </CardHeader>
+    <li className={cn("border-l-2", open ? "border-primary" : "border-transparent")}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex w-full flex-wrap items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-secondary/50"
+      >
+        <span className="w-20 shrink-0">
+          <span className="block text-sm font-semibold">{klass.className}</span>
+          <span className="block text-xs text-muted-foreground">
+            {klass.gradeLevel}-р анги
+          </span>
+        </span>
 
-      <CardContent className="space-y-4">
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm">
+            {klass.skillName ?? (
+              <span className="text-muted-foreground">
+                {klass.levelFramework ? "Сурагч бүр өөрийн ажилтай" : "Хичээл алга"}
+              </span>
+            )}
+          </span>
+          <span className="block truncate text-xs text-muted-foreground">
+            {klass.subjectName}
+            {klass.levelFramework ? ` · ${klass.levelFramework}` : ""}
+            {pages ? ` · ${pages}` : ""}
+          </span>
+        </span>
+
+        <span className="shrink-0 text-right">
+          <span className="block text-sm font-semibold tabular-nums">
+            {klass.answeredToday}
+            <span className="font-normal text-muted-foreground">/{klass.studentCount}</span>
+          </span>
+          <span className="block text-xs text-muted-foreground">хариулсан</span>
+        </span>
+
+        {klass.attention.length > 0 ? (
+          <span className="flex w-24 shrink-0 items-center justify-end gap-2 text-xs text-muted-foreground">
+            <span className="h-1.5 w-1.5 rounded-full bg-pending" />
+            {klass.attention.length} анхаарах
+          </span>
+        ) : (
+          <span className="w-24 shrink-0 text-right text-xs text-muted-foreground">
+            бүгд хийсэн
+          </span>
+        )}
+
+        {open ? (
+          <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
+        ) : (
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+        )}
+      </button>
+
+      {open ? (
+      <div className="space-y-4 border-t border-border px-4 py-4">
         <div className="flex items-start gap-3 border-l-2 border-primary py-1 pl-4">
           <BookOpen className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
           <div className="min-w-0">
@@ -118,13 +171,17 @@ function ClassCard({ klass }: { klass: TeacherClassToday }) {
             Хуваарь
           </Link>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+      ) : null}
+    </li>
   )
 }
 
 export default function TeacherDashboard() {
   const { data, isLoading, isError } = useGetTeacherDashboard()
+  // One class opens at a time: this is a list to scan, not a set of panels to
+  // leave hanging open.
+  const [openId, setOpenId] = useState<number | null>(null)
 
   if (isLoading) {
     return (
@@ -155,7 +212,16 @@ export default function TeacherDashboard() {
           </CardContent>
         </Card>
       ) : (
-        data.classes.map((klass) => <ClassCard key={klass.classId} klass={klass} />)
+        <ul className="divide-y rounded-md border border-border bg-card">
+          {data.classes.map((klass) => (
+            <ClassRow
+              key={klass.classId}
+              klass={klass}
+              open={openId === klass.classId}
+              onToggle={() => setOpenId(openId === klass.classId ? null : klass.classId)}
+            />
+          ))}
+        </ul>
       )}
     </div>
   )

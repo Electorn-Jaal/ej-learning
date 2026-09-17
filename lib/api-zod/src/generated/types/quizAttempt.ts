@@ -5,6 +5,7 @@
  * EJ Learning adaptive learning API
  * OpenAPI spec version: 0.1.0
  */
+import type { QuizResult } from './quizResult';
 
 export interface QuizAttempt {
   id: number;
@@ -12,4 +13,6 @@ export interface QuizAttempt {
   score: number;
   maxScore: number;
   submittedAt: string;
+  /** Marking comes back with the attempt, which is the first time the key is disclosed. */
+  results: QuizResult[];
 }

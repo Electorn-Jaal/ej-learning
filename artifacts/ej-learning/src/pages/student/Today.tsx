@@ -121,7 +121,7 @@ export default function StudentToday() {
       ) : null}
 
       {lesson ? <LessonCard lesson={lesson} /> : null}
-      {lesson ? <LessonQuiz lessonId={lesson.id} lessonCode={lesson.lessonCode} /> : null}
+      {lesson ? <LessonQuiz lessonId={lesson.id} /> : null}
 
       {extra ? (
         <section className="space-y-6">
@@ -137,7 +137,7 @@ export default function StudentToday() {
           ) : null}
 
           <LessonCard lesson={extra.lesson} banner={extra.reason} />
-          <LessonQuiz lessonId={extra.lesson.id} lessonCode={extra.lesson.lessonCode} />
+          <LessonQuiz lessonId={extra.lesson.id} />
         </section>
       ) : null}
 

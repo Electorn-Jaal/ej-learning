@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import {
   GenerateScheduleBody,
   GenerateScheduleResponse,
+  GetQuizPaperResponse,
   GetStudentTodayResponse,
   GetTeacherDashboardResponse,
   GetTeacherLessonsResponse,
@@ -20,7 +21,8 @@ import {
   generateSchedule,
   materialFile,
   quizAttemptsForTeacher,
-  recordQuizAttempt,
+  quizPaper,
+  recordQuizAttemptScored,
   schedulableLessons,
   setScheduleDay,
   studentToday,
@@ -126,6 +128,18 @@ router.put("/teacher/schedule/day", asStaff, async (req, res, next) => {
   }
 });
 
+router.get("/student/quiz/:lessonId", requireRole("STUDENT"), async (req, res, next) => {
+  try {
+    const lessonId = Number(req.params.lessonId);
+    if (!Number.isInteger(lessonId) || lessonId <= 0) {
+      throw badRequest("Хичээлийн дугаар буруу байна.", "INVALID_LESSON_ID");
+    }
+    res.json(GetQuizPaperResponse.parse(await quizPaper(req.user!, lessonId)));
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.post(
   "/student/quiz-attempts",
   requireRole("STUDENT"),
@@ -135,7 +149,7 @@ router.post(
       if (!parsed.success) {
         throw badRequest("Хариултын бүрдэл буруу байна.", "INVALID_ATTEMPT");
       }
-      const attempt = await recordQuizAttempt(req.user!, parsed.data);
+      const attempt = await recordQuizAttemptScored(req.user!, parsed.data);
       res.status(201).json(SubmitQuizAttemptResponse.parse(attempt));
     } catch (error) {
       next(error);

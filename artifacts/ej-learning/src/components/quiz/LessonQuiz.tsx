@@ -1,61 +1,74 @@
-import { useMemo, useState } from 'react'
-import { useSubmitQuizAttempt } from '@workspace/api-client-react'
+import { useState } from 'react'
+import {
+  getGetQuizPaperQueryKey,
+  useGetQuizPaper,
+  useSubmitQuizAttempt,
+  type QuizResult,
+} from '@workspace/api-client-react'
 import { Check, RotateCcw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
-import { questionsForLesson, type MockQuestion } from '@/lib/mock-quiz'
 
 /**
  * Practice check for a lesson.
  *
- * The questions still live in the frontend, but the attempt is posted, because
- * a teacher seeing what a class answered is the point of the prototype. The
- * server records who answered and against which lesson; the marking is sent
- * with it, which is acceptable for practice a student checks themselves.
+ * The questions come from the server and the answers go back to it. The key
+ * used to sit in the frontend bundle where any student could read it, and a
+ * score is only worth recording once the marking happens somewhere the student
+ * cannot reach. The correct options arrive with the result, which is the first
+ * moment they are disclosed.
  */
-export function LessonQuiz({
-  lessonId,
-  lessonCode,
-}: {
-  lessonId: number
-  lessonCode: string
-}) {
-  const questions = useMemo(() => questionsForLesson(lessonCode), [lessonCode])
-  const [answers, setAnswers] = useState<Record<string, string>>({})
-  const [checked, setChecked] = useState(false)
-  const { mutate, isPending, isSuccess, isError } = useSubmitQuizAttempt()
+export function LessonQuiz({ lessonId }: { lessonId: number }) {
+  const { data: paper, isLoading } = useGetQuizPaper(lessonId, {
+    query: { queryKey: getGetQuizPaperQueryKey(lessonId), retry: false },
+  })
+  const { mutate, isPending } = useSubmitQuizAttempt()
 
-  const answeredCount = Object.keys(answers).length
-  const allAnswered = answeredCount === questions.length
-  const score = questions.filter((q) => answers[q.id] === q.correctOptionId).length
+  const [chosen, setChosen] = useState<Record<number, number>>({})
+  const [results, setResults] = useState<QuizResult[] | null>(null)
+  const [score, setScore] = useState<{ score: number; max: number } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  if (isLoading) return <Skeleton className="h-64 w-full" />
+  // A lesson with no questions yet simply has no check; that is not an error
+  // worth putting in front of a student.
+  if (!paper || paper.questions.length === 0) return null
+
+  const answeredCount = Object.keys(chosen).length
+  const allAnswered = answeredCount === paper.questions.length
+  const resultFor = (itemId: number) => results?.find((row) => row.itemId === itemId)
 
   const reset = () => {
-    setAnswers({})
-    setChecked(false)
+    setChosen({})
+    setResults(null)
+    setScore(null)
+    setError(null)
   }
 
   const check = () => {
-    setChecked(true)
-    mutate({
-      data: {
-        lessonId,
-        lessonCode,
-        answers: questions.map((question) => {
-          const chosenOptionId = answers[question.id]
-          return {
-            questionId: question.id,
-            prompt: question.prompt,
-            chosenOptionId,
-            chosenText:
-              question.options.find((option) => option.id === chosenOptionId)?.text ?? '',
-            correct: chosenOptionId === question.correctOptionId,
-          }
-        }),
+    setError(null)
+    mutate(
+      {
+        data: {
+          lessonId,
+          answers: paper.questions.map((question) => ({
+            itemId: question.itemId,
+            optionId: chosen[question.itemId] ?? null,
+          })),
+        },
       },
-    })
+      {
+        onSuccess: (attempt) => {
+          setResults(attempt.results)
+          setScore({ score: attempt.score, max: attempt.maxScore })
+        },
+        onError: (cause) => setError(cause?.data?.error ?? 'Хариултыг хадгалж чадсангүй.'),
+      },
+    )
   }
 
   return (
@@ -63,39 +76,88 @@ export function LessonQuiz({
       <CardHeader>
         <CardTitle className="text-lg">Шалгах асуулт</CardTitle>
         <p className="text-sm text-muted-foreground">
-          {questions.length} асуулт. Дэвтрийн ажлаа хийсний дараа хариулаарай.
+          {paper.questions.length} асуулт. Дэвтрийн ажлаа хийсний дараа хариулаарай.
         </p>
       </CardHeader>
 
       <CardContent className="space-y-6">
-        {questions.map((question, index) => (
-          <Question
-            key={question.id}
-            index={index}
-            question={question}
-            selected={answers[question.id]}
-            checked={checked}
-            onSelect={(optionId) =>
-              setAnswers((prev) => ({ ...prev, [question.id]: optionId }))
-            }
-          />
-        ))}
+        {paper.questions.map((question, index) => {
+          const result = resultFor(question.itemId)
+          return (
+            <fieldset key={question.itemId} className="space-y-3">
+              <legend className="text-sm font-medium">
+                {index + 1}. {question.prompt}
+              </legend>
+
+              <RadioGroup
+                value={String(chosen[question.itemId] ?? '')}
+                onValueChange={(value) =>
+                  setChosen((prev) => ({ ...prev, [question.itemId]: Number(value) }))
+                }
+                disabled={Boolean(results)}
+                className="gap-2"
+              >
+                {question.options.map((option) => {
+                  const inputId = `q${question.itemId}-${option.optionId}`
+                  const isAnswer = result?.correctOptionId === option.optionId
+                  const isChosen = chosen[question.itemId] === option.optionId
+                  return (
+                    <div
+                      key={option.optionId}
+                      className={cn(
+                        'flex items-center gap-3 rounded-md border px-3 py-2 transition-colors',
+                        !results && 'hover:bg-muted/50',
+                        results && isAnswer && 'border-success bg-success/5',
+                        results && isChosen && !isAnswer && 'border-destructive bg-destructive/5',
+                      )}
+                    >
+                      <RadioGroupItem value={String(option.optionId)} id={inputId} />
+                      <Label htmlFor={inputId} className="flex-1 cursor-pointer font-normal">
+                        {option.text}
+                      </Label>
+                      {results && isAnswer ? (
+                        <Check className="h-4 w-4 shrink-0 text-success" />
+                      ) : null}
+                      {results && isChosen && !isAnswer ? (
+                        <X className="h-4 w-4 shrink-0 text-destructive" />
+                      ) : null}
+                    </div>
+                  )
+                })}
+              </RadioGroup>
+
+              {result ? (
+                <p
+                  className={cn(
+                    // A rule in the semantic colour, with the explanation left
+                    // legible in ordinary text.
+                    'border-l-2 py-1 pl-3 text-sm text-muted-foreground',
+                    result.correct ? 'border-success' : 'border-destructive',
+                  )}
+                >
+                  {result.correct ? 'Зөв. ' : 'Дахин үзье. '}
+                  {result.explanation}
+                </p>
+              ) : null}
+            </fieldset>
+          )
+        })}
 
         <div className="flex flex-wrap items-center gap-3 border-t pt-4">
-          {!checked ? (
+          {!results ? (
             <>
               <Button onClick={check} disabled={!allAnswered || isPending}>
-                {isPending ? 'Илгээж байна…' : 'Шалгах'}
+                {isPending ? 'Шалгаж байна…' : 'Шалгах'}
               </Button>
               <span className="text-sm text-muted-foreground">
-                {answeredCount}/{questions.length} хариулсан
+                {answeredCount}/{paper.questions.length} хариулсан
               </span>
             </>
           ) : (
             <>
               <p className="text-sm font-medium">
-                {questions.length} асуултаас <strong>{score}</strong> зөв.
-                {score === questions.length
+                {score?.max} асуултаас <strong>{score?.score}</strong> зөв.
+                {score && score.score === score.max
                   ? ' Маш сайн!'
                   : ' Буруу хариултын тайлбарыг уншаарай.'}
               </p>
@@ -105,90 +167,15 @@ export function LessonQuiz({
               </Button>
             </>
           )}
+          {error ? (
+            <span role="alert" className="text-sm text-destructive">
+              {error}
+            </span>
+          ) : null}
         </div>
 
-        <p className="text-xs text-muted-foreground">
-          {isError
-            ? 'Хариултыг хадгалж чадсангүй. Багшид харагдахгүй байж магадгүй.'
-            : isSuccess
-              ? 'Хариулт хадгалагдлаа. Багш үр дүнг тань харна.'
-              : 'Асуултууд туршилтынх. Хариулт тань багшид харагдана.'}
-        </p>
+        <p className="text-xs text-muted-foreground">Хариулт тань багшид харагдана.</p>
       </CardContent>
     </Card>
-  )
-}
-
-function Question({
-  index,
-  question,
-  selected,
-  checked,
-  onSelect,
-}: {
-  index: number
-  question: MockQuestion
-  selected: string | undefined
-  checked: boolean
-  onSelect: (optionId: string) => void
-}) {
-  const isCorrect = selected === question.correctOptionId
-
-  return (
-    <fieldset className="space-y-3">
-      <legend className="text-sm font-medium">
-        {index + 1}. {question.prompt}
-      </legend>
-
-      <RadioGroup
-        value={selected ?? ''}
-        onValueChange={onSelect}
-        disabled={checked}
-        className="gap-2"
-      >
-        {question.options.map((option) => {
-          const inputId = `${question.id}-${option.id}`
-          const isAnswer = option.id === question.correctOptionId
-          const isChosen = option.id === selected
-
-          return (
-            <div
-              key={option.id}
-              className={cn(
-                'flex items-center gap-3 rounded-md border px-3 py-2 transition-colors',
-                !checked && 'hover:bg-muted/50',
-                checked && isAnswer && 'border-success bg-success/5',
-                checked && isChosen && !isAnswer && 'border-destructive bg-destructive/5',
-              )}
-            >
-              <RadioGroupItem value={option.id} id={inputId} />
-              <Label htmlFor={inputId} className="flex-1 cursor-pointer font-normal">
-                {option.text}
-              </Label>
-              {checked && isAnswer ? (
-                <Check className="h-4 w-4 shrink-0 text-success" />
-              ) : null}
-              {checked && isChosen && !isAnswer ? (
-                <X className="h-4 w-4 shrink-0 text-destructive" />
-              ) : null}
-            </div>
-          )
-        })}
-      </RadioGroup>
-
-      {checked ? (
-        <p
-          className={cn(
-            // A rule in the semantic colour, with the explanation left legible
-            // in ordinary text - not a tinted block printing its own hue back.
-            'border-l-2 py-1 pl-3 text-sm text-muted-foreground',
-            isCorrect ? 'border-success' : 'border-destructive',
-          )}
-        >
-          {isCorrect ? 'Зөв. ' : 'Дахин үзье. '}
-          {question.explanation}
-        </p>
-      ) : null}
-    </fieldset>
   )
 }

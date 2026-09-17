@@ -45,6 +45,7 @@ import type {
   PreviewStudent,
   QuizAttempt,
   QuizAttemptInput,
+  QuizPaper,
   ReviewInput,
   ReviewItem,
   ReviewResult,
@@ -2868,4 +2869,82 @@ export const useAssignExtraWork = <TError = ErrorType<ApiError>,
       > => {
       return useMutation(getAssignExtraWorkMutationOptions(options));
     }
+
+export const getGetQuizPaperUrl = (lessonId: number,) => {
+
+
+
+
+  return `/api/student/quiz/${lessonId}`
+}
+
+/**
+ * The key is never sent. It used to live in the frontend bundle, where any student could read it, and it stays on the server now so that a score means something.
+ * @summary The questions for a lesson, without the answers
+ */
+export const getQuizPaper = async (lessonId: number, options?: Parameters<typeof customFetch>[1]): Promise<QuizPaper> => {
+
+  return customFetch<QuizPaper>(getGetQuizPaperUrl(lessonId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetQuizPaperQueryKey = (lessonId: number,) => {
+    return [
+    `/api/student/quiz/${lessonId}`
+    ] as const;
+    }
+
+
+export const getGetQuizPaperQueryOptions = <TData = Awaited<ReturnType<typeof getQuizPaper>>, TError = ErrorType<ApiError>>(lessonId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getQuizPaper>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetQuizPaperQueryKey(lessonId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getQuizPaper>>> = ({ signal }) => getQuizPaper(lessonId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: lessonId !== null && lessonId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getQuizPaper>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetQuizPaperQueryResult = NonNullable<Awaited<ReturnType<typeof getQuizPaper>>>
+export type GetQuizPaperQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary The questions for a lesson, without the answers
+ */
+
+export function useGetQuizPaper<TData = Awaited<ReturnType<typeof getQuizPaper>>, TError = ErrorType<ApiError>>(
+ lessonId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getQuizPaper>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetQuizPaperQueryOptions(lessonId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 

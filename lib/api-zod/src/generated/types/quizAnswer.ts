@@ -7,7 +7,7 @@
  */
 
 /**
- * The prompt and the chosen text are copied in, not referenced, so an answer still reads correctly after the questions are edited.
+ * What the teacher sees afterwards, with the text copied in so it still reads after an edit.
  */
 export interface QuizAnswer {
   questionId: string;
