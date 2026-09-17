@@ -681,3 +681,83 @@ export const classSkillMastery = (classId: number) =>
      ORDER BY gap DESC, "averageScore", sk.skill_code`,
     [classId],
   );
+
+export type AssessableSkill = {
+  skillId: number;
+  skillCode: string;
+  skillName: string;
+};
+
+/**
+ * The skills a class can be marked against.
+ *
+ * Scoped by the subjects this teacher actually teaches the class and by the
+ * class's own grade, so the picker cannot offer a maths skill to a Mongolian
+ * lesson or a grade 9 skill to a grade 4 class. A skill with no grade - the
+ * levelled subjects - is offered too, since those are placed rather than
+ * bound to a year.
+ */
+export const assessableSkills = (classId: number) =>
+  readRows<AssessableSkill>(
+    `SELECT DISTINCT sk.id::int AS "skillId", sk.skill_code AS "skillCode",
+       sk.name_mn AS "skillName"
+     FROM core.classes c
+     JOIN core.class_teachers ct ON ct.class_id = c.id AND ct.is_active
+     JOIN content.skills sk ON sk.subject_id = ct.subject_id
+       AND sk.status = 'APPROVED'
+       AND (sk.grade_level_id IS NULL OR sk.grade_level_id = c.grade_level_id)
+     WHERE c.id = $1::bigint
+     ORDER BY sk.skill_code`,
+    [classId],
+  );
+
+export type RosterRow = {
+  studentId: number;
+  studentCode: string;
+  studentName: string;
+  masteryStatus: string | null;
+  masteryScore: number | null;
+  source: string | null;
+  assessedBy: string | null;
+  lastAssessedAt: string | null;
+};
+
+/**
+ * Every student in the class with where they currently stand on one skill.
+ *
+ * A LEFT JOIN: a student nobody has assessed is a row with empty columns, not
+ * a missing row. The teacher is filling in a register and needs to see who is
+ * still blank.
+ */
+export const classRosterForSkill = (classId: number, skillId: number) =>
+  readRows<RosterRow>(
+    `SELECT st.id::int AS "studentId", st.student_code AS "studentCode",
+       st.display_name AS "studentName",
+       m.mastery_status AS "masteryStatus", round(m.mastery_score)::int AS "masteryScore",
+       m.source, m.assessed_by AS "assessedBy",
+       to_json(m.last_assessed_at) #>> '{}' AS "lastAssessedAt"
+     FROM core.student_enrollments e
+     JOIN core.students st ON st.id = e.student_id AND st.is_active
+     LEFT JOIN learning.student_skill_mastery m
+       ON m.student_id = st.id AND m.skill_id = $2::bigint
+     WHERE e.class_id = $1::bigint AND e.is_active
+     ORDER BY st.display_name`,
+    [classId, skillId],
+  );
+
+/** Confirms a skill is one this class may be marked against. */
+export const skillAssessableForClass = async (classId: number, skillId: number) =>
+  (await assessableSkills(classId)).some((skill) => skill.skillId === skillId);
+
+/** Restricts an entry to students actually enrolled in the class. */
+export const enrolledStudentIds = async (classId: number) =>
+  new Set(
+    (
+      await readRows<{ id: number }>(
+        `SELECT e.student_id::int AS id FROM core.student_enrollments e
+         JOIN core.students st ON st.id = e.student_id AND st.is_active
+         WHERE e.class_id = $1::bigint AND e.is_active`,
+        [classId],
+      )
+    ).map((row) => row.id),
+  );

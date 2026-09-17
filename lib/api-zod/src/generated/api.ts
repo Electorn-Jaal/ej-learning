@@ -723,6 +723,66 @@ export const GetTeacherQuizAttemptsResponse = zod.object({
 
 
 /**
+ * Primary grades do the monthly assessment in a notebook, so nothing reaches the system until a teacher has marked it. Returns the skills this class may be marked against and where every student currently stands on the one chosen. A student nobody has assessed is present with empty values rather than absent.
+ * @summary The register for marking a paper assessment
+ */
+export const GetAssessmentSheetQueryParams = zod.object({
+  "classId": zod.coerce.number().int(),
+  "skillId": zod.coerce.number().int().optional()
+})
+
+export const GetAssessmentSheetResponse = zod.object({
+  "classId": zod.number().int(),
+  "className": zod.string(),
+  "gradeLevel": zod.number().int(),
+  "stage": zod.enum(['PRIMARY', 'SECONDARY']),
+  "skills": zod.array(zod.object({
+  "skillId": zod.number().int(),
+  "skillCode": zod.string(),
+  "skillName": zod.string()
+})),
+  "skillId": zod.number().int().nullable(),
+  "students": zod.array(zod.object({
+  "studentId": zod.number().int(),
+  "studentCode": zod.string(),
+  "studentName": zod.string(),
+  "masteryStatus": zod.string().nullable(),
+  "masteryScore": zod.number().int().nullable(),
+  "source": zod.string().nullable().describe('TEACHER where a person entered it, AUTO where the system computed it.'),
+  "assessedBy": zod.string().nullable(),
+  "lastAssessedAt": zod.string().nullable()
+}).describe('One student\'s standing on the chosen skill. Every field but the identity is null for a student nobody has assessed yet.\n'))
+})
+
+
+/**
+ * The level may be given without a score. That is the teacher overriding the arithmetic, which the requirements ask for by name, and demanding a percentage would put a number in the database nobody measured.
+ * @summary Record a teacher's own marking of a paper assessment
+ */
+export const submitAssessmentBodyEntriesItemScoreMin = 0;
+export const submitAssessmentBodyEntriesItemScoreMax = 100;
+
+
+
+
+export const SubmitAssessmentBody = zod.object({
+  "classId": zod.number().int(),
+  "skillId": zod.number().int(),
+  "entries": zod.array(zod.object({
+  "studentId": zod.number().int(),
+  "status": zod.enum(['MASTERED', 'DEVELOPING', 'GAP']),
+  "score": zod.number().int().min(submitAssessmentBodyEntriesItemScoreMin).max(submitAssessmentBodyEntriesItemScoreMax).nullable()
+})).min(1)
+})
+
+export const SubmitAssessmentResponse = zod.object({
+  "classId": zod.number().int(),
+  "skillId": zod.number().int(),
+  "recorded": zod.number().int()
+})
+
+
+/**
  * Drawn from the answers students have already given, not from a separate exam. A skill nobody has attempted is absent rather than reported as zero, so the list only ever contains skills there is evidence about.
  * @summary How a class stands on each skill it has been measured on
  */

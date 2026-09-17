@@ -781,6 +781,17 @@ export const studentSkillMasteryInLearning = learning.table("student_skill_maste
 	attemptCount: integer("attempt_count").default(0).notNull(),
 	lastAssessedAt: timestamp("last_assessed_at", { withTimezone: true, mode: 'string' }),
 	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	// Who decided this. A primary-grade level is a teacher's judgement about
+	// work done in a notebook, and it must not be indistinguishable from a
+	// figure the system computed - a teacher reading a screen is entitled to
+	// know which of the two they are looking at.
+	source: varchar({ length: 20 }).default('AUTO').notNull(),
+	// The teacher's username rather than a foreign key, matching
+	// audit.change_logs.changed_by. A record of who judged a child's work
+	// should survive that teacher's account being removed, and core.teachers
+	// lives in identity.ts which already imports from here - a key back the
+	// other way would close an import cycle.
+	assessedBy: varchar("assessed_by", { length: 200 }),
 }, (table) => [
 	index("idx_student_mastery_status").using("btree", table.studentId.asc().nullsLast().op("int8_ops"), table.masteryStatus.asc().nullsLast().op("int8_ops")),
 	foreignKey({
@@ -794,6 +805,8 @@ export const studentSkillMasteryInLearning = learning.table("student_skill_maste
 			name: "student_skill_mastery_skill_id_fkey"
 		}).onDelete("restrict"),
 	primaryKey({ columns: [table.skillId, table.studentId], name: "student_skill_mastery_pkey"}),
+	check("student_skill_mastery_source_check",
+		sql`(source)::text = ANY ((ARRAY['AUTO'::character varying, 'TEACHER'::character varying])::text[])`),
 	check("student_skill_mastery_mastery_status_check", sql`(mastery_status)::text = ANY ((ARRAY['NOT_ASSESSED'::character varying, 'GAP'::character varying, 'DEVELOPING'::character varying, 'MASTERED'::character varying])::text[])`),
 	check("student_skill_mastery_mastery_score_check", sql`(mastery_score >= (0)::numeric) AND (mastery_score <= (100)::numeric)`),
 	check("student_skill_mastery_attempt_count_check", sql`attempt_count >= 0`),

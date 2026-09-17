@@ -20,6 +20,7 @@ import StudentAssignment from '@/pages/student/Assignment';
 import TeacherDashboard from '@/pages/teacher/Dashboard';
 import TeacherSchedule from '@/pages/teacher/Schedule';
 import TeacherQuizResults from '@/pages/teacher/QuizResults';
+import TeacherAssessment from '@/pages/teacher/Assessment';
 import AdminBooks from '@/pages/admin/Books';
 import TeacherReviews from '@/pages/teacher/Reviews';
 import TeacherIntegrations from '@/pages/teacher/Integrations';
@@ -58,6 +59,7 @@ function StaffRoutes({ admin }: { admin: boolean }) {
       <Route path="/teacher" component={TeacherDashboard} />
       <Route path="/teacher/schedule" component={TeacherSchedule} />
       <Route path="/teacher/results" component={TeacherQuizResults} />
+      <Route path="/teacher/assessment" component={TeacherAssessment} />
       <Route path="/teacher/reviews" component={TeacherReviews} />
       <Route path="/teacher/catalog" component={TeacherCatalog} />
       <Route path="/teacher/integrations" component={TeacherIntegrations} />

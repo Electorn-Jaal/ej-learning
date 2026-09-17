@@ -22,6 +22,8 @@ import type {
 import type {
   AdminMaterial,
   ApiError,
+  AssessmentSheet,
+  AssessmentSubmission,
   AssignmentDetail,
   AssignmentState,
   AssignmentStepInput,
@@ -35,6 +37,7 @@ import type {
   ExtraWorkResult,
   GenerateScheduleInput,
   GenerateScheduleResult,
+  GetAssessmentSheetParams,
   GetClassSkillsParams,
   GetTeacherLessonsParams,
   GetTeacherQuizAttemptsParams,
@@ -59,6 +62,7 @@ import type {
   StudentToday,
   SubjectOverview,
   SubmissionResult,
+  SubmitAssessmentResult,
   TeacherClass,
   TeacherDashboard,
   TeacherQuizAttempts,
@@ -2276,6 +2280,180 @@ export function useGetTeacherQuizAttempts<TData = Awaited<ReturnType<typeof getT
 
 
 
+
+export const getGetAssessmentSheetUrl = (params: GetAssessmentSheetParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/teacher/assessment-sheet?${stringifiedParams}` : `/api/teacher/assessment-sheet`
+}
+
+/**
+ * Primary grades do the monthly assessment in a notebook, so nothing reaches the system until a teacher has marked it. Returns the skills this class may be marked against and where every student currently stands on the one chosen. A student nobody has assessed is present with empty values rather than absent.
+ * @summary The register for marking a paper assessment
+ */
+export const getAssessmentSheet = async (params: GetAssessmentSheetParams, options?: Parameters<typeof customFetch>[1]): Promise<AssessmentSheet> => {
+
+  return customFetch<AssessmentSheet>(getGetAssessmentSheetUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAssessmentSheetQueryKey = (params?: GetAssessmentSheetParams,) => {
+    return [
+    `/api/teacher/assessment-sheet`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetAssessmentSheetQueryOptions = <TData = Awaited<ReturnType<typeof getAssessmentSheet>>, TError = ErrorType<ApiError>>(params: GetAssessmentSheetParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAssessmentSheet>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAssessmentSheetQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAssessmentSheet>>> = ({ signal }) => getAssessmentSheet(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAssessmentSheet>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAssessmentSheetQueryResult = NonNullable<Awaited<ReturnType<typeof getAssessmentSheet>>>
+export type GetAssessmentSheetQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary The register for marking a paper assessment
+ */
+
+export function useGetAssessmentSheet<TData = Awaited<ReturnType<typeof getAssessmentSheet>>, TError = ErrorType<ApiError>>(
+ params: GetAssessmentSheetParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAssessmentSheet>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAssessmentSheetQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSubmitAssessmentUrl = () => {
+
+
+
+
+  return `/api/teacher/assessments`
+}
+
+/**
+ * The level may be given without a score. That is the teacher overriding the arithmetic, which the requirements ask for by name, and demanding a percentage would put a number in the database nobody measured.
+ * @summary Record a teacher's own marking of a paper assessment
+ */
+export const submitAssessment = async (assessmentSubmission: AssessmentSubmission, options?: Parameters<typeof customFetch>[1]): Promise<SubmitAssessmentResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<SubmitAssessmentResult>(getSubmitAssessmentUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(assessmentSubmission)
+  }
+);}
+
+
+
+
+
+export const getSubmitAssessmentMutationKey = () => ['submitAssessment'] as const;
+
+export const getSubmitAssessmentMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitAssessment>>, TError,SubmitAssessmentMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof submitAssessment>>, TError,SubmitAssessmentMutationVariables, TContext> => {
+
+const mutationKey = getSubmitAssessmentMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof submitAssessment>>, SubmitAssessmentMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  submitAssessment(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SubmitAssessmentMutationResult = NonNullable<Awaited<ReturnType<typeof submitAssessment>>>
+    export type SubmitAssessmentMutationBody = BodyType<AssessmentSubmission>
+    export type SubmitAssessmentMutationError = ErrorType<ApiError>
+    export type SubmitAssessmentMutationVariables = {data: BodyType<AssessmentSubmission>}
+
+    /**
+ * @summary Record a teacher's own marking of a paper assessment
+ */
+export const useSubmitAssessment = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitAssessment>>, TError,SubmitAssessmentMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof submitAssessment>>,
+        TError,
+        SubmitAssessmentMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSubmitAssessmentMutationOptions(options));
+    }
 
 export const getGetClassSkillsUrl = (params: GetClassSkillsParams,) => {
   const normalizedParams = new URLSearchParams();

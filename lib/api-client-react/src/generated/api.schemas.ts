@@ -674,6 +674,86 @@ export interface AttentionRow {
   detail: string;
 }
 
+export type MasteryStatus = typeof MasteryStatus[keyof typeof MasteryStatus];
+
+
+export const MasteryStatus = {
+  MASTERED: 'MASTERED',
+  DEVELOPING: 'DEVELOPING',
+  GAP: 'GAP',
+} as const;
+
+export interface AssessableSkill {
+  skillId: number;
+  skillCode: string;
+  skillName: string;
+}
+
+/**
+ * One student's standing on the chosen skill. Every field but the identity is null for a student nobody has assessed yet.
+ */
+export interface RosterEntry {
+  studentId: number;
+  studentCode: string;
+  studentName: string;
+  /** @nullable */
+  masteryStatus: string | null;
+  /** @nullable */
+  masteryScore: number | null;
+  /**
+     * TEACHER where a person entered it, AUTO where the system computed it.
+     * @nullable
+     */
+  source: string | null;
+  /** @nullable */
+  assessedBy: string | null;
+  /** @nullable */
+  lastAssessedAt: string | null;
+}
+
+export type AssessmentSheetStage = typeof AssessmentSheetStage[keyof typeof AssessmentSheetStage];
+
+
+export const AssessmentSheetStage = {
+  PRIMARY: 'PRIMARY',
+  SECONDARY: 'SECONDARY',
+} as const;
+
+export interface AssessmentSheet {
+  classId: number;
+  className: string;
+  gradeLevel: number;
+  stage: AssessmentSheetStage;
+  skills: AssessableSkill[];
+  /** @nullable */
+  skillId: number | null;
+  students: RosterEntry[];
+}
+
+export interface AssessmentEntry {
+  studentId: number;
+  status: MasteryStatus;
+  /**
+     * @minimum 0
+     * @maximum 100
+     * @nullable
+     */
+  score: number | null;
+}
+
+export interface AssessmentSubmission {
+  classId: number;
+  skillId: number;
+  /** @minItems 1 */
+  entries: AssessmentEntry[];
+}
+
+export interface SubmitAssessmentResult {
+  classId: number;
+  skillId: number;
+  recorded: number;
+}
+
 export interface WeakStudent {
   studentId: number;
   studentName: string;
@@ -987,6 +1067,11 @@ classId: number;
  * @maximum 200
  */
 limit?: number;
+};
+
+export type GetAssessmentSheetParams = {
+classId: number;
+skillId?: number;
 };
 
 export type GetClassSkillsParams = {

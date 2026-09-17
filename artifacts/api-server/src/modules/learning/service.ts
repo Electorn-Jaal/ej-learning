@@ -3,7 +3,7 @@ import { stat } from "node:fs/promises";
 import { badRequest, forbidden } from "../../shared/http-error";
 import type { AuthenticatedUser } from "../identity/service";
 import * as repository from "./repository";
-import { recordSkillEvidence } from "./mastery";
+import { recordSkillEvidence, recordTeacherMastery } from "./mastery";
 import { assignRemediation } from "./remediation";
 
 /** Mongolian schooling splits at grade 6; the two teacher workflows follow it. */
@@ -285,6 +285,80 @@ export async function classSkillsForTeacher(user: AuthenticatedUser, classId: nu
       weakest: skill.weakest.slice(0, 5),
       weakestTotal: skill.weakest.length,
     })),
+  };
+}
+
+/**
+ * The register a teacher fills in for a paper assessment.
+ *
+ * Primary grades do the monthly assessment in a notebook, so nothing reaches
+ * the system until a teacher has marked it. This is that screen's data: the
+ * skills this class may be marked against, and where every student currently
+ * stands on the one chosen.
+ */
+export async function assessmentSheet(
+  user: AuthenticatedUser,
+  classId: number,
+  skillId: number | null,
+) {
+  const klass = await authorisedClass(user, classId);
+  const skills = await repository.assessableSkills(klass.classId);
+  const chosen = skillId ?? skills[0]?.skillId ?? null;
+
+  return {
+    classId: klass.classId,
+    className: klass.className,
+    gradeLevel: klass.gradeLevel,
+    // Primary grades are the reason this screen exists; upper grades may still
+    // use it, for a child who was absent for the web assessment.
+    stage: stageForGrade(klass.gradeLevel),
+    skills,
+    skillId: chosen,
+    students: chosen === null ? [] : await repository.classRosterForSkill(klass.classId, chosen),
+  };
+}
+
+/**
+ * Writes a teacher's marking of a paper assessment.
+ *
+ * Entries naming a student who is not in this class are refused rather than
+ * ignored: a register that silently drops a row would have the teacher
+ * believing a child was recorded when they were not.
+ */
+export async function submitAssessment(
+  user: AuthenticatedUser,
+  input: {
+    classId: number;
+    skillId: number;
+    entries: { studentId: number; status: "MASTERED" | "DEVELOPING" | "GAP"; score: number | null }[];
+  },
+) {
+  const klass = await authorisedClass(user, input.classId);
+
+  if (!(await repository.skillAssessableForClass(klass.classId, input.skillId))) {
+    throw badRequest("Энэ чадвар тухайн ангид тохирохгүй байна.", "SKILL_NOT_FOR_CLASS");
+  }
+
+  const enrolled = await repository.enrolledStudentIds(klass.classId);
+  const stranger = input.entries.find((entry) => !enrolled.has(entry.studentId));
+  if (stranger) {
+    throw badRequest("Энэ ангид харьяалагдахгүй сурагч байна.", "STUDENT_NOT_IN_CLASS");
+  }
+
+  for (const entry of input.entries) {
+    await recordTeacherMastery({
+      studentId: entry.studentId,
+      skillId: input.skillId,
+      status: entry.status,
+      score: entry.score,
+      teacherUsername: user.username,
+    });
+  }
+
+  return {
+    classId: klass.classId,
+    skillId: input.skillId,
+    recorded: input.entries.length,
   };
 }
 
