@@ -251,6 +251,12 @@ export const sourceVersionsInContent = content.table("source_versions", {
 	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
 	fileSizeBytes: bigint("file_size_bytes", { mode: "number" }),
 	checksumSha256: char("checksum_sha256", { length: 64 }),
+	// File page = printed page + offset. A scanned textbook carries covers and
+	// front matter the printed numbering does not count, so an outline entry
+	// saying "page 3" is not page 3 of the file. Belongs on the version rather
+	// than the work: re-scan the book and the offset changes, the outline does
+	// not.
+	pageOffset: integer("page_offset").default(0).notNull(),
 	status: reviewStatusInContent().default('DRAFT').notNull(),
 	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
 }, (table) => [

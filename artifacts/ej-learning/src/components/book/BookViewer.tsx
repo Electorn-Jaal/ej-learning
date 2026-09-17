@@ -8,6 +8,7 @@ type Book = {
   chapterTitle: string | null
   pageFrom: number | null
   pageTo: number | null
+  filePage: number | null
   fileUrl: string | null
 }
 
@@ -27,8 +28,9 @@ export function BookViewer({ book }: { book: Book }) {
   const [open, setOpen] = useState(false)
   if (!book.fileUrl) return null
 
-  const page = book.pageFrom ?? 1
-  const src = `${book.fileUrl}#page=${page}&view=FitH`
+  // The printed number is what the student is told; the file page is where the
+  // viewer has to open, and on a scanned book they differ.
+  const src = `${book.fileUrl}#page=${book.filePage ?? book.pageFrom ?? 1}&view=FitH`
   const pages =
     book.pageFrom === null
       ? null

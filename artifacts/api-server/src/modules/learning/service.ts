@@ -62,6 +62,8 @@ export async function studentToday(user: AuthenticatedUser) {
                   chapterTitle: row.chapterTitle,
                   pageFrom: row.pageFrom,
                   pageTo: row.pageTo,
+                  filePage:
+                    row.pageFrom === null ? null : row.pageFrom + row.pageOffset,
                   fileUrl: `/api/content/materials/${row.materialId}/file`,
                 },
         }

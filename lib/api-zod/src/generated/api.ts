@@ -560,6 +560,7 @@ export const GetStudentTodayResponse = zod.object({
   "chapterTitle": zod.string().nullable(),
   "pageFrom": zod.number().int().nullable(),
   "pageTo": zod.number().int().nullable(),
+  "filePage": zod.number().int().nullable().describe('Which page of the file to open at. Not the same as pageFrom: a scanned book carries covers and front matter the printed numbering does not count, so printed page 3 can be file page 9. The student is shown the printed numbers and the viewer opens the file page.\n'),
   "fileUrl": zod.string().nullable()
 }).describe('Where in the book this lesson sits.'),zod.null()])
 }),zod.null()]),
