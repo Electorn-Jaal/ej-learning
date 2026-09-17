@@ -1,5 +1,6 @@
 import { pgTable, pgSchema, unique, bigint, varchar, boolean, check, smallint, index, foreignKey, text, integer, timestamp, char, numeric, jsonb, uuid, primaryKey, date } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
+import { proficiencyLevelsInContent } from "./proficiency"
 
 export const content = pgSchema("content");
 export const assessment = pgSchema("assessment");
@@ -14,6 +15,13 @@ export const importanceLevelInContent = content.enum("importance_level", ['HIGH'
 export const outlineNodeTypeInContent = content.enum("outline_node_type", ['CHAPTER', 'SECTION', 'SUBSECTION', 'EXAMPLE_SET', 'EXERCISE_SET', 'REVIEW', 'ASSESSMENT', 'OTHER'])
 export const reviewStatusInContent = content.enum("review_status", ['DRAFT', 'IN_REVIEW', 'APPROVED', 'ARCHIVED'])
 export const sourceRelationTypeInContent = content.enum("source_relation_type", ['PRIMARY', 'CURRICULUM', 'EXPLAINS', 'PRACTICES', 'ASSESSES', 'RELATED'])
+/**
+ * Where an item's correct answer came from. The CEFR bank's key was solved
+ * from recorded scores rather than exported from the form that holds it, and a
+ * score computed against a reconstruction must not be indistinguishable from
+ * one computed against the real key.
+ */
+export const answerSourceInAssessment = assessment.enum("answer_source", ['AUTHORITATIVE', 'RECONSTRUCTED', 'UNKNOWN'])
 export const importStatusInStaging = staging.enum("import_status", ['UPLOADED', 'VALIDATING', 'INVALID', 'READY', 'APPROVED', 'IMPORTED', 'FAILED'])
 
 
@@ -441,6 +449,11 @@ export const studentsInCore = core.table("students", {
 	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
 	id: bigint({ mode: "number" }).primaryKey().generatedAlwaysAsIdentity({ name: "core.students_id_seq", startWith: 1, increment: 1, minValue: 1, cache: 1 }),
 	studentCode: varchar("student_code", { length: 100 }).notNull(),
+	// What the source system called this student, kept verbatim. The imported
+	// codes are free text a student typed, so they cannot be an identity - but
+	// without them a later reconciliation against real registration numbers is
+	// guesswork rather than a lookup.
+	externalCode: varchar("external_code", { length: 200 }),
 	displayName: varchar("display_name", { length: 300 }).notNull(),
 	isActive: boolean("is_active").default(true).notNull(),
 	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
@@ -454,16 +467,28 @@ export const diagnosticItemsInAssessment = assessment.table("diagnostic_items", 
 	itemCode: varchar("item_code", { length: 100 }).notNull(),
 	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
 	subjectId: bigint("subject_id", { mode: "number" }).notNull(),
-	gradeLevelId: smallint("grade_level_id").notNull(),
-	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
-	skillId: bigint("skill_id", { mode: "number" }).notNull(),
+	// Nullable since the CEFR bank: an item sits on a school grade or on a
+	// proficiency level, never necessarily both. The check below requires one.
+	gradeLevelId: smallint("grade_level_id"),
+	proficiencyLevelId: smallint("proficiency_level_id"),
+	// Nullable too: the imported bank names a domain (Grammar, Listening)
+	// before anyone has mapped it onto content.skills.
+	skillId: bigint("skill_id", { mode: "number" }),
 	itemOrder: smallint("item_order").notNull(),
 	titleMn: varchar("title_mn", { length: 500 }).notNull(),
 	domainMn: varchar("domain_mn", { length: 200 }),
 	maxScore: numeric("max_score", { precision: 8, scale:  2 }).notNull(),
 	rubricMn: text("rubric_mn"),
+	answerSource: answerSourceInAssessment("answer_source").default('UNKNOWN').notNull(),
 	status: reviewStatusInContent().default('DRAFT').notNull(),
 }, (table) => [
+	check("diagnostic_items_level_present_check",
+		sql`grade_level_id IS NOT NULL OR proficiency_level_id IS NOT NULL`),
+	foreignKey({
+			columns: [table.proficiencyLevelId],
+			foreignColumns: [proficiencyLevelsInContent.id],
+			name: "diagnostic_items_proficiency_level_id_fkey"
+		}),
 	foreignKey({
 			columns: [table.subjectId],
 			foreignColumns: [subjectsInCore.id],
