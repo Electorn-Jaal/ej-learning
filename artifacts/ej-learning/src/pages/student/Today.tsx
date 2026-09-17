@@ -3,6 +3,7 @@ import { BookOpen, Clock, ExternalLink } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { LessonQuiz } from '@/components/quiz/LessonQuiz'
 
 const LESSON_TYPE: Record<string, { label: string; className: string }> = {
   CORE: { label: 'Үндсэн хичээл', className: 'bg-primary/10 text-primary border-primary/20' },
@@ -116,6 +117,8 @@ export default function StudentToday() {
           </CardContent>
         </Card>
       )}
+
+      {lesson ? <LessonQuiz lessonCode={lesson.lessonCode} /> : null}
     </div>
   )
 }
