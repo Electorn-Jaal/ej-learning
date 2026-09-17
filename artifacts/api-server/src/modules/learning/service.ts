@@ -25,6 +25,35 @@ export const shiftDays = (isoDate: string, days: number) => {
 const isDate = (value: unknown): value is string =>
   typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
 
+/** One place that turns a lesson row into the shape the contract promises. */
+function toLessonView(row: repository.LessonRow) {
+  return {
+    id: row.id,
+    lessonCode: row.lessonCode,
+    lessonType: row.lessonType,
+    skillName: row.skillName,
+    learningGoal: row.learningGoal,
+    remember: row.remember,
+    workedExample: row.workedExample,
+    guidedPractice: row.guidedPractice,
+    independentPractice: row.independentPractice,
+    studentMessage: row.studentMessage,
+    estimatedMinutes: row.estimatedMinutes,
+    book:
+      row.materialId === null
+        ? null
+        : {
+            materialId: row.materialId,
+            title: row.materialTitle,
+            chapterTitle: row.chapterTitle,
+            pageFrom: row.pageFrom,
+            pageTo: row.pageTo,
+            filePage: row.pageFrom === null ? null : row.pageFrom + row.pageOffset,
+            fileUrl: `/api/content/materials/${row.materialId}/file`,
+          },
+  };
+}
+
 export async function studentToday(user: AuthenticatedUser) {
   if (user.studentId === null) {
     throw forbidden(
@@ -34,45 +63,77 @@ export async function studentToday(user: AuthenticatedUser) {
   }
   const date = todayInUlaanbaatar();
   const [enrolment] = await repository.studentClass(user.studentId);
-  const [row] = await repository.todayLesson(user.studentId, date);
+  const [classRow] = await repository.todayLesson(user.studentId, date);
+  const [assignment] = await repository.assignmentForDay(user.studentId, date);
+
+  // A day is the class lesson plus whatever this student personally owes.
+  // Where a subject places students by level there is no class lesson at all
+  // and the personal one is the whole of it, so both are returned and the
+  // client decides what to lead with.
+  const [extraRow] = assignment
+    ? await repository.lessonById(assignment.dailyLessonId)
+    : [];
 
   return {
     date,
     dateLabel: longDate(date),
     className: enrolment?.className ?? "",
-    lesson: row
-      ? {
-          id: row.id,
-          lessonCode: row.lessonCode,
-          lessonType: row.lessonType,
-          skillName: row.skillName,
-          learningGoal: row.learningGoal,
-          remember: row.remember,
-          workedExample: row.workedExample,
-          guidedPractice: row.guidedPractice,
-          independentPractice: row.independentPractice,
-          studentMessage: row.studentMessage,
-          estimatedMinutes: row.estimatedMinutes,
-          book:
-            row.materialId === null
-              ? null
-              : {
-                  materialId: row.materialId,
-                  title: row.materialTitle,
-                  chapterTitle: row.chapterTitle,
-                  pageFrom: row.pageFrom,
-                  pageTo: row.pageTo,
-                  filePage:
-                    row.pageFrom === null ? null : row.pageFrom + row.pageOffset,
-                  fileUrl: `/api/content/materials/${row.materialId}/file`,
-                },
-        }
-      : null,
-    notice: row
+    lesson: classRow ? toLessonView(classRow) : null,
+    extra:
+      extraRow && assignment
+        ? {
+            lesson: toLessonView(extraRow),
+            source: assignment.source as "AUTO" | "TEACHER",
+            reason: assignment.reason,
+          }
+        : null,
+    notice: classRow || extraRow
       ? "Хичээлээ дэвтэртээ гүйцэтгээд шалгах асуултад хариулна."
       : !enrolment
         ? "Та ангид бүртгэгдээгүй байна. Багштайгаа холбогдоно уу."
         : "Өнөөдөр хуваарьт хичээл алга.",
+  };
+}
+
+/**
+ * Assigns extra work to one student.
+ *
+ * The teacher must teach that student's class, and the lesson must be one the
+ * class could be taught - the endpoint takes ids, and without both checks any
+ * lesson could be pushed onto any child.
+ */
+export async function assignExtraWork(
+  user: AuthenticatedUser,
+  input: { studentId: number; lessonId: number; assignedOn: string; reason: string | null },
+) {
+  const [enrolment] = await repository.classOfStudent(input.studentId);
+  if (!enrolment) {
+    throw badRequest("Сурагч ангид бүртгэгдээгүй байна.", "STUDENT_NOT_ENROLLED");
+  }
+  const klass = await authorisedClass(user, enrolment.classId);
+
+  const lessons = await repository.schedulableLessons(klass.classId);
+  if (!lessons.some((lesson) => lesson.id === input.lessonId)) {
+    throw badRequest(
+      "Энэ хичээлийг тухайн сурагчид оноох боломжгүй.",
+      "LESSON_NOT_SCHEDULABLE",
+    );
+  }
+
+  await repository.upsertStudentAssignment({
+    studentId: input.studentId,
+    dailyLessonId: input.lessonId,
+    assignedOn: input.assignedOn,
+    assignedBy: user.id,
+    reason: input.reason,
+  });
+
+  const [lesson] = await repository.lessonById(input.lessonId);
+  return {
+    studentName: enrolment.studentName,
+    lessonCode: lesson.lessonCode,
+    skillName: lesson.skillName,
+    assignedOn: input.assignedOn,
   };
 }
 

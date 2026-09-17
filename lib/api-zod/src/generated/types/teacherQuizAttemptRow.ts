@@ -9,6 +9,8 @@ import type { QuizAnswer } from './quizAnswer';
 
 export interface TeacherQuizAttemptRow {
   id: number;
+  /** Needed to assign this student extra work straight from the row. */
+  studentId: number;
   studentName: string;
   studentCode: string;
   lessonCode: string;

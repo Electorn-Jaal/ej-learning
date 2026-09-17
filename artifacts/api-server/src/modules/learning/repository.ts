@@ -4,6 +4,7 @@ import {
   db,
   quizAttemptsInLearning,
   readRows,
+  studentAssignmentsInLearning,
 } from "@workspace/db";
 
 export type LessonRow = {
@@ -193,6 +194,7 @@ export const lessonBelongsToClass = async (lessonId: number, studentId: number) 
 export const attemptsForClass = (classId: number, limit: number) =>
   readRows<{
     id: number;
+    studentId: number;
     studentName: string;
     studentCode: string;
     lessonCode: string;
@@ -202,7 +204,7 @@ export const attemptsForClass = (classId: number, limit: number) =>
     submittedAt: string;
     answers: QuizAnswer[];
   }>(
-    `SELECT qa.id::int AS id, st.display_name AS "studentName",
+    `SELECT qa.id::int AS id, st.id::int AS "studentId", st.display_name AS "studentName",
        st.student_code AS "studentCode", qa.lesson_code AS "lessonCode",
        sk.name_mn AS "skillName", qa.score::int AS score,
        qa.max_score::int AS "maxScore",
@@ -474,3 +476,82 @@ export const attentionRows = (classIds: number[], onDate: string) =>
      LIMIT 50`,
     [classIds, onDate],
   );
+
+/** A lesson row shaped like todayLesson's, for one lesson id. */
+export const lessonById = (lessonId: number) =>
+  readRows<LessonRow>(
+    `SELECT dl.id::int AS id, dl.lesson_code AS "lessonCode", dl.lesson_type AS "lessonType",
+       sk.name_mn AS "skillName", dl.learning_goal_mn AS "learningGoal",
+       dl.remember_mn AS remember, dl.worked_example_mn AS "workedExample",
+       dl.guided_practice_mn AS "guidedPractice",
+       dl.independent_practice_mn AS "independentPractice",
+       dl.student_message_mn AS "studentMessage",
+       dl.estimated_minutes::int AS "estimatedMinutes",
+       book.material_id::int AS "materialId", book.material_title AS "materialTitle",
+       book.chapter_title AS "chapterTitle",
+       book.page_from::int AS "pageFrom", book.page_to::int AS "pageTo",
+       COALESCE(book.page_offset, 0)::int AS "pageOffset"
+     FROM learning.daily_lessons dl
+     JOIN content.skills sk ON sk.id = dl.core_skill_id
+     LEFT JOIN LATERAL (
+       SELECT sm.id AS material_id, sm.title AS material_title,
+              son.title AS chapter_title, a.page_from, a.page_to,
+              (SELECT sv.page_offset FROM content.source_versions sv
+               WHERE sv.source_material_id = sm.id AND sv.status = 'APPROVED'
+               ORDER BY sv.version_no DESC LIMIT 1) AS page_offset
+       FROM content.content_skill_maps m
+       JOIN content.content_nodes cn ON cn.id = m.content_node_id AND cn.status = 'APPROVED'
+       JOIN content.content_source_alignments a ON a.content_node_id = cn.id AND a.status = 'APPROVED'
+       JOIN content.source_materials sm ON sm.id = a.source_material_id AND sm.status = 'APPROVED'
+       LEFT JOIN content.source_outline_nodes son ON son.id = a.source_outline_node_id
+       WHERE m.skill_id = sk.id AND m.status = 'APPROVED'
+       ORDER BY m.is_primary DESC, a.page_from
+       LIMIT 1
+     ) book ON true
+     WHERE dl.id = $1::bigint AND dl.status = 'APPROVED'`,
+    [lessonId],
+  );
+
+export const assignmentForDay = (studentId: number, onDate: string) =>
+  readRows<{ dailyLessonId: number; source: string; reason: string | null }>(
+    `SELECT daily_lesson_id::int AS "dailyLessonId", source::text AS source, reason
+     FROM learning.student_assignments
+     WHERE student_id = $1::bigint AND assigned_on = $2::date`,
+    [studentId, onDate],
+  );
+
+/** The class a student is enrolled in, for checking a teacher may act on them. */
+export const classOfStudent = (studentId: number) =>
+  readRows<{ classId: number; className: string; studentName: string }>(
+    `SELECT c.id::int AS "classId", c.name_mn AS "className", s.display_name AS "studentName"
+     FROM core.students s
+     JOIN core.student_enrollments e ON e.student_id = s.id AND e.is_active
+     JOIN core.classes c ON c.id = e.class_id AND c.is_active
+     WHERE s.id = $1::bigint
+     LIMIT 1`,
+    [studentId],
+  );
+
+export async function upsertStudentAssignment(row: {
+  studentId: number;
+  dailyLessonId: number;
+  assignedOn: string;
+  assignedBy: number;
+  reason: string | null;
+}) {
+  await db
+    .insert(studentAssignmentsInLearning)
+    .values({ ...row, source: "TEACHER" })
+    .onConflictDoUpdate({
+      target: [
+        studentAssignmentsInLearning.studentId,
+        studentAssignmentsInLearning.assignedOn,
+      ],
+      set: {
+        dailyLessonId: row.dailyLessonId,
+        source: "TEACHER",
+        assignedBy: row.assignedBy,
+        reason: row.reason,
+      },
+    });
+}

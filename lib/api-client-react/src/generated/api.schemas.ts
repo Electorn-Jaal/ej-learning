@@ -5,6 +5,90 @@
  * EJ Learning adaptive learning API
  * OpenAPI spec version: 0.1.0
  */
+export type ExtraWorkSource = typeof ExtraWorkSource[keyof typeof ExtraWorkSource];
+
+
+export const ExtraWorkSource = {
+  AUTO: 'AUTO',
+  TEACHER: 'TEACHER',
+} as const;
+
+export type DailyLessonViewLessonType = typeof DailyLessonViewLessonType[keyof typeof DailyLessonViewLessonType];
+
+
+export const DailyLessonViewLessonType = {
+  CORE: 'CORE',
+  RECOVERY: 'RECOVERY',
+  REINFORCE: 'REINFORCE',
+} as const;
+
+/**
+ * Where in the book this lesson sits.
+ */
+export interface BookReference {
+  materialId: number;
+  /** @nullable */
+  title: string | null;
+  /** @nullable */
+  chapterTitle: string | null;
+  /** @nullable */
+  pageFrom: number | null;
+  /** @nullable */
+  pageTo: number | null;
+  /**
+     * Which page of the file to open at. Not the same as pageFrom: a scanned book carries covers and front matter the printed numbering does not count, so printed page 3 can be file page 9. The student is shown the printed numbers and the viewer opens the file page.
+     * @nullable
+     */
+  filePage: number | null;
+  /** @nullable */
+  fileUrl: string | null;
+}
+
+export interface DailyLessonView {
+  id: number;
+  lessonCode: string;
+  lessonType: DailyLessonViewLessonType;
+  skillName: string;
+  /** @nullable */
+  learningGoal: string | null;
+  /** @nullable */
+  remember: string | null;
+  /** @nullable */
+  workedExample: string | null;
+  /** @nullable */
+  guidedPractice: string | null;
+  /** @nullable */
+  independentPractice: string | null;
+  /** @nullable */
+  studentMessage: string | null;
+  /** @nullable */
+  estimatedMinutes: number | null;
+  book: BookReference | null;
+}
+
+export interface ExtraWork {
+  lesson: DailyLessonView;
+  source: ExtraWorkSource;
+  /** @nullable */
+  reason: string | null;
+}
+
+export interface ExtraWorkInput {
+  studentId: number;
+  lessonId: number;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  assignedOn: string;
+  /** @nullable */
+  reason: string | null;
+}
+
+export interface ExtraWorkResult {
+  studentName: string;
+  lessonCode: string;
+  skillName: string;
+  assignedOn: string;
+}
+
 export interface AdminMaterial {
   id: number;
   sourceCode: string;
@@ -132,6 +216,8 @@ export interface QuizAttempt {
 
 export interface TeacherQuizAttemptRow {
   id: number;
+  /** Needed to assign this student extra work straight from the row. */
+  studentId: number;
   studentName: string;
   studentCode: string;
   lessonCode: string;
@@ -158,59 +244,6 @@ export interface PasswordChangeInput {
   newPassword: string;
 }
 
-/**
- * Where in the book this lesson sits.
- */
-export interface BookReference {
-  materialId: number;
-  /** @nullable */
-  title: string | null;
-  /** @nullable */
-  chapterTitle: string | null;
-  /** @nullable */
-  pageFrom: number | null;
-  /** @nullable */
-  pageTo: number | null;
-  /**
-     * Which page of the file to open at. Not the same as pageFrom: a scanned book carries covers and front matter the printed numbering does not count, so printed page 3 can be file page 9. The student is shown the printed numbers and the viewer opens the file page.
-     * @nullable
-     */
-  filePage: number | null;
-  /** @nullable */
-  fileUrl: string | null;
-}
-
-export type DailyLessonViewLessonType = typeof DailyLessonViewLessonType[keyof typeof DailyLessonViewLessonType];
-
-
-export const DailyLessonViewLessonType = {
-  CORE: 'CORE',
-  RECOVERY: 'RECOVERY',
-  REINFORCE: 'REINFORCE',
-} as const;
-
-export interface DailyLessonView {
-  id: number;
-  lessonCode: string;
-  lessonType: DailyLessonViewLessonType;
-  skillName: string;
-  /** @nullable */
-  learningGoal: string | null;
-  /** @nullable */
-  remember: string | null;
-  /** @nullable */
-  workedExample: string | null;
-  /** @nullable */
-  guidedPractice: string | null;
-  /** @nullable */
-  independentPractice: string | null;
-  /** @nullable */
-  studentMessage: string | null;
-  /** @nullable */
-  estimatedMinutes: number | null;
-  book: BookReference | null;
-}
-
 export interface StudentToday {
   /**
      * Calendar date, YYYY-MM-DD. Not an instant, so not format:date.
@@ -219,7 +252,10 @@ export interface StudentToday {
   date: string;
   dateLabel: string;
   className: string;
+  /** What the class is scheduled to study today. Null when nothing is. */
   lesson: DailyLessonView | null;
+  /** Work assigned to this student personally. For a subject where the class works through one book it is remediation on top; for one placed by level it is the whole of the day's work. */
+  extra: ExtraWork | null;
   notice: string;
 }
 

@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { DailyLessonView } from './dailyLessonView';
+import type { ExtraWork } from './extraWork';
 
 export interface StudentToday {
   /**
@@ -15,6 +16,9 @@ export interface StudentToday {
   date: string;
   dateLabel: string;
   className: string;
+  /** What the class is scheduled to study today. Null when nothing is. */
   lesson: DailyLessonView | null;
+  /** Work assigned to this student personally. For a subject where the class works through one book it is remediation on top; for one placed by level it is the whole of the day's work. */
+  extra: ExtraWork | null;
   notice: string;
 }
