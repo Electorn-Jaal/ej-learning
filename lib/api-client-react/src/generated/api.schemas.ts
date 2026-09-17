@@ -5,6 +5,66 @@
  * EJ Learning adaptive learning API
  * OpenAPI spec version: 0.1.0
  */
+export interface AdminMaterial {
+  id: number;
+  sourceCode: string;
+  /** @nullable */
+  title: string | null;
+  subjectName: string;
+  status: string;
+  hasFile: boolean;
+  /** @nullable */
+  filePages: number | null;
+  pageOffset: number;
+  sectionCount: number;
+}
+
+export interface OutlineSection {
+  /** @nullable */
+  id: number | null;
+  outlineCode: string;
+  /** @nullable */
+  printedNumber: string | null;
+  title: string;
+  /** @nullable */
+  pageFrom: number | null;
+  /** @nullable */
+  pageTo: number | null;
+  sequenceNo: number;
+  /** How many lessons point at this section. Above zero means editing it moves real work. */
+  usedByLessons: number;
+}
+
+export interface MaterialOutline {
+  materialId: number;
+  /** @nullable */
+  title: string | null;
+  pageOffset: number;
+  /** @nullable */
+  filePages: number | null;
+  sections: OutlineSection[];
+}
+
+export type MaterialOutlineInputSectionsItem = {
+  /** @minLength 1 */
+  outlineCode: string;
+  /** @nullable */
+  printedNumber: string | null;
+  /** @minLength 1 */
+  title: string;
+  /** @nullable */
+  pageFrom: number | null;
+  /** @nullable */
+  pageTo: number | null;
+  sequenceNo: number;
+};
+
+export interface MaterialOutlineInput {
+  /** @minimum 0 */
+  pageOffset: number;
+  sections: MaterialOutlineInputSectionsItem[];
+}
+
 export interface SchedulableLesson {
   id: number;
   lessonCode: string;

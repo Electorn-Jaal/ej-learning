@@ -20,6 +20,7 @@ import StudentAssignment from '@/pages/student/Assignment';
 import TeacherDashboard from '@/pages/teacher/Dashboard';
 import TeacherSchedule from '@/pages/teacher/Schedule';
 import TeacherQuizResults from '@/pages/teacher/QuizResults';
+import AdminBooks from '@/pages/admin/Books';
 import TeacherReviews from '@/pages/teacher/Reviews';
 import TeacherIntegrations from '@/pages/teacher/Integrations';
 import TeacherCatalog from '@/pages/teacher/Catalog';
@@ -50,9 +51,10 @@ function StudentRoutes() {
   );
 }
 
-function TeacherRoutes() {
+function StaffRoutes({ admin }: { admin: boolean }) {
   return (
     <Switch>
+      {admin ? <Route path="/teacher/books" component={AdminBooks} /> : null}
       <Route path="/teacher" component={TeacherDashboard} />
       <Route path="/teacher/schedule" component={TeacherSchedule} />
       <Route path="/teacher/results" component={TeacherQuizResults} />
@@ -78,7 +80,7 @@ function RoleRoutes({ user }: { user: AuthenticatedUser }) {
     if (staff && !location.startsWith('/teacher')) navigate('/teacher', { replace: true });
   }, [staff, location, navigate]);
 
-  return staff ? <TeacherRoutes /> : <StudentRoutes />;
+  return staff ? <StaffRoutes admin={hasRole(user, 'ADMIN')} /> : <StudentRoutes />;
 }
 
 function RoutedErrorBoundary({ children }: { children: ReactNode }) {

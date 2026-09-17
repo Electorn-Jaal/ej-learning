@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter"
 import {
   LayoutDashboard, BookOpen, TrendingUp, User, CheckSquare, Database, LogOut,
-  CalendarDays, Sun, KeyRound, ClipboardCheck,
+  CalendarDays, Sun, KeyRound, ClipboardCheck, Library,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -26,6 +26,11 @@ const TEACHER_NAV = [
   { href: "/teacher/password", label: "Нууц үг солих", icon: KeyRound },
 ]
 
+// Only an administrator configures the books themselves.
+const ADMIN_ONLY = [
+  { href: "/teacher/books", label: "Ном ба бүтэц", icon: Library },
+]
+
 const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Админ",
   TEACHER: "Багш",
@@ -37,7 +42,10 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation()
 
   const staff = hasRole(user, "TEACHER", "ADMIN")
-  const navItems = staff ? TEACHER_NAV : STUDENT_NAV
+  const admin = hasRole(user, "ADMIN")
+  const navItems = staff
+    ? [...TEACHER_NAV.slice(0, -1), ...(admin ? ADMIN_ONLY : []), ...TEACHER_NAV.slice(-1)]
+    : STUDENT_NAV
   // An account can hold several roles; name the most privileged one.
   const roleLabel =
     ROLE_LABEL[

@@ -20,6 +20,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AdminMaterial,
   ApiError,
   AssignmentDetail,
   AssignmentState,
@@ -36,6 +37,8 @@ import type {
   GetTeacherScheduleParams,
   HealthStatus,
   LoginInput,
+  MaterialOutline,
+  MaterialOutlineInput,
   PasswordChangeInput,
   PreviewStudent,
   QuizAttempt,
@@ -2529,5 +2532,249 @@ export const useSetScheduleDay = <TError = ErrorType<ApiError>,
         TContext
       > => {
       return useMutation(getSetScheduleDayMutationOptions(options));
+    }
+
+export const getGetAdminMaterialsUrl = () => {
+
+
+
+
+  return `/api/admin/materials`
+}
+
+/**
+ * @summary Source materials with their file and outline state
+ */
+export const getAdminMaterials = async ( options?: Parameters<typeof customFetch>[1]): Promise<AdminMaterial[]> => {
+
+  return customFetch<AdminMaterial[]>(getGetAdminMaterialsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminMaterialsQueryKey = () => {
+    return [
+    `/api/admin/materials`
+    ] as const;
+    }
+
+
+export const getGetAdminMaterialsQueryOptions = <TData = Awaited<ReturnType<typeof getAdminMaterials>>, TError = ErrorType<ApiError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminMaterials>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminMaterialsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminMaterials>>> = ({ signal }) => getAdminMaterials({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminMaterials>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminMaterialsQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminMaterials>>>
+export type GetAdminMaterialsQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Source materials with their file and outline state
+ */
+
+export function useGetAdminMaterials<TData = Awaited<ReturnType<typeof getAdminMaterials>>, TError = ErrorType<ApiError>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminMaterials>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminMaterialsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetMaterialOutlineUrl = (materialId: number,) => {
+
+
+
+
+  return `/api/admin/materials/${materialId}/outline`
+}
+
+/**
+ * @summary A material's sections and page mapping
+ */
+export const getMaterialOutline = async (materialId: number, options?: Parameters<typeof customFetch>[1]): Promise<MaterialOutline> => {
+
+  return customFetch<MaterialOutline>(getGetMaterialOutlineUrl(materialId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMaterialOutlineQueryKey = (materialId: number,) => {
+    return [
+    `/api/admin/materials/${materialId}/outline`
+    ] as const;
+    }
+
+
+export const getGetMaterialOutlineQueryOptions = <TData = Awaited<ReturnType<typeof getMaterialOutline>>, TError = ErrorType<ApiError>>(materialId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMaterialOutline>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMaterialOutlineQueryKey(materialId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMaterialOutline>>> = ({ signal }) => getMaterialOutline(materialId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: materialId !== null && materialId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMaterialOutline>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMaterialOutlineQueryResult = NonNullable<Awaited<ReturnType<typeof getMaterialOutline>>>
+export type GetMaterialOutlineQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary A material's sections and page mapping
+ */
+
+export function useGetMaterialOutline<TData = Awaited<ReturnType<typeof getMaterialOutline>>, TError = ErrorType<ApiError>>(
+ materialId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMaterialOutline>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMaterialOutlineQueryOptions(materialId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSaveMaterialOutlineUrl = (materialId: number,) => {
+
+
+
+
+  return `/api/admin/materials/${materialId}/outline`
+}
+
+/**
+ * Sections are matched on outlineCode: known codes are updated, new ones inserted. Nothing is deleted here, because a section can already be aligned to content and to lessons, and silently dropping it would leave those pointing at nothing.
+ * @summary Save the sections and the printed-to-file page offset
+ */
+export const saveMaterialOutline = async (materialId: number,
+    materialOutlineInput: MaterialOutlineInput, options?: Parameters<typeof customFetch>[1]): Promise<MaterialOutline> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<MaterialOutline>(getSaveMaterialOutlineUrl(materialId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(materialOutlineInput)
+  }
+);}
+
+
+
+
+
+export const getSaveMaterialOutlineMutationKey = () => ['saveMaterialOutline'] as const;
+
+export const getSaveMaterialOutlineMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveMaterialOutline>>, TError,SaveMaterialOutlineMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveMaterialOutline>>, TError,SaveMaterialOutlineMutationVariables, TContext> => {
+
+const mutationKey = getSaveMaterialOutlineMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveMaterialOutline>>, SaveMaterialOutlineMutationVariables> = (props) => {
+          const {materialId,data} = props ?? {};
+
+          return  saveMaterialOutline(materialId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveMaterialOutlineMutationResult = NonNullable<Awaited<ReturnType<typeof saveMaterialOutline>>>
+    export type SaveMaterialOutlineMutationBody = BodyType<MaterialOutlineInput>
+    export type SaveMaterialOutlineMutationError = ErrorType<ApiError>
+    export type SaveMaterialOutlineMutationVariables = {materialId: number;data: BodyType<MaterialOutlineInput>}
+
+    /**
+ * @summary Save the sections and the printed-to-file page offset
+ */
+export const useSaveMaterialOutline = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveMaterialOutline>>, TError,SaveMaterialOutlineMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof saveMaterialOutline>>,
+        TError,
+        SaveMaterialOutlineMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSaveMaterialOutlineMutationOptions(options));
     }
 
