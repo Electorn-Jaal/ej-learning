@@ -20,7 +20,7 @@ import {
   userRolesInCore,
   usersInCore,
 } from "@workspace/db";
-import { hashPassword } from "../src/shared/password";
+import { MIN_PASSWORD_LENGTH, hashPassword } from "../src/shared/password";
 
 const ROLES = ["STUDENT", "TEACHER", "ADMIN"] as const;
 type Role = (typeof ROLES)[number];
@@ -53,7 +53,9 @@ if (role === "TEACHER" && !teacherCode) {
 
 const password = flag("password") ?? randomBytes(12).toString("base64url");
 const generated = !flag("password");
-if (password.length < 12) fail("Password must be at least 12 characters.");
+if (password.length < MIN_PASSWORD_LENGTH) {
+  fail(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
+}
 
 try {
   const existing = await db

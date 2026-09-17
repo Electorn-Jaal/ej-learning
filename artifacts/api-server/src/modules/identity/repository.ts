@@ -1,4 +1,4 @@
-import { and, eq, gt, isNotNull, isNull, lt, or } from "drizzle-orm";
+import { and, eq, gt, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
 import {
   db,
   sessionsInCore,
@@ -117,6 +117,33 @@ export async function findLiveSession(tokenHash: string) {
 
   const { sessionId, expiresAt, ...user } = row;
   return { sessionId, expiresAt, user: await decorate(user) };
+}
+
+export async function updatePasswordHash(userId: number, passwordHash: string) {
+  await db
+    .update(usersInCore)
+    .set({ passwordHash, updatedAt: new Date().toISOString() })
+    .where(eq(usersInCore.id, userId));
+}
+
+/**
+ * Revokes every live session for a user except the one presenting `keepHash`.
+ *
+ * A password is usually changed because someone else may know it, so leaving
+ * their session running would defeat the change. The caller's own session is
+ * kept so the change does not sign them out of the tab they are in.
+ */
+export async function revokeOtherSessions(userId: number, keepHash: string) {
+  await db
+    .update(sessionsInCore)
+    .set({ revokedAt: new Date().toISOString() })
+    .where(
+      and(
+        eq(sessionsInCore.userId, userId),
+        ne(sessionsInCore.tokenHash, keepHash),
+        isNull(sessionsInCore.revokedAt),
+      ),
+    );
 }
 
 export async function revokeSession(tokenHash: string) {

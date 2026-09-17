@@ -10,6 +10,7 @@ import type { AuthenticatedUser } from '@workspace/api-client-react';
 import { Shell } from '@/components/layout/Shell';
 import { SessionProvider, hasRole, useSessionQuery } from '@/lib/session';
 import Login from '@/pages/Login';
+import Password from '@/pages/Password';
 import StudentToday from '@/pages/student/Today';
 import StudentDashboard from '@/pages/student/Dashboard';
 import StudentSubjects from '@/pages/student/Subjects';
@@ -41,6 +42,7 @@ function StudentRoutes() {
       <Route path="/subjects" component={StudentSubjects} />
       <Route path="/progress" component={StudentProgress} />
       <Route path="/profile" component={StudentProfile} />
+      <Route path="/password" component={Password} />
       <Route path="/assignment/:id" component={StudentAssignment} />
       <Route component={NotFound} />
     </Switch>
@@ -55,6 +57,7 @@ function TeacherRoutes() {
       <Route path="/teacher/reviews" component={TeacherReviews} />
       <Route path="/teacher/catalog" component={TeacherCatalog} />
       <Route path="/teacher/integrations" component={TeacherIntegrations} />
+      <Route path="/teacher/password" component={Password} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter"
 import {
   LayoutDashboard, BookOpen, TrendingUp, User, CheckSquare, Database, LogOut,
-  CalendarDays, Sun,
+  CalendarDays, Sun, KeyRound,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -13,6 +13,7 @@ const STUDENT_NAV = [
   { href: "/subjects", label: "Миний хичээлүүд", icon: BookOpen },
   { href: "/progress", label: "Миний ахиц", icon: TrendingUp },
   { href: "/profile", label: "Миний бүртгэл", icon: User },
+  { href: "/password", label: "Нууц үг солих", icon: KeyRound },
 ]
 
 const TEACHER_NAV = [
@@ -21,6 +22,7 @@ const TEACHER_NAV = [
   { href: "/teacher/reviews", label: "Шалгах ажлууд", icon: CheckSquare },
   { href: "/teacher/catalog", label: "Сургалтын сан", icon: BookOpen },
   { href: "/teacher/integrations", label: "Холболтууд", icon: Database },
+  { href: "/teacher/password", label: "Нууц үг солих", icon: KeyRound },
 ]
 
 const ROLE_LABEL: Record<string, string> = {

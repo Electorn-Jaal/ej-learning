@@ -38,6 +38,7 @@ export * from './materialBlock';
 export * from './materialBlockKind';
 export * from './nextAction';
 export * from './nextActionKind';
+export * from './passwordChangeInput';
 export * from './previewStudent';
 export * from './reviewInput';
 export * from './reviewItem';

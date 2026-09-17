@@ -27,6 +27,14 @@ const MAXMEM = 192 * 1024 * 1024;
 const options = { N: COST, r: BLOCK_SIZE, p: PARALLELISM, maxmem: MAXMEM } as const;
 
 /**
+ * NIST SP 800-63B's floor for a user-chosen secret. Length is the only rule:
+ * composition requirements ("one capital, one digit") push people toward
+ * predictable substitutions without adding real entropy, and these accounts
+ * belong to schoolchildren who will otherwise write them down.
+ */
+export const MIN_PASSWORD_LENGTH = 8;
+
+/**
  * Returns `scrypt$N$r$p$salt$key`, parameters inline, so stored hashes stay
  * verifiable after the cost is raised.
  */
