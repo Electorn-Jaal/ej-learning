@@ -331,3 +331,116 @@ export const termCovering = (isoDate: string) =>
      WHERE $1::date BETWEEN starts_on AND ends_on ORDER BY term_number LIMIT 1`,
     [isoDate],
   );
+
+/**
+ * Dashboard aggregates for the classes a teacher is responsible for.
+ *
+ * One query per question rather than one joined query: these count different
+ * things over different tables, and forcing them together would produce a
+ * cartesian product that has to be counted back out with DISTINCT.
+ */
+export const teacherClassIds = (teacherId: number | null, isAdmin: boolean) =>
+  isAdmin
+    ? readRows<{ id: number }>(`SELECT id::int AS id FROM core.classes WHERE is_active`)
+    : readRows<{ id: number }>(
+        `SELECT c.id::int AS id FROM core.class_teachers ct
+         JOIN core.classes c ON c.id = ct.class_id AND c.is_active
+         WHERE ct.teacher_id = $1::bigint AND ct.is_active`,
+        [teacherId ?? 0],
+      );
+
+export const dashboardCounts = (classIds: number[], onDate: string) =>
+  readRows<{
+    studentCount: number;
+    placedCount: number;
+    assignedToday: number;
+    answeredToday: number;
+  }>(
+    `WITH roll AS (
+       SELECT DISTINCT e.student_id
+       FROM core.student_enrollments e
+       WHERE e.is_active AND e.class_id = ANY($1::bigint[])
+     )
+     SELECT
+       (SELECT count(*)::int FROM roll) AS "studentCount",
+       (SELECT count(DISTINCT a.student_id)::int FROM assessment.placement_attempts a
+          JOIN roll ON roll.student_id = a.student_id
+          WHERE a.proficiency_level_id IS NOT NULL) AS "placedCount",
+       (SELECT count(*)::int FROM learning.student_assignments sa
+          JOIN roll ON roll.student_id = sa.student_id
+          WHERE sa.assigned_on = $2::date) AS "assignedToday",
+       (SELECT count(DISTINCT qa.student_id)::int FROM learning.quiz_attempts qa
+          JOIN roll ON roll.student_id = qa.student_id
+          WHERE qa.submitted_at >= $2::date) AS "answeredToday"`,
+    [classIds, onDate],
+  );
+
+export const levelBands = (classIds: number[]) =>
+  readRows<{ code: string; nameMn: string; studentCount: number }>(
+    `SELECT p.code, p.name_mn AS "nameMn", count(DISTINCT a.student_id)::int AS "studentCount"
+     FROM content.proficiency_levels p
+     LEFT JOIN assessment.placement_attempts a ON a.proficiency_level_id = p.id
+       AND a.student_id IN (
+         SELECT DISTINCT e.student_id FROM core.student_enrollments e
+         WHERE e.is_active AND e.class_id = ANY($1::bigint[]))
+     WHERE p.framework = 'CEFR'
+     GROUP BY p.code, p.name_mn, p.sequence
+     ORDER BY p.sequence`,
+    [classIds],
+  );
+
+/**
+ * Students worth a second look, newest problem first.
+ *
+ * Three reasons, in the order a teacher would act on them: never placed, so
+ * the system has nothing to go on; scored below half on their last check; or
+ * assigned work today and has not answered.
+ */
+export const attentionRows = (classIds: number[], onDate: string) =>
+  readRows<{
+    studentId: number;
+    studentCode: string;
+    studentName: string;
+    className: string;
+    level: string | null;
+    reason: string;
+    detail: string;
+  }>(
+    `WITH roll AS (
+       SELECT DISTINCT ON (e.student_id) e.student_id, c.name_mn AS class_name
+       FROM core.student_enrollments e
+       JOIN core.classes c ON c.id = e.class_id
+       WHERE e.is_active AND e.class_id = ANY($1::bigint[])
+     ), latest_placement AS (
+       SELECT DISTINCT ON (a.student_id) a.student_id, p.code
+       FROM assessment.placement_attempts a
+       LEFT JOIN content.proficiency_levels p ON p.id = a.proficiency_level_id
+       ORDER BY a.student_id, a.id DESC
+     ), latest_quiz AS (
+       SELECT DISTINCT ON (q.student_id) q.student_id, q.score, q.max_score, q.submitted_at
+       FROM learning.quiz_attempts q ORDER BY q.student_id, q.submitted_at DESC
+     )
+     SELECT s.id::int AS "studentId", s.student_code AS "studentCode",
+       s.display_name AS "studentName", roll.class_name AS "className",
+       lp.code AS level,
+       CASE WHEN lp.code IS NULL THEN 'NO_PLACEMENT'
+            WHEN lq.student_id IS NOT NULL AND lq.score::float / lq.max_score < 0.5 THEN 'LOW_SCORE'
+            ELSE 'NOT_ANSWERED' END AS reason,
+       CASE WHEN lp.code IS NULL THEN 'Түвшин тогтоогоогүй'
+            WHEN lq.student_id IS NOT NULL AND lq.score::float / lq.max_score < 0.5
+              THEN 'Сүүлийн шалгалт: ' || lq.score || '/' || lq.max_score
+            ELSE 'Өнөөдрийн даалгаварт хариулаагүй' END AS detail
+     FROM roll
+     JOIN core.students s ON s.id = roll.student_id AND s.is_active
+     LEFT JOIN latest_placement lp ON lp.student_id = s.id
+     LEFT JOIN latest_quiz lq ON lq.student_id = s.id
+     WHERE lp.code IS NULL
+        OR (lq.student_id IS NOT NULL AND lq.score::float / lq.max_score < 0.5)
+        OR (EXISTS (SELECT 1 FROM learning.student_assignments sa
+                    WHERE sa.student_id = s.id AND sa.assigned_on = $2::date)
+            AND NOT EXISTS (SELECT 1 FROM learning.quiz_attempts q2
+                            WHERE q2.student_id = s.id AND q2.submitted_at >= $2::date))
+     ORDER BY (lp.code IS NULL) DESC, s.student_code
+     LIMIT 50`,
+    [classIds, onDate],
+  );

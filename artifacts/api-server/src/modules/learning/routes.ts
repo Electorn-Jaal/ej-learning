@@ -3,6 +3,7 @@ import {
   GenerateScheduleBody,
   GenerateScheduleResponse,
   GetStudentTodayResponse,
+  GetTeacherDashboardResponse,
   GetTeacherLessonsResponse,
   GetTeacherQuizAttemptsResponse,
   GetTeacherScheduleResponse,
@@ -20,6 +21,7 @@ import {
   schedulableLessons,
   setScheduleDay,
   studentToday,
+  teacherDashboard,
   teacherSchedule,
 } from "./service";
 
@@ -59,6 +61,14 @@ router.get(
 );
 
 const asStaff = requireRole("TEACHER", "ADMIN");
+
+router.get("/teacher/dashboard", asStaff, async (req, res, next) => {
+  try {
+    res.json(GetTeacherDashboardResponse.parse(await teacherDashboard(req.user!)));
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.get("/teacher/lessons", asStaff, async (req, res, next) => {
   try {

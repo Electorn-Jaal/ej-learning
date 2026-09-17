@@ -1,9 +1,8 @@
 import { Router, type IRouter, type Request } from 'express';
-import { readRows } from '@workspace/db';
 import {
   GetCurrentUserResponse, GetPreviewStudentsResponse, GetStudentDashboardResponse,
   GetStudentAssignmentResponse, GetStudentProgressResponse, GetStudentSubjectsResponse,
-  GetTeacherClassesResponse, GetTeacherDashboardResponse, GetTeacherReviewQueueResponse,
+  GetTeacherClassesResponse, GetTeacherReviewQueueResponse,
   GetTeacherCatalogResponse, GetWorkspaceIntegrationDashboardResponse,
 } from '@workspace/api-zod';
 import { requireRole } from '../middlewares/auth';
@@ -123,19 +122,6 @@ router.get('/student/progress', asStudent, handle(async (req, res) => {
 
 router.get('/teacher/classes', asTeacher, handle(async (_req, res) => {
   res.json(GetTeacherClassesResponse.parse(await data.classes()));
-}));
-
-router.get('/teacher/dashboard', asTeacher, handle(async (req, res) => {
-  const [counts] = await readRows(`SELECT
-    (SELECT count(*)::int FROM core.classes WHERE is_active) AS "classCount",
-    (SELECT count(*)::int FROM core.students WHERE is_active) AS "studentCount",
-    (SELECT count(*)::int FROM assessment.web_diagnostic_submissions WHERE status='PENDING_REVIEW') AS "awaitingReview"`);
-  res.json(GetTeacherDashboardResponse.parse({
-    ...counts,
-    teacherName: req.user?.displayName ?? '',
-    currentTopic: 'Сэдэв оноох урсгал холбогдоогүй',
-    insight: `${dataNotice} Шалгах тоо нь хариултын тоо биш, илгээсэн оношилгооны хуудасны тоо.`,
-  }));
 }));
 
 router.get('/teacher/catalog', asTeacher, handle(async (_req, res) => {

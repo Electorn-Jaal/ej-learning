@@ -1320,6 +1320,36 @@ components:
         dataNotice:
           type: string
       required: [skills, attempts, dataNotice]
+    LevelBand:
+      type: object
+      properties:
+        code:
+          type: string
+        nameMn:
+          type: string
+        studentCount:
+          type: integer
+      required: [code, nameMn, studentCount]
+    AttentionRow:
+      type: object
+      description: A student the teacher should look at, with why.
+      properties:
+        studentId:
+          type: integer
+        studentCode:
+          type: string
+        studentName:
+          type: string
+        className:
+          type: string
+        level:
+          type: ["string", "null"]
+        reason:
+          type: string
+          enum: [NO_PLACEMENT, LOW_SCORE, NOT_ANSWERED]
+        detail:
+          type: string
+      required: [studentId, studentCode, studentName, className, level, reason, detail]
     TeacherDashboard:
       type: object
       properties:
@@ -1329,13 +1359,29 @@ components:
           type: integer
         studentCount:
           type: integer
-        awaitingReview:
+        placedCount:
           type: integer
-        currentTopic:
-          type: string
-        insight:
-          type: string
-      required: [teacherName, classCount, studentCount, awaitingReview, currentTopic, insight]
+        assignedToday:
+          type: integer
+        answeredToday:
+          type: integer
+        levels:
+          type: array
+          items:
+            $ref: "#/components/schemas/LevelBand"
+        attention:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttentionRow"
+      required:
+        - teacherName
+        - classCount
+        - studentCount
+        - placedCount
+        - assignedToday
+        - answeredToday
+        - levels
+        - attention
     TeacherClass:
       type: object
       properties:

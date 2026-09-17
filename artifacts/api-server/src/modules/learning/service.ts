@@ -322,3 +322,37 @@ export async function setScheduleDay(
     createdBy: user.id,
   });
 }
+
+export async function teacherDashboard(user: AuthenticatedUser) {
+  const isAdmin = user.roles.includes("ADMIN");
+  const classes = await repository.teacherClassIds(user.teacherId, isAdmin);
+  const classIds = classes.map((row) => row.id);
+  const onDate = todayInUlaanbaatar();
+
+  if (classIds.length === 0) {
+    return {
+      teacherName: user.displayName,
+      classCount: 0,
+      studentCount: 0,
+      placedCount: 0,
+      assignedToday: 0,
+      answeredToday: 0,
+      levels: [],
+      attention: [],
+    };
+  }
+
+  const [[counts], levels, attention] = await Promise.all([
+    repository.dashboardCounts(classIds, onDate),
+    repository.levelBands(classIds),
+    repository.attentionRows(classIds, onDate),
+  ]);
+
+  return {
+    teacherName: user.displayName,
+    classCount: classIds.length,
+    ...counts,
+    levels,
+    attention,
+  };
+}

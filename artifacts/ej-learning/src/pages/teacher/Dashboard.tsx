@@ -1,93 +1,156 @@
-import { useGetTeacherDashboard, useGetTeacherClasses } from "@workspace/api-client-react"
-import { Card, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+import { Link } from "wouter"
+import { useGetTeacherDashboard } from "@workspace/api-client-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { PageHeader } from "@/components/ui/page-header"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Users, BookOpen, CheckSquare, Settings } from "lucide-react"
+import { cn } from "@/lib/utils"
+
+const REASON: Record<string, { label: string; dot: string }> = {
+  NO_PLACEMENT: { label: "Түвшин тогтоогоогүй", dot: "bg-destructive" },
+  LOW_SCORE: { label: "Оноо бага", dot: "bg-pending" },
+  NOT_ANSWERED: { label: "Хариулаагүй", dot: "bg-muted-foreground/50" },
+}
 
 export default function TeacherDashboard() {
-  const { data: dashboard, isLoading: dashLoading } = useGetTeacherDashboard()
-  const { data: classes, isLoading: classesLoading } = useGetTeacherClasses()
+  const { data, isLoading, isError } = useGetTeacherDashboard()
 
-  if (dashLoading || classesLoading) {
-     return <div className="space-y-4"><Skeleton className="h-32 w-full" /><Skeleton className="h-64 w-full" /></div>
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-28 w-full" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    )
+  }
+  if (isError || !data) {
+    return <p role="alert">Хяналтын самбарыг уншиж чадсангүй.</p>
   }
 
-  if (!dashboard || !classes) return <p role="alert">Ангийн мэдээллийг уншиж чадсангүй.</p>
+  const placedShare = data.studentCount
+    ? Math.round((data.placedCount / data.studentCount) * 100)
+    : 0
+  const peak = Math.max(1, ...data.levels.map((level) => level.studentCount))
 
   return (
-    <div className="space-y-8 pb-10 animate-in fade-in duration-500">
-      <header>
-        <h1 className="text-2xl font-bold text-foreground mb-1">{dashboard.teacherName}</h1>
-        <p className="text-muted-foreground font-medium">Ерөнхий мэдээлэл болон ангиудын явц</p>
-      </header>
+    <div className="space-y-8">
+      <PageHeader
+        title="Хяналтын самбар"
+        description={`${data.teacherName} · ${data.classCount} анги`}
+        stats={[
+          { label: "Сурагч", value: data.studentCount },
+          {
+            label: "Түвшин тогтоосон",
+            value: data.placedCount,
+            hint: `${placedShare}%`,
+          },
+          { label: "Өнөөдөр оногдсон", value: data.assignedToday },
+          {
+            label: "Өнөөдөр хариулсан",
+            value: data.answeredToday,
+            hint:
+              data.assignedToday > 0
+                ? `${data.assignedToday - data.answeredToday} хүлээгдэж байна`
+                : undefined,
+          },
+        ]}
+      />
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="bg-card shadow-sm border-border">
-          <CardContent className="p-6 flex items-center gap-4">
-            <div className="rounded-md border border-border p-3 text-muted-foreground">
-              <Users className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-1">Нийт сурагч</p>
-              <p className="text-2xl font-bold text-foreground">{dashboard.studentCount}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-card shadow-sm border-border">
-          <CardContent className="p-6 flex items-center gap-4">
-            <div className="rounded-md border border-border p-3 text-muted-foreground">
-              <BookOpen className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-1">Идэвхтэй анги</p>
-              <p className="text-2xl font-bold text-foreground">{dashboard.classCount}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-card shadow-sm border-border">
-          <CardContent className="p-6 flex items-center gap-4">
-            <div className="rounded-md border border-border p-3 text-muted-foreground">
-              <CheckSquare className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-sm font-bold uppercase tracking-wider text-muted-foreground mb-1">Шалгах хуудас</p>
-              <p className="text-2xl font-bold text-foreground">{dashboard.awaitingReview}</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card className="bg-card shadow-sm border-border">
-         <CardContent className="p-6">
-            <h3 className="font-bold text-foreground mb-2">Системийн мэдээлэл</h3>
-            <p className="text-sm font-medium text-foreground/80 leading-relaxed">{dashboard.insight}</p>
-         </CardContent>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Түвшний тархалт</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Байршуулалтын шалгалтаар тогтоосон CEFR түвшин.
+          </p>
+        </CardHeader>
+        <CardContent>
+          {data.levels.every((level) => level.studentCount === 0) ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Хараахан хэний ч түвшинг тогтоогоогүй байна.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {data.levels.map((level) => (
+                <li key={level.code} className="flex items-center gap-3">
+                  <span className="w-16 shrink-0 text-sm font-medium tabular-nums">
+                    {level.code}
+                  </span>
+                  <span className="h-5 flex-1 overflow-hidden rounded-sm bg-secondary">
+                    <span
+                      className="block h-full bg-primary"
+                      style={{ width: `${(level.studentCount / peak) * 100}%` }}
+                    />
+                  </span>
+                  <span className="w-10 shrink-0 text-right text-sm tabular-nums text-muted-foreground">
+                    {level.studentCount}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
       </Card>
 
-      <section>
-        <h2 className="text-lg font-bold text-foreground border-b pb-2 mb-4">Бүртгэлтэй ангиуд</h2>
-        <div className="space-y-4">
-          {classes.map(cls => (
-            <Card key={cls.id} className="bg-card shadow-sm border-border">
-              <CardContent className="p-5 flex flex-col md:flex-row justify-between md:items-center gap-4">
-                <div>
-                  <h3 className="text-base font-bold text-foreground mb-1">{cls.name} <span className="text-sm font-medium text-muted-foreground ml-2">({cls.gradeLevel}-р анги)</span></h3>
-                  <p className="text-sm font-medium text-muted-foreground mb-3">Сурагч: {cls.studentCount} | Шалгах: <span className={cls.needsReview > 0 ? "text-pending font-bold" : ""}>{cls.needsReview}</span></p>
-                  <div className="text-sm flex items-center gap-2">
-                    <span className="font-bold text-foreground uppercase tracking-wider text-xs">Одоогийн сэдэв: </span>
-                    <span className="bg-muted px-2 py-1 rounded-sm font-medium">{cls.currentTopic}</span>
-                  </div>
-                </div>
-                <div className="flex gap-2 flex-shrink-0">
-                   <Button variant="outline" size="sm" className="font-bold" disabled title="Сэдэв оноох урсгал хараахан холбогдоогүй">
-                     <Settings className="w-4 h-4 mr-2" /> Сэдэв солих
-                   </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </section>
+      <Card>
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
+          <div>
+            <CardTitle className="text-lg">Анхаарах сурагчид</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Түвшингүй, оноо бага, эсвэл өнөөдөр хариулаагүй.
+            </p>
+          </div>
+          <Link
+            href="/teacher/results"
+            className="text-sm font-medium underline underline-offset-4"
+          >
+            Бүх үр дүн
+          </Link>
+        </CardHeader>
+        <CardContent>
+          {data.attention.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Одоогоор анхаарах зүйл алга.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <th className="py-2 pr-3 font-medium">Сурагч</th>
+                    <th className="py-2 pr-3 font-medium">Анги</th>
+                    <th className="py-2 pr-3 font-medium">Түвшин</th>
+                    <th className="py-2 font-medium">Шалтгаан</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.attention.map((row) => {
+                    const reason = REASON[row.reason] ?? REASON.NOT_ANSWERED
+                    return (
+                      <tr key={row.studentId} className="border-b last:border-0">
+                        <td className="py-2 pr-3">
+                          <span className="font-medium">{row.studentName}</span>
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            {row.studentCode}
+                          </span>
+                        </td>
+                        <td className="py-2 pr-3 text-muted-foreground">{row.className}</td>
+                        <td className="py-2 pr-3 tabular-nums">{row.level ?? "—"}</td>
+                        <td className="py-2">
+                          <span className="flex items-center gap-2">
+                            <span
+                              className={cn("h-1.5 w-1.5 shrink-0 rounded-full", reason.dot)}
+                            />
+                            <span>{row.detail}</span>
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }
