@@ -204,6 +204,9 @@ export const skillsInContent = content.table("skills", {
 	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
 	subjectId: bigint("subject_id", { mode: "number" }).notNull(),
 	gradeLevelId: smallint("grade_level_id"),
+	// A skill sits on a school grade or on a proficiency level. English CEFR
+	// skills use the latter: "Grammar at B1" is a competence, not a school year.
+	proficiencyLevelId: smallint("proficiency_level_id"),
 	nameMn: varchar("name_mn", { length: 500 }).notNull(),
 	descriptionMn: text("description_mn"),
 	learningOutcomeMn: text("learning_outcome_mn"),
@@ -225,6 +228,11 @@ export const skillsInContent = content.table("skills", {
 			columns: [table.gradeLevelId],
 			foreignColumns: [gradeLevelsInCore.id],
 			name: "skills_grade_level_id_fkey"
+		}),
+	foreignKey({
+			columns: [table.proficiencyLevelId],
+			foreignColumns: [proficiencyLevelsInContent.id],
+			name: "skills_proficiency_level_id_fkey"
 		}),
 	unique("skills_skill_code_key").on(table.skillCode),
 	check("skills_difficulty_check", sql`(difficulty >= 1) AND (difficulty <= 5)`),

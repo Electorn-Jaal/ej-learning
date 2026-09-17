@@ -11,7 +11,12 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import { classesInCore, dailyLessonsInLearning, learning } from "./database";
+import {
+  classesInCore,
+  dailyLessonsInLearning,
+  learning,
+  studentsInCore,
+} from "./database";
 import { usersInCore } from "./identity";
 
 /**
@@ -107,6 +112,75 @@ export const classScheduleInLearning = learning.table(
       columns: [table.createdBy],
       foreignColumns: [usersInCore.id],
       name: "class_schedule_created_by_fkey",
+    }),
+  ],
+);
+
+/**
+ * Work assigned to one student on one day.
+ *
+ * class_schedule answers "what is this class studying today", which is the
+ * right question for a textbook everyone works through together. It is the
+ * wrong question for English: a single class here holds students from PRE-A1
+ * to C2, so the lesson has to follow the student's measured level rather than
+ * the room they sit in.
+ *
+ * `source` is what keeps the two apart as the system learns to place work
+ * itself. AUTO rows come from a student's level or, later, from the
+ * remediation walk; TEACHER rows are a person overriding it. A teacher can
+ * always see which is which, and the algorithm can be told not to touch what a
+ * teacher put there.
+ */
+export const assignmentSourceInLearning = learning.enum("assignment_source", [
+  "AUTO",
+  "TEACHER",
+]);
+
+export const studentAssignmentsInLearning = learning.table(
+  "student_assignments",
+  {
+    id: bigint({ mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity({
+        name: "learning.student_assignments_id_seq",
+        startWith: 1,
+        increment: 1,
+        minValue: 1,
+        cache: 1,
+      }),
+    studentId: bigint("student_id", { mode: "number" }).notNull(),
+    dailyLessonId: bigint("daily_lesson_id", { mode: "number" }).notNull(),
+    assignedOn: date("assigned_on").notNull(),
+    source: assignmentSourceInLearning().default("AUTO").notNull(),
+    assignedBy: bigint("assigned_by", { mode: "number" }),
+    reason: text(),
+    completedAt: timestamp("completed_at", { withTimezone: true, mode: "string" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    // One lesson per student per day, so "today's work" has one answer. A
+    // teacher replacing the automatic pick updates the row rather than adding.
+    unique("student_assignments_student_day_key").on(table.studentId, table.assignedOn),
+    index("idx_student_assignments_day").using(
+      "btree",
+      table.assignedOn.asc().nullsLast(),
+    ),
+    foreignKey({
+      columns: [table.studentId],
+      foreignColumns: [studentsInCore.id],
+      name: "student_assignments_student_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.dailyLessonId],
+      foreignColumns: [dailyLessonsInLearning.id],
+      name: "student_assignments_daily_lesson_id_fkey",
+    }),
+    foreignKey({
+      columns: [table.assignedBy],
+      foreignColumns: [usersInCore.id],
+      name: "student_assignments_assigned_by_fkey",
     }),
   ],
 );
