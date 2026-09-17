@@ -723,6 +723,37 @@ export const GetTeacherQuizAttemptsResponse = zod.object({
 
 
 /**
+ * Drawn from the answers students have already given, not from a separate exam. A skill nobody has attempted is absent rather than reported as zero, so the list only ever contains skills there is evidence about.
+ * @summary How a class stands on each skill it has been measured on
+ */
+export const GetClassSkillsQueryParams = zod.object({
+  "classId": zod.coerce.number().int()
+})
+
+export const GetClassSkillsResponse = zod.object({
+  "classId": zod.number().int(),
+  "className": zod.string(),
+  "skills": zod.array(zod.object({
+  "skillId": zod.number().int(),
+  "skillCode": zod.string(),
+  "skillName": zod.string(),
+  "gradeLevel": zod.number().int().nullable(),
+  "assessed": zod.number().int(),
+  "gap": zod.number().int(),
+  "developing": zod.number().int(),
+  "mastered": zod.number().int(),
+  "averageScore": zod.number().int(),
+  "weakest": zod.array(zod.object({
+  "studentId": zod.number().int(),
+  "studentName": zod.string(),
+  "score": zod.number().int()
+})).describe('The lowest-scoring students who have not mastered it, capped for reading.'),
+  "weakestTotal": zod.number().int().describe('How many have not mastered it, which may exceed the names listed.')
+}).describe('One skill, and how the measured students in the class stand on it. `assessed` counts students with any evidence; the three status counts add up to it.\n'))
+})
+
+
+/**
  * @summary Approved lessons for a class, in the order the book teaches them
  */
 export const GetTeacherLessonsQueryParams = zod.object({

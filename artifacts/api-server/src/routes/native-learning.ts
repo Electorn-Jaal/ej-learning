@@ -116,7 +116,8 @@ router.get('/student/progress', asStudent, handle(async (req, res) => {
   ]);
   res.json(GetStudentProgressResponse.parse(serializable({
     skills, attempts,
-    dataNotice: 'Хадгалагдсан чадварын үнэлгээ болон оношилгооны түүх.',
+    dataNotice:
+      'Чадварын хувь нь сүүлийн хариултыг илүү жинтэйгээр, өмнөх хариултуудтай нийлүүлж бодогддог. Нэг удаагийн сайн дүнгээр эзэмшсэн гэж тооцохгүй.',
   })));
 }));
 

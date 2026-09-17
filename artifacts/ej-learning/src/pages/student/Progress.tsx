@@ -64,7 +64,9 @@ export default function StudentProgress() {
                      {getStatusLabel(skill.status)}
                    </span>
                    <span className="text-sm font-bold text-foreground">
-                     {skill.status === 'unassessed' ? 'Тодорхойлох боломжгүй' : `Оноо: ${skill.percentage === null ? 'Бүртгээгүй' : `${skill.percentage}%`} (Баталгаа: ${skill.evidenceCount})`}
+                     {skill.status === 'unassessed'
+                       ? 'Хараахан хэмжигдээгүй'
+                       : `${skill.percentage ?? '—'}% · ${skill.evidenceCount} удаа хариулсан`}
                    </span>
                 </div>
               </CardContent>

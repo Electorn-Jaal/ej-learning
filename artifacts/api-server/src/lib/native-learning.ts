@@ -53,7 +53,15 @@ export const attemptHistory = (studentId: string) => readRows(`
   FROM assessment.web_diagnostic_submissions w JOIN core.subjects sub ON sub.id=w.subject_id
   LEFT JOIN assessment.web_diagnostic_answers a ON a.submission_id=w.id
   LEFT JOIN assessment.diagnostic_items i ON i.id=a.diagnostic_item_id
-  WHERE w.student_id=$1::bigint GROUP BY w.id,sub.name_mn ORDER BY "submittedAt" DESC`, [studentId]);
+  WHERE w.student_id=$1::bigint GROUP BY w.id,sub.name_mn
+  UNION ALL
+  SELECT 'quiz:'||q.id, sk.name_mn||' — шалгах асуулт', q.submitted_at, 'Шалгагдсан',
+    q.score::float8, q.max_score::float8, NULL
+  FROM learning.quiz_attempts q
+  JOIN learning.daily_lessons dl ON dl.id=q.daily_lesson_id
+  JOIN content.skills sk ON sk.id=dl.core_skill_id
+  WHERE q.student_id=$1::bigint
+  ORDER BY "submittedAt" DESC`, [studentId]);
 
 export const subjects = (studentId: string) => readRows(`
   SELECT sub.code,sub.name_mn AS name,

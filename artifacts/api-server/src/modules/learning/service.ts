@@ -3,6 +3,7 @@ import { stat } from "node:fs/promises";
 import { badRequest, forbidden } from "../../shared/http-error";
 import type { AuthenticatedUser } from "../identity/service";
 import * as repository from "./repository";
+import { recordSkillEvidence } from "./mastery";
 
 /** Mongolian schooling splits at grade 6; the two teacher workflows follow it. */
 export const stageForGrade = (gradeLevel: number): "PRIMARY" | "SECONDARY" =>
@@ -261,6 +262,28 @@ export async function quizAttemptsForTeacher(
     classId: klass.classId,
     className: klass.className,
     attempts: await repository.attemptsForClass(klass.classId, limit),
+  };
+}
+
+/**
+ * What a class has and has not got hold of, skill by skill.
+ *
+ * The named students are capped: a teacher needs to see who to sit with, and a
+ * list of thirty names is a report rather than an instruction. The counts
+ * above them are complete, so nothing is hidden by the cap.
+ */
+export async function classSkillsForTeacher(user: AuthenticatedUser, classId: number) {
+  const klass = await authorisedClass(user, classId);
+  const skills = await repository.classSkillMastery(klass.classId);
+
+  return {
+    classId: klass.classId,
+    className: klass.className,
+    skills: skills.map((skill) => ({
+      ...skill,
+      weakest: skill.weakest.slice(0, 5),
+      weakestTotal: skill.weakest.length,
+    })),
   };
 }
 
@@ -540,6 +563,25 @@ export async function recordQuizAttemptScored(
     score: stored.filter((answer) => answer.correct).length,
     maxScore: stored.length,
   });
+
+  // The attempt is the record of one sitting; this is what the sitting says
+  // about the student. Grouped by the skill each question tests rather than by
+  // the lesson, so a quiz that draws on two skills is not averaged into one
+  // meaningless number - today every item hangs off the lesson's core skill,
+  // but a diagnostic will not.
+  const perSkill = new Map<number, { correct: number; total: number }>();
+  for (const [itemId, itemRows] of items) {
+    const skillId = itemRows[0].skillId;
+    if (!skillId) continue;
+    const tally = perSkill.get(skillId) ?? { correct: 0, total: 0 };
+    tally.total += 1;
+    if (results.find((result) => result.itemId === itemId)?.correct) tally.correct += 1;
+    perSkill.set(skillId, tally);
+  }
+  await recordSkillEvidence(
+    user.studentId,
+    [...perSkill].map(([skillId, tally]) => ({ skillId, ...tally })),
+  );
 
   return { ...attempt, results };
 }
