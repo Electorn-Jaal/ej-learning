@@ -129,3 +129,54 @@ export const teachersInCore = core.table(
     }),
   ],
 );
+
+/**
+ * Server-side sessions.
+ *
+ * Opaque tokens rather than JWTs: the browser holds a random string, the
+ * server holds its SHA-256, and sign-out or a compromised account revokes
+ * immediately by row. A stateless JWT cannot be withdrawn before it expires,
+ * which is the wrong trade for a school system where an account is handed
+ * over, a teacher leaves mid-term, or a shared classroom machine stays signed
+ * in. Only the hash is stored, so a dump of this table cannot be replayed.
+ */
+export const sessionsInCore = core.table(
+  "sessions",
+  {
+    id: bigint({ mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity({
+        name: "core.sessions_id_seq",
+        startWith: 1,
+        increment: 1,
+        minValue: 1,
+        cache: 1,
+      }),
+    userId: bigint("user_id", { mode: "number" }).notNull(),
+    tokenHash: varchar("token_hash", { length: 64 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+    expiresAt: timestamp("expires_at", {
+      withTimezone: true,
+      mode: "string",
+    }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true, mode: "string" }),
+  },
+  (table) => [
+    unique("sessions_token_hash_key").on(table.tokenHash),
+    index("idx_sessions_user").using(
+      "btree",
+      table.userId.asc().nullsLast().op("int8_ops"),
+    ),
+    index("idx_sessions_expires").using(
+      "btree",
+      table.expiresAt.asc().nullsLast(),
+    ),
+    foreignKey({
+      columns: [table.userId],
+      foreignColumns: [usersInCore.id],
+      name: "sessions_user_id_fkey",
+    }).onDelete("cascade"),
+  ],
+);
