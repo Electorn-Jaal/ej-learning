@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useSubmitQuizAttempt } from '@workspace/api-client-react'
 import { Check, RotateCcw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,16 +11,22 @@ import { questionsForLesson, type MockQuestion } from '@/lib/mock-quiz'
 /**
  * Practice check for a lesson.
  *
- * Deliberately storage-free: answers stay in component state, so nothing is
- * recorded and no teacher can review them. That is the agreed scope for this
- * stage - the flow and the look, not the evidence. Said plainly in the notice
- * below rather than only in a comment, because a student who answers questions
- * will otherwise assume their teacher sees the result.
+ * The questions still live in the frontend, but the attempt is posted, because
+ * a teacher seeing what a class answered is the point of the prototype. The
+ * server records who answered and against which lesson; the marking is sent
+ * with it, which is acceptable for practice a student checks themselves.
  */
-export function LessonQuiz({ lessonCode }: { lessonCode: string }) {
+export function LessonQuiz({
+  lessonId,
+  lessonCode,
+}: {
+  lessonId: number
+  lessonCode: string
+}) {
   const questions = useMemo(() => questionsForLesson(lessonCode), [lessonCode])
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [checked, setChecked] = useState(false)
+  const { mutate, isPending, isSuccess, isError } = useSubmitQuizAttempt()
 
   const answeredCount = Object.keys(answers).length
   const allAnswered = answeredCount === questions.length
@@ -28,6 +35,27 @@ export function LessonQuiz({ lessonCode }: { lessonCode: string }) {
   const reset = () => {
     setAnswers({})
     setChecked(false)
+  }
+
+  const check = () => {
+    setChecked(true)
+    mutate({
+      data: {
+        lessonId,
+        lessonCode,
+        answers: questions.map((question) => {
+          const chosenOptionId = answers[question.id]
+          return {
+            questionId: question.id,
+            prompt: question.prompt,
+            chosenOptionId,
+            chosenText:
+              question.options.find((option) => option.id === chosenOptionId)?.text ?? '',
+            correct: chosenOptionId === question.correctOptionId,
+          }
+        }),
+      },
+    })
   }
 
   return (
@@ -56,8 +84,8 @@ export function LessonQuiz({ lessonCode }: { lessonCode: string }) {
         <div className="flex flex-wrap items-center gap-3 border-t pt-4">
           {!checked ? (
             <>
-              <Button onClick={() => setChecked(true)} disabled={!allAnswered}>
-                Шалгах
+              <Button onClick={check} disabled={!allAnswered || isPending}>
+                {isPending ? 'Илгээж байна…' : 'Шалгах'}
               </Button>
               <span className="text-sm text-muted-foreground">
                 {answeredCount}/{questions.length} хариулсан
@@ -80,8 +108,11 @@ export function LessonQuiz({ lessonCode }: { lessonCode: string }) {
         </div>
 
         <p className="text-xs text-muted-foreground">
-          Энэ бол туршилтын асуултууд. Хариулт хадгалагдахгүй бөгөөд багшид
-          харагдахгүй.
+          {isError
+            ? 'Хариултыг хадгалж чадсангүй. Багшид харагдахгүй байж магадгүй.'
+            : isSuccess
+              ? 'Хариулт хадгалагдлаа. Багш үр дүнг тань харна.'
+              : 'Асуултууд туршилтынх. Хариулт тань багшид харагдана.'}
         </p>
       </CardContent>
     </Card>

@@ -1,4 +1,4 @@
-import { readRows } from "@workspace/db";
+import { db, quizAttemptsInLearning, readRows } from "@workspace/db";
 
 export type LessonRow = {
   id: number;
@@ -131,4 +131,82 @@ export const approvedVersion = (materialId: number) =>
      ORDER BY sv.version_no DESC
      LIMIT 1`,
     [materialId],
+  );
+
+export type QuizAnswer = {
+  questionId: string;
+  prompt: string;
+  chosenOptionId: string;
+  chosenText: string;
+  correct: boolean;
+};
+
+export async function insertQuizAttempt(row: {
+  studentId: number;
+  dailyLessonId: number;
+  lessonCode: string;
+  answers: QuizAnswer[];
+  score: number;
+  maxScore: number;
+}) {
+  const [attempt] = await db
+    .insert(quizAttemptsInLearning)
+    .values(row)
+    .returning({
+      id: quizAttemptsInLearning.id,
+      lessonCode: quizAttemptsInLearning.lessonCode,
+      score: quizAttemptsInLearning.score,
+      maxScore: quizAttemptsInLearning.maxScore,
+      submittedAt: quizAttemptsInLearning.submittedAt,
+    });
+  // Drizzle's string mode returns Postgres's own rendering, which separates
+  // date and time with a space. The read path emits ISO 8601, and one API
+  // should not return two shapes for one column.
+  return { ...attempt, submittedAt: new Date(attempt.submittedAt).toISOString() };
+}
+
+/** True when the lesson is approved and actually scheduled for that class. */
+export const lessonBelongsToClass = async (lessonId: number, studentId: number) =>
+  (
+    await readRows<{ ok: number }>(
+      `SELECT 1 AS ok
+       FROM core.student_enrollments e
+       JOIN learning.class_schedule cs ON cs.class_id = e.class_id
+       JOIN learning.daily_lessons dl ON dl.id = cs.daily_lesson_id AND dl.status = 'APPROVED'
+       WHERE e.student_id = $1::bigint AND e.is_active AND dl.id = $2::bigint
+       LIMIT 1`,
+      [studentId, lessonId],
+    )
+  ).length > 0;
+
+export const attemptsForClass = (classId: number, limit: number) =>
+  readRows<{
+    id: number;
+    studentName: string;
+    studentCode: string;
+    lessonCode: string;
+    skillName: string;
+    score: number;
+    maxScore: number;
+    submittedAt: string;
+    answers: QuizAnswer[];
+  }>(
+    `SELECT qa.id::int AS id, st.display_name AS "studentName",
+       st.student_code AS "studentCode", qa.lesson_code AS "lessonCode",
+       sk.name_mn AS "skillName", qa.score::int AS score,
+       qa.max_score::int AS "maxScore",
+       -- node-postgres hands back a JS Date for timestamptz, which the string
+       -- contract rejects. to_json gives ISO 8601; ::text gives a space in
+       -- place of the T, which Date.parse is not required to accept.
+       to_json(qa.submitted_at) #>> '{}' AS "submittedAt",
+       qa.answers
+     FROM learning.quiz_attempts qa
+     JOIN core.students st ON st.id = qa.student_id
+     JOIN core.student_enrollments e ON e.student_id = qa.student_id AND e.is_active
+     JOIN learning.daily_lessons dl ON dl.id = qa.daily_lesson_id
+     JOIN content.skills sk ON sk.id = dl.core_skill_id
+     WHERE e.class_id = $1::bigint
+     ORDER BY qa.submitted_at DESC
+     LIMIT $2`,
+    [classId, limit],
   );

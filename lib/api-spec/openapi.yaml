@@ -473,6 +473,73 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /student/quiz-attempts:
+    post:
+      operationId: submitQuizAttempt
+      tags: [student]
+      summary: Record the signed-in student's run at a lesson's practice check
+      description: >
+        The server scores nothing: the questions live in the frontend for now,
+        so it records what was answered and trusts the client's marking. That
+        is fine for practice a student marks themselves and would not be for a
+        graded assessment - the diagnostic block moves questions into the
+        database and the scoring with them.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuizAttemptInput"
+      responses:
+        "201":
+          description: Attempt recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizAttempt"
+        "400":
+          description: Malformed attempt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: The account is not linked to a student record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /teacher/quiz-attempts:
+    get:
+      operationId: getTeacherQuizAttempts
+      tags: [teacher]
+      summary: What a class answered, newest first
+      parameters:
+        - name: classId
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        "200":
+          description: Recorded attempts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeacherQuizAttempts"
+        "403":
+          description: Not a teacher of that class
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   parameters:
     AssignmentId:
@@ -488,6 +555,95 @@ components:
       schema:
         type: string
   schemas:
+    QuizAnswer:
+      type: object
+      description: >
+        The prompt and the chosen text are copied in, not referenced, so an
+        answer still reads correctly after the questions are edited.
+      properties:
+        questionId:
+          type: string
+        prompt:
+          type: string
+        chosenOptionId:
+          type: string
+        chosenText:
+          type: string
+        correct:
+          type: boolean
+      required: [questionId, prompt, chosenOptionId, chosenText, correct]
+    QuizAttemptInput:
+      type: object
+      properties:
+        lessonId:
+          type: integer
+        lessonCode:
+          type: string
+        answers:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/QuizAnswer"
+      required: [lessonId, lessonCode, answers]
+    QuizAttempt:
+      type: object
+      properties:
+        id:
+          type: integer
+        lessonCode:
+          type: string
+        score:
+          type: integer
+        maxScore:
+          type: integer
+        submittedAt:
+          type: string
+      required: [id, lessonCode, score, maxScore, submittedAt]
+    TeacherQuizAttemptRow:
+      type: object
+      properties:
+        id:
+          type: integer
+        studentName:
+          type: string
+        studentCode:
+          type: string
+        lessonCode:
+          type: string
+        skillName:
+          type: string
+        score:
+          type: integer
+        maxScore:
+          type: integer
+        submittedAt:
+          type: string
+        answers:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuizAnswer"
+      required:
+        - id
+        - studentName
+        - studentCode
+        - lessonCode
+        - skillName
+        - score
+        - maxScore
+        - submittedAt
+        - answers
+    TeacherQuizAttempts:
+      type: object
+      properties:
+        classId:
+          type: integer
+        className:
+          type: string
+        attempts:
+          type: array
+          items:
+            $ref: "#/components/schemas/TeacherQuizAttemptRow"
+      required: [classId, className, attempts]
     PasswordChangeInput:
       type: object
       properties:

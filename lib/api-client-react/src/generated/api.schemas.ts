@@ -5,6 +5,50 @@
  * EJ Learning adaptive learning API
  * OpenAPI spec version: 0.1.0
  */
+/**
+ * The prompt and the chosen text are copied in, not referenced, so an answer still reads correctly after the questions are edited.
+ */
+export interface QuizAnswer {
+  questionId: string;
+  prompt: string;
+  chosenOptionId: string;
+  chosenText: string;
+  correct: boolean;
+}
+
+export interface QuizAttemptInput {
+  lessonId: number;
+  lessonCode: string;
+  /** @minItems 1 */
+  answers: QuizAnswer[];
+}
+
+export interface QuizAttempt {
+  id: number;
+  lessonCode: string;
+  score: number;
+  maxScore: number;
+  submittedAt: string;
+}
+
+export interface TeacherQuizAttemptRow {
+  id: number;
+  studentName: string;
+  studentCode: string;
+  lessonCode: string;
+  skillName: string;
+  score: number;
+  maxScore: number;
+  submittedAt: string;
+  answers: QuizAnswer[];
+}
+
+export interface TeacherQuizAttempts {
+  classId: number;
+  className: string;
+  attempts: TeacherQuizAttemptRow[];
+}
+
 export interface PasswordChangeInput {
   /** @minLength 1 */
   currentPassword: string;
@@ -680,5 +724,14 @@ from?: string;
  * @pattern ^\d{4}-\d{2}-\d{2}$
  */
 to?: string;
+};
+
+export type GetTeacherQuizAttemptsParams = {
+classId: number;
+/**
+ * @minimum 1
+ * @maximum 200
+ */
+limit?: number;
 };
 

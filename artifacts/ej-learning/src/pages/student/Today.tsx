@@ -1,8 +1,9 @@
 import { useGetStudentToday } from '@workspace/api-client-react'
-import { BookOpen, Clock, ExternalLink } from 'lucide-react'
+import { Clock } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { LessonQuiz } from '@/components/quiz/LessonQuiz'
+import { BookViewer } from '@/components/book/BookViewer'
 import { cn } from '@/lib/utils'
 
 /**
@@ -91,28 +92,7 @@ export default function StudentToday() {
               </p>
             ) : null}
 
-            {lesson.book ? (
-              <a
-                href={`${lesson.book.fileUrl}#page=${lesson.book.pageFrom ?? 1}`}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center gap-3 rounded-md border border-border bg-background p-4 transition-colors hover:border-primary/50"
-              >
-                <BookOpen className="h-5 w-5 shrink-0 text-primary" />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium">
-                    {lesson.book.chapterTitle ?? lesson.book.title ?? 'Сурах бичиг'}
-                  </span>
-                  <span className="block text-xs text-muted-foreground">
-                    {lesson.book.title}
-                    {lesson.book.pageFrom
-                      ? ` · ${lesson.book.pageFrom}–${lesson.book.pageTo ?? lesson.book.pageFrom} хуудас`
-                      : null}
-                  </span>
-                </span>
-                <ExternalLink className="h-4 w-4 shrink-0 text-muted-foreground" />
-              </a>
-            ) : null}
+            {lesson.book ? <BookViewer book={lesson.book} /> : null}
 
             <Section title="Сануулах" body={lesson.remember} />
             <Section title="Жишээ" body={lesson.workedExample} />
@@ -124,7 +104,9 @@ export default function StudentToday() {
         </Card>
       )}
 
-      {lesson ? <LessonQuiz lessonCode={lesson.lessonCode} /> : null}
+      {lesson ? (
+        <LessonQuiz lessonId={lesson.id} lessonCode={lesson.lessonCode} />
+      ) : null}
     </div>
   )
 }
