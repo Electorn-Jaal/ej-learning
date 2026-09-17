@@ -55,3 +55,6 @@ Thumbs.db
 
 # Reference checkout, not part of this product. It carries its own .git.
 NUM-TMS-26/
+
+# Database dumps. May hold real student data; restore from these, don't commit them.
+backups/
