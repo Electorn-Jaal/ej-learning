@@ -10,6 +10,7 @@
 // drizzle-kit reads this file to plan migrations. Anything exported here that
 // is absent from the database becomes a CREATE TABLE in the next migration, so
 // definitions for tables that do not exist belong in ./legacy.ts instead.
+export * from "./proficiency";
 export * from "./database";
 export * from "./relations";
 export * from "./identity";
