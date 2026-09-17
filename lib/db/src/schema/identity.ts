@@ -8,7 +8,12 @@ import {
   unique,
   varchar,
 } from "drizzle-orm/pg-core";
-import { core, studentsInCore, subjectsInCore } from "./database";
+import {
+  classesInCore,
+  core,
+  studentsInCore,
+  subjectsInCore,
+} from "./database";
 
 /**
  * Account identity for the application.
@@ -178,5 +183,57 @@ export const sessionsInCore = core.table(
       foreignColumns: [usersInCore.id],
       name: "sessions_user_id_fkey",
     }).onDelete("cascade"),
+  ],
+);
+
+/**
+ * Which classes a teacher is responsible for.
+ *
+ * Nothing linked a teacher to a class before this, so "list my classes" was
+ * unanswerable. The same link decides which workflow a teacher sees: the
+ * primary-grade flow (the teacher enters diagnostic scores from paper) and the
+ * secondary-grade flow (the system scores a web exam and the teacher reviews)
+ * differ per class, not per person.
+ *
+ * The stage is therefore derived from the class's grade rather than stored on
+ * core.teachers. A teacher who takes both a 5th and a 6th grade class needs
+ * both workflows, and a column on the account could only name one of them.
+ */
+export const classTeachersInCore = core.table(
+  "class_teachers",
+  {
+    classId: bigint("class_id", { mode: "number" }).notNull(),
+    teacherId: bigint("teacher_id", { mode: "number" }).notNull(),
+    // Nullable: a primary-grade teacher usually covers every subject.
+    subjectId: bigint("subject_id", { mode: "number" }),
+    isActive: boolean("is_active").default(true).notNull(),
+    assignedAt: timestamp("assigned_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.classId, table.teacherId],
+      name: "class_teachers_pkey",
+    }),
+    index("idx_class_teachers_teacher").using(
+      "btree",
+      table.teacherId.asc().nullsLast().op("int8_ops"),
+    ),
+    foreignKey({
+      columns: [table.classId],
+      foreignColumns: [classesInCore.id],
+      name: "class_teachers_class_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.teacherId],
+      foreignColumns: [teachersInCore.id],
+      name: "class_teachers_teacher_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.subjectId],
+      foreignColumns: [subjectsInCore.id],
+      name: "class_teachers_subject_id_fkey",
+    }),
   ],
 );

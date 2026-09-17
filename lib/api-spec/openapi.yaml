@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Sign-in and the current session
   - name: session
     description: Current authenticated identity
   - name: student
@@ -288,6 +290,66 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/WorkspaceIntegrationDashboard"
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Sign in and start a session
+      description: >
+        On success the session token is returned as an httpOnly cookie, never
+        in the body. A wrong password and an unknown username give the same
+        401 so neither can be probed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Session started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionEnvelope"
+        "400":
+          description: Username or password missing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "401":
+          description: Wrong username or password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Revoke the current session
+      responses:
+        "204":
+          description: Session revoked and the cookie cleared
+  /auth/me:
+    get:
+      operationId: getSession
+      tags: [auth]
+      summary: The signed-in user
+      responses:
+        "200":
+          description: Signed-in user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionEnvelope"
+        "401":
+          description: Not signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   parameters:
     AssignmentId:
@@ -303,6 +365,61 @@ components:
       schema:
         type: string
   schemas:
+    UserRole:
+      type: string
+      enum: [STUDENT, TEACHER, ADMIN]
+    AuthenticatedUser:
+      type: object
+      description: >
+        Roles are a list: one account can hold TEACHER and ADMIN at once.
+        studentId and teacherId are the linked core.students / core.teachers
+        rows, null when the account has none.
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        displayName:
+          type: string
+        studentId:
+          type: ["integer", "null"]
+        teacherId:
+          type: ["integer", "null"]
+        roles:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserRole"
+      required:
+        - id
+        - username
+        - displayName
+        - studentId
+        - teacherId
+        - roles
+    SessionEnvelope:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/AuthenticatedUser"
+      required: [user]
+    LoginInput:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          minLength: 1
+      required: [username, password]
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+      required: [error]
     HealthStatus:
       type: object
       properties:
