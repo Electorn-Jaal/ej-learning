@@ -24,7 +24,7 @@ export default function TeacherDashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="bg-card shadow-sm border-border">
           <CardContent className="p-6 flex items-center gap-4">
-            <div className="p-3 bg-primary/10 text-primary rounded-md">
+            <div className="rounded-md border border-border p-3 text-muted-foreground">
               <Users className="w-6 h-6" />
             </div>
             <div>
@@ -35,7 +35,7 @@ export default function TeacherDashboard() {
         </Card>
         <Card className="bg-card shadow-sm border-border">
           <CardContent className="p-6 flex items-center gap-4">
-            <div className="p-3 bg-primary/10 text-primary rounded-md">
+            <div className="rounded-md border border-border p-3 text-muted-foreground">
               <BookOpen className="w-6 h-6" />
             </div>
             <div>
@@ -46,7 +46,7 @@ export default function TeacherDashboard() {
         </Card>
         <Card className="bg-card shadow-sm border-border">
           <CardContent className="p-6 flex items-center gap-4">
-            <div className="p-3 bg-pending/10 text-pending rounded-md">
+            <div className="rounded-md border border-border p-3 text-muted-foreground">
               <CheckSquare className="w-6 h-6" />
             </div>
             <div>

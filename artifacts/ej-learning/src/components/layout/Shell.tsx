@@ -54,7 +54,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             EJ Learning
           </div>
         </div>
-        <nav className="flex-1 p-4 space-y-1">
+        <nav className="flex-1 space-y-0.5 py-4 pr-4">
           {navItems.map((item) => {
             const Icon = item.icon
             return (
@@ -62,10 +62,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  // The active item is marked by a solid rule and weight, not
+                  // by a wash of the accent colour under text of that same
+                  // colour - that pairing is what makes a page look generated.
+                  "flex items-center gap-3 border-l-2 py-2 pl-3 pr-2 text-sm transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   isActive(item.href)
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                    ? "border-primary bg-secondary font-semibold text-foreground"
+                    : "border-transparent font-medium text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
                 )}
               >
                 <Icon className="h-4 w-4" />
@@ -114,8 +117,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
                 className={cn(
                   "flex items-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                   isActive(item.href)
-                    ? "border-b-2 border-primary text-primary"
-                    : "text-muted-foreground",
+                    ? "border-b-2 border-primary font-semibold text-foreground"
+                    : "border-b-2 border-transparent text-muted-foreground",
                 )}
               >
                 <Icon className="h-4 w-4" />
