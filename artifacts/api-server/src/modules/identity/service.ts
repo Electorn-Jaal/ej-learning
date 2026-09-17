@@ -1,6 +1,10 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { hashPassword, verifyPassword } from "../../shared/password";
-import { unauthorized } from "../../shared/http-error";
+import {
+  MIN_PASSWORD_LENGTH,
+  hashPassword,
+  verifyPassword,
+} from "../../shared/password";
+import { badRequest, unauthorized } from "../../shared/http-error";
 import * as repository from "./repository";
 import type { AuthenticatedUser, UserRole } from "./repository";
 
@@ -63,6 +67,39 @@ export async function resolve(token: string): Promise<AuthenticatedUser | null> 
 
 export async function logout(token: string): Promise<void> {
   if (token) await repository.revokeSession(tokenHash(token));
+}
+
+/**
+ * Verifies the current password before changing it, then drops the account's
+ * other sessions. The token of the caller is needed, not just the user id, so
+ * the session doing the work can be the one that survives.
+ */
+export async function changePassword(
+  user: AuthenticatedUser,
+  token: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  if (newPassword.length < MIN_PASSWORD_LENGTH) {
+    throw badRequest(
+      `Шинэ нууц үг дор хаяж ${MIN_PASSWORD_LENGTH} тэмдэгттэй байх ёстой.`,
+      "PASSWORD_TOO_SHORT",
+    );
+  }
+  if (newPassword === currentPassword) {
+    throw badRequest(
+      "Шинэ нууц үг хуучнаасаа өөр байх ёстой.",
+      "PASSWORD_UNCHANGED",
+    );
+  }
+
+  const credentials = await repository.findCredentialsByUsername(user.username);
+  if (!credentials || !(await verifyPassword(currentPassword, credentials.passwordHash))) {
+    throw unauthorized("Одоогийн нууц үг буруу байна.", "INVALID_CREDENTIALS");
+  }
+
+  await repository.updatePasswordHash(user.id, await hashPassword(newPassword));
+  await repository.revokeOtherSessions(user.id, tokenHash(token));
 }
 
 export const hasRole = (user: AuthenticatedUser, role: UserRole) =>

@@ -595,3 +595,20 @@ export const GetMaterialFileParams = zod.object({
 export const GetMaterialFileResponse = zod.unknown()
 
 
+/**
+ * Every other session for the account is revoked, so a password changed because it leaked actually locks the other holder out. The session making the change survives, so the user is not signed out of the tab they are working in.
+ * @summary Change the signed-in account's password
+ */
+
+export const changePasswordBodyNewPasswordMin = 8;
+
+
+
+export const ChangePasswordBody = zod.object({
+  "currentPassword": zod.string().min(1),
+  "newPassword": zod.string().min(changePasswordBodyNewPasswordMin).describe('At least 8 characters. No composition rules - length is what matters.')
+})
+
+export const ChangePasswordResponse = zod.void()
+
+

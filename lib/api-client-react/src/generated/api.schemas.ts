@@ -5,6 +5,16 @@
  * EJ Learning adaptive learning API
  * OpenAPI spec version: 0.1.0
  */
+export interface PasswordChangeInput {
+  /** @minLength 1 */
+  currentPassword: string;
+  /**
+     * At least 8 characters. No composition rules - length is what matters.
+     * @minLength 8
+     */
+  newPassword: string;
+}
+
 /**
  * Where in the book this lesson sits.
  */

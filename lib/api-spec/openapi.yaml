@@ -442,6 +442,37 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /auth/password:
+    post:
+      operationId: changePassword
+      tags: [auth]
+      summary: Change the signed-in account's password
+      description: >
+        Every other session for the account is revoked, so a password changed
+        because it leaked actually locks the other holder out. The session
+        making the change survives, so the user is not signed out of the tab
+        they are working in.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordChangeInput"
+      responses:
+        "204":
+          description: Password changed and other sessions revoked
+        "400":
+          description: The new password fails the length rule, or repeats the old one
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "401":
+          description: Not signed in, or the current password is wrong
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   parameters:
     AssignmentId:
@@ -457,6 +488,17 @@ components:
       schema:
         type: string
   schemas:
+    PasswordChangeInput:
+      type: object
+      properties:
+        currentPassword:
+          type: string
+          minLength: 1
+        newPassword:
+          description: At least 8 characters. No composition rules - length is what matters.
+          type: string
+          minLength: 8
+      required: [currentPassword, newPassword]
     BookReference:
       type: object
       description: Where in the book this lesson sits.
