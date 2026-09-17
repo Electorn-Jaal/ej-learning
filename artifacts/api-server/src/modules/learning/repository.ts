@@ -1,4 +1,10 @@
-import { db, quizAttemptsInLearning, readRows } from "@workspace/db";
+import { and, eq } from "drizzle-orm";
+import {
+  classScheduleInLearning,
+  db,
+  quizAttemptsInLearning,
+  readRows,
+} from "@workspace/db";
 
 export type LessonRow = {
   id: number;
@@ -209,4 +215,119 @@ export const attemptsForClass = (classId: number, limit: number) =>
      ORDER BY qa.submitted_at DESC
      LIMIT $2`,
     [classId, limit],
+  );
+
+export type SchedulableLesson = {
+  id: number;
+  lessonCode: string;
+  lessonType: string;
+  skillName: string;
+  chapterTitle: string | null;
+  pageFrom: number | null;
+};
+
+/**
+ * Approved lessons for a class's grade and subject, in the order the book
+ * teaches them: outline sequence first, then page.
+ *
+ * DISTINCT ON collapses a lesson that reaches the book through more than one
+ * content node; the ORDER BY inside decides which alignment wins, so the
+ * earliest one in the book is the one that positions it.
+ */
+export const schedulableLessons = (classId: number) =>
+  readRows<SchedulableLesson>(
+    `SELECT DISTINCT ON (dl.id)
+       dl.id::int AS id, dl.lesson_code AS "lessonCode",
+       dl.lesson_type AS "lessonType", sk.name_mn AS "skillName",
+       son.title AS "chapterTitle", a.page_from::int AS "pageFrom",
+       son.sequence_no, a.page_from AS ord_page
+     FROM core.classes c
+     JOIN content.skills sk ON sk.grade_level_id = c.grade_level_id
+     JOIN learning.daily_lessons dl ON dl.core_skill_id = sk.id AND dl.status = 'APPROVED'
+     LEFT JOIN content.content_skill_maps m ON m.skill_id = sk.id AND m.status = 'APPROVED'
+     LEFT JOIN content.content_nodes cn ON cn.id = m.content_node_id AND cn.status = 'APPROVED'
+     LEFT JOIN content.content_source_alignments a ON a.content_node_id = cn.id AND a.status = 'APPROVED'
+     LEFT JOIN content.source_outline_nodes son ON son.id = a.source_outline_node_id
+     WHERE c.id = $1::bigint AND sk.status = 'APPROVED'
+     ORDER BY dl.id, son.sequence_no NULLS LAST, a.page_from NULLS LAST`,
+    [classId],
+  ).then((rows) =>
+    // Re-sort in book order: DISTINCT ON forces its own ORDER BY to lead with
+    // the distinct key, so the shape the caller wants is applied here.
+    [...rows].sort((a, b) => {
+      const left = a as SchedulableLesson & { sequence_no: number | null; ord_page: number | null };
+      const right = b as SchedulableLesson & { sequence_no: number | null; ord_page: number | null };
+      return (
+        (left.sequence_no ?? 9e9) - (right.sequence_no ?? 9e9) ||
+        (left.ord_page ?? 9e9) - (right.ord_page ?? 9e9) ||
+        left.lessonCode.localeCompare(right.lessonCode)
+      );
+    }),
+  );
+
+export const termById = (termId: number) =>
+  readRows<{ id: number; nameMn: string; startsOn: string; endsOn: string }>(
+    `SELECT id::int AS id, name_mn AS "nameMn",
+       starts_on::text AS "startsOn", ends_on::text AS "endsOn"
+     FROM learning.terms WHERE id = $1::smallint`,
+    [termId],
+  );
+
+export const scheduledDates = (classId: number, from: string, to: string) =>
+  readRows<{ scheduledOn: string }>(
+    `SELECT scheduled_on::text AS "scheduledOn" FROM learning.class_schedule
+     WHERE class_id = $1::bigint AND scheduled_on BETWEEN $2::date AND $3::date`,
+    [classId, from, to],
+  );
+
+export async function insertScheduleDays(
+  rows: {
+    classId: number;
+    termId: number;
+    dailyLessonId: number;
+    scheduledOn: string;
+    createdBy: number | null;
+  }[],
+) {
+  if (rows.length === 0) return;
+  await db.insert(classScheduleInLearning).values(rows);
+}
+
+export async function clearScheduleDay(classId: number, scheduledOn: string) {
+  await db
+    .delete(classScheduleInLearning)
+    .where(
+      and(
+        eq(classScheduleInLearning.classId, classId),
+        eq(classScheduleInLearning.scheduledOn, scheduledOn),
+      ),
+    );
+}
+
+/** Replaces whatever the day held; the unique key is (class, day). */
+export async function setScheduleDay(row: {
+  classId: number;
+  termId: number;
+  dailyLessonId: number;
+  scheduledOn: string;
+  createdBy: number | null;
+}) {
+  await db
+    .insert(classScheduleInLearning)
+    .values(row)
+    .onConflictDoUpdate({
+      target: [classScheduleInLearning.classId, classScheduleInLearning.scheduledOn],
+      set: {
+        dailyLessonId: row.dailyLessonId,
+        termId: row.termId,
+        createdBy: row.createdBy,
+      },
+    });
+}
+
+export const termCovering = (isoDate: string) =>
+  readRows<{ id: number }>(
+    `SELECT id::int AS id FROM learning.terms
+     WHERE $1::date BETWEEN starts_on AND ends_on ORDER BY term_number LIMIT 1`,
+    [isoDate],
   );

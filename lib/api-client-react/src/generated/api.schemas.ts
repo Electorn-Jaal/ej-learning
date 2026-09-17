@@ -5,6 +5,45 @@
  * EJ Learning adaptive learning API
  * OpenAPI spec version: 0.1.0
  */
+export interface SchedulableLesson {
+  id: number;
+  lessonCode: string;
+  lessonType: string;
+  skillName: string;
+  /** @nullable */
+  chapterTitle: string | null;
+  /** @nullable */
+  pageFrom: number | null;
+}
+
+export interface GenerateScheduleInput {
+  classId: number;
+  termId: number;
+}
+
+export interface GenerateScheduleResult {
+  created: number;
+  /** School days that already carried a lesson and were left alone. */
+  skipped: number;
+  lessonsAvailable: number;
+  /** @nullable */
+  firstDay: string | null;
+  /** @nullable */
+  lastDay: string | null;
+  notice: string;
+}
+
+export interface ScheduleDayInput {
+  classId: number;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  scheduledOn: string;
+  /**
+     * null clears the day.
+     * @nullable
+     */
+  lessonId: number | null;
+}
+
 /**
  * The prompt and the chosen text are copied in, not referenced, so an answer still reads correctly after the questions are edited.
  */
@@ -733,5 +772,9 @@ classId: number;
  * @maximum 200
  */
 limit?: number;
+};
+
+export type GetTeacherLessonsParams = {
+classId: number;
 };
 

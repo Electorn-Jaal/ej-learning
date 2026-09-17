@@ -675,3 +675,56 @@ export const GetTeacherQuizAttemptsResponse = zod.object({
 })
 
 
+/**
+ * @summary Approved lessons for a class, in the order the book teaches them
+ */
+export const GetTeacherLessonsQueryParams = zod.object({
+  "classId": zod.coerce.number().int()
+})
+
+export const GetTeacherLessonsResponseItem = zod.object({
+  "id": zod.number().int(),
+  "lessonCode": zod.string(),
+  "lessonType": zod.string(),
+  "skillName": zod.string(),
+  "chapterTitle": zod.string().nullable(),
+  "pageFrom": zod.number().int().nullable()
+})
+export const GetTeacherLessonsResponse = zod.array(GetTeacherLessonsResponseItem)
+
+
+/**
+ * The sequence is already fixed by the textbook and the curriculum, so it is laid out rather than typed in. Days that already carry a lesson are left alone: regenerating must never discard a teacher's correction. Weekends are skipped; holidays are not modelled yet, so a teacher clears those days by hand.
+ * @summary Fill a term's empty school days from the book's own order
+ */
+export const GenerateScheduleBody = zod.object({
+  "classId": zod.number().int(),
+  "termId": zod.number().int()
+})
+
+export const GenerateScheduleResponse = zod.object({
+  "created": zod.number().int(),
+  "skipped": zod.number().int().describe('School days that already carried a lesson and were left alone.'),
+  "lessonsAvailable": zod.number().int(),
+  "firstDay": zod.string().nullable(),
+  "lastDay": zod.string().nullable(),
+  "notice": zod.string()
+})
+
+
+/**
+ * The teacher's correction surface. A null lessonId clears the day, which is how a holiday or a school event is recorded.
+ * @summary Set, replace or clear one day's lesson
+ */
+export const setScheduleDayBodyScheduledOnRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const SetScheduleDayBody = zod.object({
+  "classId": zod.number().int(),
+  "scheduledOn": zod.string().regex(setScheduleDayBodyScheduledOnRegExp),
+  "lessonId": zod.number().int().nullable().describe('null clears the day.')
+})
+
+export const SetScheduleDayResponse = zod.void()
+
+
