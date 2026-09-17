@@ -13,8 +13,9 @@
     "push": "drizzle-kit push --config ./drizzle.config.ts",
     "introspect": "drizzle-kit introspect --config ./drizzle.config.ts",
     "generate": "drizzle-kit generate --config ./drizzle.config.ts",
-    "migrate": "drizzle-kit migrate --config ./drizzle.config.ts",
-    "check-drift": "drizzle-kit check --config ./drizzle.config.ts"
+    "migrate": "node --env-file-if-exists=../../.env scripts/migrate.mjs",
+    "check-drift": "drizzle-kit check --config ./drizzle.config.ts",
+    "mark-baseline": "node --env-file-if-exists=../../.env scripts/mark-baseline.mjs"
   },
   "dependencies": {
     "drizzle-orm": "catalog:",
