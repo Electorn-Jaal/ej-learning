@@ -340,141 +340,158 @@ export const termCovering = (isoDate: string) =>
   );
 
 /**
- * Dashboard aggregates for the classes a teacher is responsible for.
+ * The classes a teacher holds, each with the subject it is taught for.
  *
- * One query per question rather than one joined query: these count different
- * things over different tables, and forcing them together would produce a
- * cartesian product that has to be counted back out with DISTINCT.
+ * A teacher is not one subject. This one teaches Mongolian to one class and
+ * maths to another, so the subject belongs to the pairing, not the person.
  */
-export const teacherClassIds = (teacherId: number | null, isAdmin: boolean) =>
+export const teacherClasses = (teacherId: number | null, isAdmin: boolean) =>
   isAdmin
-    ? readRows<{ id: number; subjectId: number | null }>(
-        `SELECT c.id::int AS id, NULL::int AS "subjectId"
-         FROM core.classes c WHERE c.is_active`,
+    ? readRows<{
+        classId: number;
+        className: string;
+        gradeLevel: number;
+        subjectId: number | null;
+        subjectName: string;
+      }>(
+        `SELECT c.id::int AS "classId", c.name_mn AS "className",
+           g.grade_number::int AS "gradeLevel", NULL::int AS "subjectId",
+           '' AS "subjectName"
+         FROM core.classes c
+         JOIN core.grade_levels g ON g.id = c.grade_level_id
+         WHERE c.is_active ORDER BY g.grade_number, c.class_code`,
       )
-    : readRows<{ id: number; subjectId: number | null }>(
-        `SELECT c.id::int AS id,
-           COALESCE(ct.subject_id, t.subject_id)::int AS "subjectId"
+    : readRows<{
+        classId: number;
+        className: string;
+        gradeLevel: number;
+        subjectId: number | null;
+        subjectName: string;
+      }>(
+        `SELECT c.id::int AS "classId", c.name_mn AS "className",
+           g.grade_number::int AS "gradeLevel",
+           COALESCE(ct.subject_id, t.subject_id)::int AS "subjectId",
+           COALESCE(sub.name_mn, '') AS "subjectName"
          FROM core.class_teachers ct
          JOIN core.classes c ON c.id = ct.class_id AND c.is_active
+         JOIN core.grade_levels g ON g.id = c.grade_level_id
          JOIN core.teachers t ON t.id = ct.teacher_id
-         WHERE ct.teacher_id = $1::bigint AND ct.is_active`,
+         LEFT JOIN core.subjects sub ON sub.id = COALESCE(ct.subject_id, t.subject_id)
+         WHERE ct.teacher_id = $1::bigint AND ct.is_active
+         ORDER BY g.grade_number, c.class_code`,
         [teacherId ?? 0],
       );
 
 /**
- * The framework a subject's skills are levelled on, or null when it uses none.
+ * The framework a subject is levelled on, or null where it uses none.
  *
- * English runs on CEFR; Mongolian runs on school grades and skill mastery. A
- * dashboard that shows CEFR bands to a Mongolian teacher is showing them a
- * measurement that does not exist for their subject.
+ * English runs on CEFR; maths and Mongolian run on school grades. Showing a
+ * placement level to a maths teacher is showing them a measurement that does
+ * not exist for their subject.
  */
-export const subjectFramework = (subjectId: number | null) =>
+export const frameworkOfSubject = (subjectId: number | null) =>
   subjectId === null
     ? Promise.resolve([])
-    : readRows<{ subjectName: string; framework: string | null }>(
-        `SELECT s.name_mn AS "subjectName",
-           (SELECT p.framework FROM content.skills k
-            JOIN content.proficiency_levels p ON p.id = k.proficiency_level_id
-            WHERE k.subject_id = s.id LIMIT 1) AS framework
-         FROM core.subjects s WHERE s.id = $1::bigint`,
+    : readRows<{ framework: string | null }>(
+        `SELECT (SELECT p.framework FROM content.skills k
+                 JOIN content.proficiency_levels p ON p.id = k.proficiency_level_id
+                 WHERE k.subject_id = $1::bigint LIMIT 1) AS framework`,
         [subjectId],
       );
 
-export const dashboardCounts = (classIds: number[], onDate: string) =>
+/** Today's scheduled lesson for one class, with the pages it covers. */
+export const classLessonToday = (classId: number, onDate: string) =>
   readRows<{
-    studentCount: number;
-    placedCount: number;
-    assignedToday: number;
-    answeredToday: number;
+    lessonCode: string;
+    skillName: string;
+    pageFrom: number | null;
+    pageTo: number | null;
   }>(
-    `WITH roll AS (
-       SELECT DISTINCT e.student_id
-       FROM core.student_enrollments e
-       WHERE e.is_active AND e.class_id = ANY($1::bigint[])
-     )
-     SELECT
-       (SELECT count(*)::int FROM roll) AS "studentCount",
-       (SELECT count(DISTINCT a.student_id)::int FROM assessment.placement_attempts a
-          JOIN roll ON roll.student_id = a.student_id
-          WHERE a.proficiency_level_id IS NOT NULL) AS "placedCount",
-       (SELECT count(*)::int FROM learning.student_assignments sa
-          JOIN roll ON roll.student_id = sa.student_id
-          WHERE sa.assigned_on = $2::date) AS "assignedToday",
-       (SELECT count(DISTINCT qa.student_id)::int FROM learning.quiz_attempts qa
-          JOIN roll ON roll.student_id = qa.student_id
-          WHERE qa.submitted_at >= $2::date) AS "answeredToday"`,
-    [classIds, onDate],
+    `SELECT dl.lesson_code AS "lessonCode", sk.name_mn AS "skillName",
+       a.page_from::int AS "pageFrom", a.page_to::int AS "pageTo"
+     FROM learning.class_schedule cs
+     JOIN learning.daily_lessons dl ON dl.id = cs.daily_lesson_id
+     JOIN content.skills sk ON sk.id = dl.core_skill_id
+     LEFT JOIN LATERAL (
+       SELECT al.page_from, al.page_to
+       FROM content.content_skill_maps m
+       JOIN content.content_source_alignments al ON al.content_node_id = m.content_node_id
+       WHERE m.skill_id = sk.id AND m.status = 'APPROVED'
+       ORDER BY m.is_primary DESC LIMIT 1
+     ) a ON true
+     WHERE cs.class_id = $1::bigint AND cs.scheduled_on = $2::date`,
+    [classId, onDate],
   );
 
-export const levelBands = (classIds: number[]) =>
-  readRows<{ code: string; nameMn: string; studentCount: number }>(
-    `SELECT p.code, p.name_mn AS "nameMn", count(DISTINCT a.student_id)::int AS "studentCount"
-     FROM content.proficiency_levels p
-     LEFT JOIN assessment.placement_attempts a ON a.proficiency_level_id = p.id
-       AND a.student_id IN (
-         SELECT DISTINCT e.student_id FROM core.student_enrollments e
-         WHERE e.is_active AND e.class_id = ANY($1::bigint[]))
-     WHERE p.framework = 'CEFR'
-     GROUP BY p.code, p.name_mn, p.sequence
-     ORDER BY p.sequence`,
-    [classIds],
+export const classCounts = (classId: number, onDate: string) =>
+  readRows<{ studentCount: number; answeredToday: number }>(
+    `WITH roll AS (
+       SELECT DISTINCT e.student_id FROM core.student_enrollments e
+       WHERE e.is_active AND e.class_id = $1::bigint
+     )
+     SELECT (SELECT count(*)::int FROM roll) AS "studentCount",
+       (SELECT count(DISTINCT q.student_id)::int FROM learning.quiz_attempts q
+        JOIN roll ON roll.student_id = q.student_id
+        WHERE q.submitted_at >= $2::date) AS "answeredToday"`,
+    [classId, onDate],
   );
 
 /**
- * Students worth a second look, newest problem first.
+ * Students in one class worth a second look.
  *
- * Three reasons, in the order a teacher would act on them: never placed, so
- * the system has nothing to go on; scored below half on their last check; or
- * assigned work today and has not answered.
+ * `levelled` decides whether a missing placement is even a finding. For a
+ * subject that never places anyone it is not, and emitting it would fill the
+ * list with a row per student and bury the ones that matter.
  */
-export const attentionRows = (classIds: number[], onDate: string) =>
+export const classAttention = (classId: number, onDate: string, levelled: boolean) =>
   readRows<{
     studentId: number;
     studentCode: string;
     studentName: string;
-    className: string;
     level: string | null;
     reason: string;
     detail: string;
   }>(
     `WITH roll AS (
-       SELECT DISTINCT ON (e.student_id) e.student_id, c.name_mn AS class_name
-       FROM core.student_enrollments e
-       JOIN core.classes c ON c.id = e.class_id
-       WHERE e.is_active AND e.class_id = ANY($1::bigint[])
+       SELECT DISTINCT e.student_id FROM core.student_enrollments e
+       WHERE e.is_active AND e.class_id = $1::bigint
      ), latest_placement AS (
        SELECT DISTINCT ON (a.student_id) a.student_id, p.code
        FROM assessment.placement_attempts a
        LEFT JOIN content.proficiency_levels p ON p.id = a.proficiency_level_id
        ORDER BY a.student_id, a.id DESC
      ), latest_quiz AS (
-       SELECT DISTINCT ON (q.student_id) q.student_id, q.score, q.max_score, q.submitted_at
+       SELECT DISTINCT ON (q.student_id) q.student_id, q.score, q.max_score
        FROM learning.quiz_attempts q ORDER BY q.student_id, q.submitted_at DESC
+     ), assigned AS (
+       SELECT DISTINCT student_id FROM learning.student_assignments
+       WHERE assigned_on = $2::date
+       UNION
+       SELECT roll.student_id FROM roll
+       WHERE EXISTS (SELECT 1 FROM learning.class_schedule cs
+                     WHERE cs.class_id = $1::bigint AND cs.scheduled_on = $2::date)
      )
      SELECT s.id::int AS "studentId", s.student_code AS "studentCode",
-       s.display_name AS "studentName", roll.class_name AS "className",
-       lp.code AS level,
-       CASE WHEN lp.code IS NULL THEN 'NO_PLACEMENT'
+       s.display_name AS "studentName", lp.code AS level,
+       CASE WHEN $3::boolean AND lp.code IS NULL THEN 'NO_PLACEMENT'
             WHEN lq.student_id IS NOT NULL AND lq.score::float / lq.max_score < 0.5 THEN 'LOW_SCORE'
             ELSE 'NOT_ANSWERED' END AS reason,
-       CASE WHEN lp.code IS NULL THEN 'Түвшин тогтоогоогүй'
+       CASE WHEN $3::boolean AND lp.code IS NULL THEN 'Түвшин тогтоогоогүй'
             WHEN lq.student_id IS NOT NULL AND lq.score::float / lq.max_score < 0.5
               THEN 'Сүүлийн шалгалт: ' || lq.score || '/' || lq.max_score
-            ELSE 'Өнөөдрийн даалгаварт хариулаагүй' END AS detail
+            ELSE 'Өнөөдрийн ажилдаа хариулаагүй' END AS detail
      FROM roll
      JOIN core.students s ON s.id = roll.student_id AND s.is_active
      LEFT JOIN latest_placement lp ON lp.student_id = s.id
      LEFT JOIN latest_quiz lq ON lq.student_id = s.id
-     WHERE lp.code IS NULL
+     WHERE ($3::boolean AND lp.code IS NULL)
         OR (lq.student_id IS NOT NULL AND lq.score::float / lq.max_score < 0.5)
-        OR (EXISTS (SELECT 1 FROM learning.student_assignments sa
-                    WHERE sa.student_id = s.id AND sa.assigned_on = $2::date)
+        OR (s.id IN (SELECT student_id FROM assigned)
             AND NOT EXISTS (SELECT 1 FROM learning.quiz_attempts q2
                             WHERE q2.student_id = s.id AND q2.submitted_at >= $2::date))
-     ORDER BY (lp.code IS NULL) DESC, s.student_code
-     LIMIT 50`,
-    [classIds, onDate],
+     ORDER BY s.student_code
+     LIMIT 30`,
+    [classId, onDate, levelled],
   );
 
 /** A lesson row shaped like todayLesson's, for one lesson id. */

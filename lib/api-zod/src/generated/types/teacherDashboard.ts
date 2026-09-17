@@ -5,26 +5,13 @@
  * EJ Learning adaptive learning API
  * OpenAPI spec version: 0.1.0
  */
-import type { AttentionRow } from './attentionRow';
-import type { LevelBand } from './levelBand';
+import type { TeacherClassToday } from './teacherClassToday';
 
+/**
+ * Organised by class rather than by teacher. A teacher holds several classes and often more than one subject, so totals across all of them answer no question anybody asks.
+ */
 export interface TeacherDashboard {
   teacherName: string;
-  /**
-     * The subject this teacher's classes are scoped to, when there is one.
-     * @nullable
-     */
-  subjectName: string | null;
-  /**
-     * The proficiency framework this subject uses, or null when it has none. Mongolian runs on school grades and skill mastery, so a CEFR band chart would be meaningless there - the client hides the panel rather than drawing empty bars.
-     * @nullable
-     */
-  levelFramework: string | null;
-  classCount: number;
-  studentCount: number;
-  placedCount: number;
-  assignedToday: number;
-  answeredToday: number;
-  levels: LevelBand[];
-  attention: AttentionRow[];
+  dateLabel: string;
+  classes: TeacherClassToday[];
 }

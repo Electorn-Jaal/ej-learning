@@ -8,13 +8,12 @@
 import type { AttentionRowReason } from './attentionRowReason';
 
 /**
- * A student the teacher should look at, with why.
+ * A student in this class worth a second look. Reasons are limited to what the subject can actually say: a class that works through a textbook has no placement, so NO_PLACEMENT is only ever emitted for a subject that is levelled.
  */
 export interface AttentionRow {
   studentId: number;
   studentCode: string;
   studentName: string;
-  className: string;
   /** @nullable */
   level: string | null;
   reason: AttentionRowReason;

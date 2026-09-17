@@ -1606,27 +1606,19 @@ components:
         dataNotice:
           type: string
       required: [skills, attempts, dataNotice]
-    LevelBand:
-      type: object
-      properties:
-        code:
-          type: string
-        nameMn:
-          type: string
-        studentCount:
-          type: integer
-      required: [code, nameMn, studentCount]
     AttentionRow:
       type: object
-      description: A student the teacher should look at, with why.
+      description: >
+        A student in this class worth a second look. Reasons are limited to
+        what the subject can actually say: a class that works through a
+        textbook has no placement, so NO_PLACEMENT is only ever emitted for a
+        subject that is levelled.
       properties:
         studentId:
           type: integer
         studentCode:
           type: string
         studentName:
-          type: string
-        className:
           type: string
         level:
           type: ["string", "null"]
@@ -1635,51 +1627,66 @@ components:
           enum: [NO_PLACEMENT, LOW_SCORE, NOT_ANSWERED]
         detail:
           type: string
-      required: [studentId, studentCode, studentName, className, level, reason, detail]
-    TeacherDashboard:
+      required: [studentId, studentCode, studentName, level, reason, detail]
+    TeacherClassToday:
       type: object
       properties:
-        teacherName:
+        classId:
+          type: integer
+        className:
           type: string
+        gradeLevel:
+          type: integer
         subjectName:
-          description: The subject this teacher's classes are scoped to, when there is one.
-          type: ["string", "null"]
+          type: string
         levelFramework:
-          description: >
-            The proficiency framework this subject uses, or null when it has
-            none. Mongolian runs on school grades and skill mastery, so a
-            CEFR band chart would be meaningless there - the client hides the
-            panel rather than drawing empty bars.
+          description: The proficiency ladder this subject uses, or null where it uses none.
           type: ["string", "null"]
-        classCount:
-          type: integer
+        lessonCode:
+          type: ["string", "null"]
+        skillName:
+          type: ["string", "null"]
+        pageFrom:
+          type: ["integer", "null"]
+        pageTo:
+          type: ["integer", "null"]
         studentCount:
-          type: integer
-        placedCount:
-          type: integer
-        assignedToday:
           type: integer
         answeredToday:
           type: integer
-        levels:
-          type: array
-          items:
-            $ref: "#/components/schemas/LevelBand"
         attention:
           type: array
           items:
             $ref: "#/components/schemas/AttentionRow"
       required:
-        - teacherName
+        - classId
+        - className
+        - gradeLevel
         - subjectName
         - levelFramework
-        - classCount
+        - lessonCode
+        - skillName
+        - pageFrom
+        - pageTo
         - studentCount
-        - placedCount
-        - assignedToday
         - answeredToday
-        - levels
         - attention
+    TeacherDashboard:
+      type: object
+      description: >
+        Organised by class rather than by teacher. A teacher holds several
+        classes and often more than one subject, so totals across all of them
+        answer no question anybody asks.
+      properties:
+        teacherName:
+          type: string
+        dateLabel:
+          type: string
+        classes:
+          type: array
+          items:
+            $ref: "#/components/schemas/TeacherClassToday"
+      required: [teacherName, dateLabel, classes]
     TeacherClass:
       type: object
       properties:
