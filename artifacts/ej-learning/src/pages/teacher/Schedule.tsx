@@ -1,9 +1,18 @@
 import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import {
+  getGetTeacherLessonsQueryKey,
+  getGetTeacherScheduleQueryKey,
+  useGenerateSchedule,
   useGetTeacherClasses,
+  useGetTeacherLessons,
   useGetTeacherSchedule,
+  useSetScheduleDay,
+  type SchedulableLesson,
 } from '@workspace/api-client-react'
+import { Sparkles, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -26,8 +35,24 @@ const DAY = new Intl.DateTimeFormat('mn-MN', {
   timeZone: 'UTC',
 })
 
-function ScheduleTable({ classId }: { classId: number }) {
+function ScheduleTable({
+  classId,
+  lessons,
+}: {
+  classId: number
+  lessons: SchedulableLesson[]
+}) {
+  const queryClient = useQueryClient()
   const { data, isLoading, isError, error } = useGetTeacherSchedule({ classId })
+  const { mutate: setDay, isPending: saving } = useSetScheduleDay()
+  const { mutate: generate, isPending: generating } = useGenerateSchedule()
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const refresh = () =>
+    queryClient.invalidateQueries({ queryKey: getGetTeacherScheduleQueryKey({ classId }) })
+
+  const change = (scheduledOn: string, lessonId: number | null) =>
+    setDay({ data: { classId, scheduledOn, lessonId } }, { onSuccess: refresh })
 
   if (isLoading) return <Skeleton className="h-64 w-full" />
   if (isError || !data) {
@@ -41,15 +66,52 @@ function ScheduleTable({ classId }: { classId: number }) {
   return (
     <Card>
       <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
-        <CardTitle className="text-lg">{data.className} — хуваарь</CardTitle>
+        <div>
+          <CardTitle className="text-lg">{data.className} — хуваарь</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Дараалал номоор тогтоно. Та зөвхөн засна.
+          </p>
+        </div>
         <Badge variant="outline">
           {STAGE_LABEL[data.stage] ?? data.stage} · {data.gradeLevel}-р анги
         </Badge>
       </CardHeader>
-      <CardContent>
+
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap items-center gap-3 border-b pb-4">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={generating}
+            onClick={() =>
+              generate(
+                { data: { classId, termId: 1 } },
+                {
+                  onSuccess: (result) => {
+                    setNotice(result.notice)
+                    refresh()
+                  },
+                },
+              )
+            }
+          >
+            <Sparkles className="h-4 w-4" />
+            {generating ? 'Үүсгэж байна…' : 'Хоосон өдрүүдийг бөглөх'}
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            Хичээлтэй өдрүүд хөндөгдөхгүй.
+          </span>
+        </div>
+
+        {notice ? (
+          <p className="border-l-2 border-primary py-1 pl-3 text-sm text-foreground">
+            {notice}
+          </p>
+        ) : null}
+
         {data.days.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            Энэ хугацаанд хуваарь оруулаагүй байна.
+            Энэ хугацаанд хуваарь алга.
           </p>
         ) : (
           <ul className="divide-y">
@@ -68,11 +130,39 @@ function ScheduleTable({ classId }: { classId: number }) {
                       {WEEKDAY.format(date)}
                     </div>
                   </div>
+
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">{day.skillName}</div>
-                    <div className="text-xs text-muted-foreground">{day.lessonCode}</div>
+                    <Select
+                      value={String(day.lessonId)}
+                      disabled={saving}
+                      onValueChange={(value) => change(day.scheduledOn, Number(value))}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {lessons.map((lesson) => (
+                          <SelectItem key={lesson.id} value={String(lesson.id)}>
+                            {lesson.skillName}
+                            {lesson.chapterTitle ? ` · ${lesson.chapterTitle}` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
+
                   {day.isToday ? <Badge>Өнөөдөр</Badge> : null}
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={saving}
+                    title="Энэ өдрийг хоослох"
+                    onClick={() => change(day.scheduledOn, null)}
+                  >
+                    <X className="h-4 w-4" />
+                    <span className="sr-only">Хоослох</span>
+                  </Button>
                 </li>
               )
             })}
@@ -86,25 +176,34 @@ function ScheduleTable({ classId }: { classId: number }) {
 export default function TeacherSchedule() {
   const { data: classes, isLoading } = useGetTeacherClasses()
   const [selected, setSelected] = useState<string | null>(null)
+  const classId = Number(selected ?? classes?.[0]?.id ?? 0)
+  const { data: lessons } = useGetTeacherLessons(
+    { classId },
+    {
+      query: {
+        queryKey: getGetTeacherLessonsQueryKey({ classId }),
+        enabled: classId > 0,
+      },
+    },
+  )
 
   if (isLoading) return <Skeleton className="h-64 w-full" />
   if (!classes?.length) {
     return <p className="text-sm text-muted-foreground">Анги олдсонгүй.</p>
   }
 
-  const classId = selected ?? classes[0].id
-
   return (
     <div className="space-y-6">
       <header className="space-y-1">
         <h1 className="text-2xl font-bold">Хичээлийн хуваарь</h1>
         <p className="text-sm text-muted-foreground">
-          Анги бүрт өдөр бүр нэг хичээл. Хоосон өдөр бол хичээлгүй өдөр.
+          Сурах бичгийн дараалал автоматаар байрлана. Амралт, өөрчлөлт гарвал
+          та тухайн өдрийг засна.
         </p>
       </header>
 
       {classes.length > 1 ? (
-        <Select value={classId} onValueChange={setSelected}>
+        <Select value={String(classId)} onValueChange={setSelected}>
           <SelectTrigger className="w-full sm:w-64">
             <SelectValue placeholder="Анги сонгох" />
           </SelectTrigger>
@@ -118,7 +217,11 @@ export default function TeacherSchedule() {
         </Select>
       ) : null}
 
-      <ScheduleTable classId={Number(classId)} />
+      {lessons ? (
+        <ScheduleTable classId={classId} lessons={lessons} />
+      ) : (
+        <Skeleton className="h-64 w-full" />
+      )}
     </div>
   )
 }

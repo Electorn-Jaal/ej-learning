@@ -540,6 +540,91 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /teacher/lessons:
+    get:
+      operationId: getTeacherLessons
+      tags: [teacher]
+      summary: Approved lessons for a class, in the order the book teaches them
+      parameters:
+        - name: classId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Lessons the class can be scheduled
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SchedulableLesson"
+        "403":
+          description: Not a teacher of that class
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /teacher/schedule/generate:
+    post:
+      operationId: generateSchedule
+      tags: [teacher]
+      summary: Fill a term's empty school days from the book's own order
+      description: >
+        The sequence is already fixed by the textbook and the curriculum, so it
+        is laid out rather than typed in. Days that already carry a lesson are
+        left alone: regenerating must never discard a teacher's correction.
+        Weekends are skipped; holidays are not modelled yet, so a teacher
+        clears those days by hand.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateScheduleInput"
+      responses:
+        "200":
+          description: What was laid out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateScheduleResult"
+        "403":
+          description: Not a teacher of that class
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /teacher/schedule/day:
+    put:
+      operationId: setScheduleDay
+      tags: [teacher]
+      summary: Set, replace or clear one day's lesson
+      description: >
+        The teacher's correction surface. A null lessonId clears the day, which
+        is how a holiday or a school event is recorded.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScheduleDayInput"
+      responses:
+        "204":
+          description: Day updated
+        "400":
+          description: Malformed day or a lesson that is not schedulable here
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Not a teacher of that class
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   parameters:
     AssignmentId:
@@ -555,6 +640,59 @@ components:
       schema:
         type: string
   schemas:
+    SchedulableLesson:
+      type: object
+      properties:
+        id:
+          type: integer
+        lessonCode:
+          type: string
+        lessonType:
+          type: string
+        skillName:
+          type: string
+        chapterTitle:
+          type: ["string", "null"]
+        pageFrom:
+          type: ["integer", "null"]
+      required: [id, lessonCode, lessonType, skillName, chapterTitle, pageFrom]
+    GenerateScheduleInput:
+      type: object
+      properties:
+        classId:
+          type: integer
+        termId:
+          type: integer
+      required: [classId, termId]
+    GenerateScheduleResult:
+      type: object
+      properties:
+        created:
+          type: integer
+        skipped:
+          description: School days that already carried a lesson and were left alone.
+          type: integer
+        lessonsAvailable:
+          type: integer
+        firstDay:
+          type: ["string", "null"]
+        lastDay:
+          type: ["string", "null"]
+        notice:
+          type: string
+      required: [created, skipped, lessonsAvailable, firstDay, lastDay, notice]
+    ScheduleDayInput:
+      type: object
+      properties:
+        classId:
+          type: integer
+        scheduledOn:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+        lessonId:
+          description: null clears the day.
+          type: ["integer", "null"]
+      required: [classId, scheduledOn, lessonId]
     QuizAnswer:
       type: object
       description: >

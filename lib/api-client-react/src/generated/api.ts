@@ -29,6 +29,9 @@ import type {
   CurrentTopic,
   CurrentTopicInput,
   CurrentUser,
+  GenerateScheduleInput,
+  GenerateScheduleResult,
+  GetTeacherLessonsParams,
   GetTeacherQuizAttemptsParams,
   GetTeacherScheduleParams,
   HealthStatus,
@@ -40,6 +43,8 @@ import type {
   ReviewInput,
   ReviewItem,
   ReviewResult,
+  SchedulableLesson,
+  ScheduleDayInput,
   SessionEnvelope,
   StudentDashboard,
   StudentProgress,
@@ -2263,4 +2268,266 @@ export function useGetTeacherQuizAttempts<TData = Awaited<ReturnType<typeof getT
 
 
 
+
+export const getGetTeacherLessonsUrl = (params: GetTeacherLessonsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/teacher/lessons?${stringifiedParams}` : `/api/teacher/lessons`
+}
+
+/**
+ * @summary Approved lessons for a class, in the order the book teaches them
+ */
+export const getTeacherLessons = async (params: GetTeacherLessonsParams, options?: Parameters<typeof customFetch>[1]): Promise<SchedulableLesson[]> => {
+
+  return customFetch<SchedulableLesson[]>(getGetTeacherLessonsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTeacherLessonsQueryKey = (params?: GetTeacherLessonsParams,) => {
+    return [
+    `/api/teacher/lessons`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetTeacherLessonsQueryOptions = <TData = Awaited<ReturnType<typeof getTeacherLessons>>, TError = ErrorType<ApiError>>(params: GetTeacherLessonsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTeacherLessons>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTeacherLessonsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTeacherLessons>>> = ({ signal }) => getTeacherLessons(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTeacherLessons>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTeacherLessonsQueryResult = NonNullable<Awaited<ReturnType<typeof getTeacherLessons>>>
+export type GetTeacherLessonsQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Approved lessons for a class, in the order the book teaches them
+ */
+
+export function useGetTeacherLessons<TData = Awaited<ReturnType<typeof getTeacherLessons>>, TError = ErrorType<ApiError>>(
+ params: GetTeacherLessonsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTeacherLessons>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTeacherLessonsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGenerateScheduleUrl = () => {
+
+
+
+
+  return `/api/teacher/schedule/generate`
+}
+
+/**
+ * The sequence is already fixed by the textbook and the curriculum, so it is laid out rather than typed in. Days that already carry a lesson are left alone: regenerating must never discard a teacher's correction. Weekends are skipped; holidays are not modelled yet, so a teacher clears those days by hand.
+ * @summary Fill a term's empty school days from the book's own order
+ */
+export const generateSchedule = async (generateScheduleInput: GenerateScheduleInput, options?: Parameters<typeof customFetch>[1]): Promise<GenerateScheduleResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<GenerateScheduleResult>(getGenerateScheduleUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(generateScheduleInput)
+  }
+);}
+
+
+
+
+
+export const getGenerateScheduleMutationKey = () => ['generateSchedule'] as const;
+
+export const getGenerateScheduleMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateSchedule>>, TError,GenerateScheduleMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof generateSchedule>>, TError,GenerateScheduleMutationVariables, TContext> => {
+
+const mutationKey = getGenerateScheduleMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof generateSchedule>>, GenerateScheduleMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  generateSchedule(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GenerateScheduleMutationResult = NonNullable<Awaited<ReturnType<typeof generateSchedule>>>
+    export type GenerateScheduleMutationBody = BodyType<GenerateScheduleInput>
+    export type GenerateScheduleMutationError = ErrorType<ApiError>
+    export type GenerateScheduleMutationVariables = {data: BodyType<GenerateScheduleInput>}
+
+    /**
+ * @summary Fill a term's empty school days from the book's own order
+ */
+export const useGenerateSchedule = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateSchedule>>, TError,GenerateScheduleMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof generateSchedule>>,
+        TError,
+        GenerateScheduleMutationVariables,
+        TContext
+      > => {
+      return useMutation(getGenerateScheduleMutationOptions(options));
+    }
+
+export const getSetScheduleDayUrl = () => {
+
+
+
+
+  return `/api/teacher/schedule/day`
+}
+
+/**
+ * The teacher's correction surface. A null lessonId clears the day, which is how a holiday or a school event is recorded.
+ * @summary Set, replace or clear one day's lesson
+ */
+export const setScheduleDay = async (scheduleDayInput: ScheduleDayInput, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<void>(getSetScheduleDayUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(scheduleDayInput)
+  }
+);}
+
+
+
+
+
+export const getSetScheduleDayMutationKey = () => ['setScheduleDay'] as const;
+
+export const getSetScheduleDayMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setScheduleDay>>, TError,SetScheduleDayMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setScheduleDay>>, TError,SetScheduleDayMutationVariables, TContext> => {
+
+const mutationKey = getSetScheduleDayMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setScheduleDay>>, SetScheduleDayMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  setScheduleDay(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetScheduleDayMutationResult = NonNullable<Awaited<ReturnType<typeof setScheduleDay>>>
+    export type SetScheduleDayMutationBody = BodyType<ScheduleDayInput>
+    export type SetScheduleDayMutationError = ErrorType<ApiError>
+    export type SetScheduleDayMutationVariables = {data: BodyType<ScheduleDayInput>}
+
+    /**
+ * @summary Set, replace or clear one day's lesson
+ */
+export const useSetScheduleDay = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setScheduleDay>>, TError,SetScheduleDayMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setScheduleDay>>,
+        TError,
+        SetScheduleDayMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSetScheduleDayMutationOptions(options));
+    }
 

@@ -1,17 +1,24 @@
 import { Router, type IRouter } from "express";
 import {
+  GenerateScheduleBody,
+  GenerateScheduleResponse,
   GetStudentTodayResponse,
+  GetTeacherLessonsResponse,
   GetTeacherQuizAttemptsResponse,
   GetTeacherScheduleResponse,
+  SetScheduleDayBody,
   SubmitQuizAttemptBody,
   SubmitQuizAttemptResponse,
 } from "@workspace/api-zod";
 import { requireRole } from "../../middlewares/auth";
 import { badRequest, unauthorized } from "../../shared/http-error";
 import {
+  generateSchedule,
   materialFile,
   quizAttemptsForTeacher,
   recordQuizAttempt,
+  schedulableLessons,
+  setScheduleDay,
   studentToday,
   teacherSchedule,
 } from "./service";
@@ -50,6 +57,48 @@ router.get(
     }
   },
 );
+
+const asStaff = requireRole("TEACHER", "ADMIN");
+
+router.get("/teacher/lessons", asStaff, async (req, res, next) => {
+  try {
+    const classId = Number(req.query.classId);
+    if (!Number.isInteger(classId) || classId <= 0) {
+      throw badRequest("Ангийн дугаар буруу байна.", "INVALID_CLASS_ID");
+    }
+    res.json(
+      GetTeacherLessonsResponse.parse(await schedulableLessons(req.user!, classId)),
+    );
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/teacher/schedule/generate", asStaff, async (req, res, next) => {
+  try {
+    const parsed = GenerateScheduleBody.safeParse(req.body);
+    if (!parsed.success) {
+      throw badRequest("Анги, улирлаа сонгоно уу.", "INVALID_INPUT");
+    }
+    const result = await generateSchedule(req.user!, parsed.data);
+    res.json(GenerateScheduleResponse.parse(result));
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.put("/teacher/schedule/day", asStaff, async (req, res, next) => {
+  try {
+    const parsed = SetScheduleDayBody.safeParse(req.body);
+    if (!parsed.success) {
+      throw badRequest("Өдрийн мэдээлэл буруу байна.", "INVALID_INPUT");
+    }
+    await setScheduleDay(req.user!, parsed.data);
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.post(
   "/student/quiz-attempts",

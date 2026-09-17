@@ -1,6 +1,6 @@
 import path from "node:path";
 import { stat } from "node:fs/promises";
-import { forbidden } from "../../shared/http-error";
+import { badRequest, forbidden } from "../../shared/http-error";
 import type { AuthenticatedUser } from "../identity/service";
 import * as repository from "./repository";
 
@@ -199,4 +199,126 @@ export async function quizAttemptsForTeacher(
     className: klass.className,
     attempts: await repository.attemptsForClass(klass.classId, limit),
   };
+}
+
+/** Resolves the class a teacher may act on, or refuses. Admins bypass. */
+async function authorisedClass(user: AuthenticatedUser, classId: number) {
+  const isAdmin = user.roles.includes("ADMIN");
+  const [klass] = isAdmin
+    ? await repository.anyClass(classId)
+    : user.teacherId === null
+      ? []
+      : await repository.teacherClass(user.teacherId, classId);
+  if (!klass) {
+    throw forbidden("Энэ ангид өөрчлөлт хийх эрхгүй байна.", "NOT_YOUR_CLASS");
+  }
+  return klass;
+}
+
+export async function schedulableLessons(user: AuthenticatedUser, classId: number) {
+  const klass = await authorisedClass(user, classId);
+  return repository.schedulableLessons(klass.classId);
+}
+
+/** Weekdays between two dates. Holidays are not modelled; a teacher clears those. */
+function schoolDays(from: string, to: string): string[] {
+  const days: string[] = [];
+  for (let day = from; day <= to; day = shiftDays(day, 1)) {
+    const weekday = new Date(`${day}T00:00:00Z`).getUTCDay();
+    if (weekday !== 0 && weekday !== 6) days.push(day);
+  }
+  return days;
+}
+
+export async function generateSchedule(
+  user: AuthenticatedUser,
+  input: { classId: number; termId: number },
+) {
+  const klass = await authorisedClass(user, input.classId);
+  const [term] = await repository.termById(input.termId);
+  if (!term) throw badRequest("Улирал олдсонгүй.", "TERM_NOT_FOUND");
+
+  const lessons = await repository.schedulableLessons(klass.classId);
+  if (lessons.length === 0) {
+    return {
+      created: 0,
+      skipped: 0,
+      lessonsAvailable: 0,
+      firstDay: null,
+      lastDay: null,
+      notice:
+        "Энэ ангид баталгаажсан хичээл алга. Эхлээд сургалтын агуулгыг оруулна уу.",
+    };
+  }
+
+  const taken = new Set(
+    (await repository.scheduledDates(klass.classId, term.startsOn, term.endsOn)).map(
+      (row) => row.scheduledOn,
+    ),
+  );
+  const days = schoolDays(term.startsOn, term.endsOn);
+  const free = days.filter((day) => !taken.has(day));
+
+  // The book runs out long before the term does, so it repeats from the start
+  // rather than leaving the rest of the term blank. With a real book this
+  // wraps rarely; with three mock chapters it wraps often, and saying so is
+  // better than silently producing a term of duplicates.
+  const rows = free.map((day, index) => ({
+    classId: klass.classId,
+    termId: term.id,
+    dailyLessonId: lessons[index % lessons.length].id,
+    scheduledOn: day,
+    createdBy: user.id,
+  }));
+  await repository.insertScheduleDays(rows);
+
+  const wrapped = free.length > lessons.length;
+  return {
+    created: rows.length,
+    skipped: days.length - free.length,
+    lessonsAvailable: lessons.length,
+    firstDay: free[0] ?? null,
+    lastDay: free[free.length - 1] ?? null,
+    notice: wrapped
+      ? `${term.nameMn}: ${lessons.length} хичээл ${free.length} өдөрт хүрэлцэхгүй тул давтагдсан. Агуулга нэмэгдэхэд дахин үүсгэнэ үү.`
+      : `${term.nameMn}: ${rows.length} өдөр хуваарилагдлаа.`,
+  };
+}
+
+export async function setScheduleDay(
+  user: AuthenticatedUser,
+  input: { classId: number; scheduledOn: string; lessonId: number | null },
+) {
+  const klass = await authorisedClass(user, input.classId);
+
+  if (input.lessonId === null) {
+    await repository.clearScheduleDay(klass.classId, input.scheduledOn);
+    return;
+  }
+
+  // Only a lesson this class could be taught: the endpoint takes an id, and
+  // without this any approved lesson from any grade would be assignable.
+  const lessons = await repository.schedulableLessons(klass.classId);
+  if (!lessons.some((lesson) => lesson.id === input.lessonId)) {
+    throw badRequest(
+      "Энэ хичээлийг тухайн ангид оноох боломжгүй.",
+      "LESSON_NOT_SCHEDULABLE",
+    );
+  }
+
+  const [term] = await repository.termCovering(input.scheduledOn);
+  if (!term) {
+    throw badRequest(
+      "Энэ огноо ямар ч улиралд хамаарахгүй байна.",
+      "OUTSIDE_TERM",
+    );
+  }
+
+  await repository.setScheduleDay({
+    classId: klass.classId,
+    termId: term.id,
+    dailyLessonId: input.lessonId,
+    scheduledOn: input.scheduledOn,
+    createdBy: user.id,
+  });
 }
