@@ -1,4 +1,4 @@
-import { useGetStudentToday, type DailyLessonView } from '@workspace/api-client-react'
+import { useGetStudentToday, type DailyLessonView, type SubjectDay } from '@workspace/api-client-react'
 import { Clock } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -53,7 +53,7 @@ function LessonCard({
         </div>
         <CardTitle className="text-xl">{lesson.skillName}</CardTitle>
         {lesson.learningGoal ? (
-          <p className="text-sm text-muted-foreground">{lesson.learningGoal}</p>
+          <p className="whitespace-pre-line text-sm text-muted-foreground">{lesson.learningGoal}</p>
         ) : null}
       </CardHeader>
 
@@ -81,6 +81,57 @@ function LessonCard({
   )
 }
 
+/**
+ * One subject's work for the day.
+ *
+ * The heading is the subject, because that is how a child thinks about their
+ * day - first maths, then English - rather than a flat list of lessons whose
+ * subject has to be inferred from the topic.
+ *
+ * Where a subject places students by level there is no class lesson at all and
+ * the personal one is the whole of it, so the "extra work" heading only appears
+ * when there is something for it to be extra to.
+ */
+function SubjectBlock({ day }: { day: SubjectDay }) {
+  const personalOnly = !day.lesson && Boolean(day.extra)
+
+  return (
+    <section className="space-y-4">
+      <div className="flex flex-wrap items-baseline gap-3 border-b pb-2">
+        <h2 className="text-lg font-bold">{day.subjectName}</h2>
+        {personalOnly ? (
+          <span className="text-xs text-muted-foreground">Таны түвшинд тохируулсан</span>
+        ) : null}
+      </div>
+
+      {day.lesson ? (
+        <>
+          <LessonCard lesson={day.lesson} />
+          <LessonQuiz lessonId={day.lesson.id} />
+        </>
+      ) : null}
+
+      {day.extra ? (
+        <div className="space-y-4">
+          {!personalOnly ? (
+            <div className="flex flex-wrap items-baseline gap-2 pt-2">
+              <h3 className="text-base font-semibold">Нэмэлт ажил</h3>
+              <span className="text-sm text-muted-foreground">
+                {day.extra.source === 'TEACHER'
+                  ? 'Багш тань тусгайлан өгсөн'
+                  : 'Таны түвшинд тохируулсан'}
+              </span>
+            </div>
+          ) : null}
+
+          <LessonCard lesson={day.extra.lesson} banner={day.extra.reason} />
+          <LessonQuiz lessonId={day.extra.lesson.id} />
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
 export default function StudentToday() {
   const { data, isLoading, isError } = useGetStudentToday()
 
@@ -97,51 +148,28 @@ export default function StudentToday() {
     return <p role="alert">Өнөөдрийн хичээлийг уншиж чадсангүй.</p>
   }
 
-  const { lesson, extra } = data
-  // Where a subject places students by level there is no class lesson at all,
-  // and the personal one is the whole of the day rather than an addition to it.
-  const extraIsOnlyWork = !lesson && Boolean(extra)
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <header className="space-y-1">
         <p className="text-sm text-muted-foreground">{data.dateLabel}</p>
         <h1 className="text-2xl font-bold">Өнөөдрийн хичээл</h1>
-        {data.className ? (
-          <p className="text-sm text-muted-foreground">{data.className}</p>
-        ) : null}
+        <p className="text-sm text-muted-foreground">
+          {data.className}
+          {data.subjects.length > 0 ? ` · ${data.subjects.length} хичээл` : ''}
+        </p>
       </header>
 
-      {!lesson && !extra ? (
+      {data.subjects.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center text-muted-foreground">
             {data.notice}
           </CardContent>
         </Card>
-      ) : null}
+      ) : (
+        data.subjects.map((day) => <SubjectBlock key={day.subjectCode} day={day} />)
+      )}
 
-      {lesson ? <LessonCard lesson={lesson} /> : null}
-      {lesson ? <LessonQuiz lessonId={lesson.id} /> : null}
-
-      {extra ? (
-        <section className="space-y-6">
-          {!extraIsOnlyWork ? (
-            <div className="flex flex-wrap items-baseline gap-2 border-t pt-6">
-              <h2 className="text-lg font-bold">Нэмэлт ажил</h2>
-              <span className="text-sm text-muted-foreground">
-                {extra.source === 'TEACHER'
-                  ? 'Багш тань тусгайлан өгсөн'
-                  : 'Таны түвшинд тохируулсан'}
-              </span>
-            </div>
-          ) : null}
-
-          <LessonCard lesson={extra.lesson} banner={extra.reason} />
-          <LessonQuiz lessonId={extra.lesson.id} />
-        </section>
-      ) : null}
-
-      {lesson || extra ? (
+      {data.subjects.length > 0 ? (
         <p className="border-t pt-4 text-xs text-muted-foreground">{data.notice}</p>
       ) : null}
     </div>

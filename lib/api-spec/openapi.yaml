@@ -1457,22 +1457,38 @@ components:
           type: string
         className:
           type: string
+        subjects:
+          description: >
+            One entry per subject the student has work in today. A child studies
+            several subjects a day, so this is a list rather than a single
+            lesson.
+          type: array
+          items:
+            $ref: "#/components/schemas/SubjectDay"
+        notice:
+          type: string
+      required: [date, dateLabel, className, subjects, notice]
+    SubjectDay:
+      type: object
+      properties:
+        subjectCode:
+          type: string
+        subjectName:
+          type: string
         lesson:
-          description: What the class is scheduled to study today. Null when nothing is.
+          description: What the class is scheduled to study in this subject today.
           oneOf:
             - $ref: "#/components/schemas/DailyLessonView"
             - type: "null"
         extra:
           description: >
-            Work assigned to this student personally. For a subject where the
-            class works through one book it is remediation on top; for one
-            placed by level it is the whole of the day's work.
+            Work assigned to this student personally in this subject. Where the
+            class works through one book it is remediation on top; where the
+            subject places students by level it is the whole of the day's work.
           oneOf:
             - $ref: "#/components/schemas/ExtraWork"
             - type: "null"
-        notice:
-          type: string
-      required: [date, dateLabel, className, lesson, extra, notice]
+      required: [subjectCode, subjectName, lesson, extra]
     ScheduledDay:
       type: object
       properties:

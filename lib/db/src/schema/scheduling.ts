@@ -16,6 +16,7 @@ import {
   dailyLessonsInLearning,
   learning,
   studentsInCore,
+  subjectsInCore,
 } from "./database";
 import { usersInCore } from "./identity";
 
@@ -80,6 +81,11 @@ export const classScheduleInLearning = learning.table(
     termId: smallint("term_id").notNull(),
     dailyLessonId: bigint("daily_lesson_id", { mode: "number" }).notNull(),
     scheduledOn: date("scheduled_on").notNull(),
+    // A school day is not one lesson. Which subject a row belongs to is
+    // derivable from the lesson's skill, but the rule worth enforcing - one
+    // lesson per subject per day - cannot be written as a constraint across a
+    // join, so the subject is carried here and set from the lesson on write.
+    subjectId: bigint("subject_id", { mode: "number" }).notNull(),
     note: text(),
     createdBy: bigint("created_by", { mode: "number" }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
@@ -87,7 +93,11 @@ export const classScheduleInLearning = learning.table(
       .notNull(),
   },
   (table) => [
-    unique("class_schedule_class_day_key").on(table.classId, table.scheduledOn),
+    unique("class_schedule_class_day_key").on(
+      table.classId,
+      table.subjectId,
+      table.scheduledOn,
+    ),
     index("idx_class_schedule_day").using(
       "btree",
       table.scheduledOn.asc().nullsLast(),
@@ -112,6 +122,11 @@ export const classScheduleInLearning = learning.table(
       columns: [table.createdBy],
       foreignColumns: [usersInCore.id],
       name: "class_schedule_created_by_fkey",
+    }),
+    foreignKey({
+      columns: [table.subjectId],
+      foreignColumns: [subjectsInCore.id],
+      name: "class_schedule_subject_id_fkey",
     }),
   ],
 );
@@ -151,6 +166,11 @@ export const studentAssignmentsInLearning = learning.table(
     studentId: bigint("student_id", { mode: "number" }).notNull(),
     dailyLessonId: bigint("daily_lesson_id", { mode: "number" }).notNull(),
     assignedOn: date("assigned_on").notNull(),
+    // Extra work is per subject too: falling behind in maths says
+    // nothing about English. Same reasoning as class_schedule - one
+    // lesson per subject per day - cannot be written as a constraint across a
+    // join, so the subject is carried here and set from the lesson on write.
+    subjectId: bigint("subject_id", { mode: "number" }).notNull(),
     source: assignmentSourceInLearning().default("AUTO").notNull(),
     assignedBy: bigint("assigned_by", { mode: "number" }),
     reason: text(),
@@ -160,9 +180,14 @@ export const studentAssignmentsInLearning = learning.table(
       .notNull(),
   },
   (table) => [
-    // One lesson per student per day, so "today's work" has one answer. A
-    // teacher replacing the automatic pick updates the row rather than adding.
-    unique("student_assignments_student_day_key").on(table.studentId, table.assignedOn),
+    // One lesson per student per subject per day, so "today's maths" has one
+    // answer. A teacher replacing the automatic pick updates the row rather
+    // than adding.
+    unique("student_assignments_student_day_key").on(
+      table.studentId,
+      table.subjectId,
+      table.assignedOn,
+    ),
     index("idx_student_assignments_day").using(
       "btree",
       table.assignedOn.asc().nullsLast(),
@@ -176,6 +201,11 @@ export const studentAssignmentsInLearning = learning.table(
       columns: [table.dailyLessonId],
       foreignColumns: [dailyLessonsInLearning.id],
       name: "student_assignments_daily_lesson_id_fkey",
+    }),
+    foreignKey({
+      columns: [table.subjectId],
+      foreignColumns: [subjectsInCore.id],
+      name: "student_assignments_subject_id_fkey",
     }),
     foreignKey({
       columns: [table.assignedBy],
