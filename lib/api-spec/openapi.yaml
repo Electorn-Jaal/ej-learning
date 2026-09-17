@@ -12,6 +12,8 @@ tags:
     description: Health operations
   - name: auth
     description: Sign-in and the current session
+  - name: content
+    description: Source materials and their files
   - name: session
     description: Current authenticated identity
   - name: student
@@ -350,6 +352,96 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /student/today:
+    get:
+      operationId: getStudentToday
+      tags: [student]
+      summary: The lesson scheduled for the signed-in student today
+      responses:
+        "200":
+          description: Today's lesson, or none when nothing is scheduled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentToday"
+        "401":
+          description: Not signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: The account is not linked to a student record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /teacher/schedule:
+    get:
+      operationId: getTeacherSchedule
+      tags: [teacher]
+      summary: A class's scheduled lessons over a date range
+      parameters:
+        - name: classId
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: from
+          in: query
+          required: false
+          description: Inclusive start date (YYYY-MM-DD). Defaults to seven days ago.
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+        - name: to
+          in: query
+          required: false
+          description: Inclusive end date (YYYY-MM-DD). Defaults to fourteen days ahead.
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+      responses:
+        "200":
+          description: Scheduled days
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeacherSchedule"
+        "403":
+          description: Not a teacher of that class
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /content/materials/{materialId}/file:
+    get:
+      operationId: getMaterialFile
+      tags: [content]
+      summary: The approved file for a source material
+      description: >
+        Streams the stored file, currently always a PDF. Viewers accept a
+        #page=N fragment, so a lesson can open the book at its own pages.
+      parameters:
+        - name: materialId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The file
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: No approved version, or the stored file is missing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   parameters:
     AssignmentId:
@@ -365,6 +457,124 @@ components:
       schema:
         type: string
   schemas:
+    BookReference:
+      type: object
+      description: Where in the book this lesson sits.
+      properties:
+        materialId:
+          type: integer
+        title:
+          type: ["string", "null"]
+        chapterTitle:
+          type: ["string", "null"]
+        pageFrom:
+          type: ["integer", "null"]
+        pageTo:
+          type: ["integer", "null"]
+        fileUrl:
+          type: ["string", "null"]
+      required: [materialId, title, chapterTitle, pageFrom, pageTo, fileUrl]
+    DailyLessonView:
+      type: object
+      properties:
+        id:
+          type: integer
+        lessonCode:
+          type: string
+        lessonType:
+          type: string
+          enum: [CORE, RECOVERY, REINFORCE]
+        skillName:
+          type: string
+        learningGoal:
+          type: ["string", "null"]
+        remember:
+          type: ["string", "null"]
+        workedExample:
+          type: ["string", "null"]
+        guidedPractice:
+          type: ["string", "null"]
+        independentPractice:
+          type: ["string", "null"]
+        studentMessage:
+          type: ["string", "null"]
+        estimatedMinutes:
+          type: ["integer", "null"]
+        book:
+          oneOf:
+            - $ref: "#/components/schemas/BookReference"
+            - type: "null"
+      required:
+        - id
+        - lessonCode
+        - lessonType
+        - skillName
+        - learningGoal
+        - remember
+        - workedExample
+        - guidedPractice
+        - independentPractice
+        - studentMessage
+        - estimatedMinutes
+        - book
+    StudentToday:
+      type: object
+      properties:
+        date:
+          description: Calendar date, YYYY-MM-DD. Not an instant, so not format:date.
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+        dateLabel:
+          type: string
+        className:
+          type: string
+        lesson:
+          oneOf:
+            - $ref: "#/components/schemas/DailyLessonView"
+            - type: "null"
+        notice:
+          type: string
+      required: [date, dateLabel, className, lesson, notice]
+    ScheduledDay:
+      type: object
+      properties:
+        scheduledOn:
+          description: Calendar date, YYYY-MM-DD.
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+        isToday:
+          type: boolean
+        lessonId:
+          type: integer
+        lessonCode:
+          type: string
+        lessonType:
+          type: string
+        skillName:
+          type: string
+        note:
+          type: ["string", "null"]
+      required: [scheduledOn, isToday, lessonId, lessonCode, lessonType, skillName, note]
+    TeacherSchedule:
+      type: object
+      properties:
+        classId:
+          type: integer
+        className:
+          type: string
+        gradeLevel:
+          type: integer
+        stage:
+          type: string
+          enum: [PRIMARY, SECONDARY]
+          description: >
+            Derived from the class's grade, not stored on the teacher: the two
+            workflows differ per class, and one teacher may hold both.
+        days:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScheduledDay"
+      required: [classId, className, gradeLevel, stage, days]
     UserRole:
       type: string
       enum: [STUDENT, TEACHER, ADMIN]

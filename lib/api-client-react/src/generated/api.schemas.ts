@@ -5,6 +5,101 @@
  * EJ Learning adaptive learning API
  * OpenAPI spec version: 0.1.0
  */
+/**
+ * Where in the book this lesson sits.
+ */
+export interface BookReference {
+  materialId: number;
+  /** @nullable */
+  title: string | null;
+  /** @nullable */
+  chapterTitle: string | null;
+  /** @nullable */
+  pageFrom: number | null;
+  /** @nullable */
+  pageTo: number | null;
+  /** @nullable */
+  fileUrl: string | null;
+}
+
+export type DailyLessonViewLessonType = typeof DailyLessonViewLessonType[keyof typeof DailyLessonViewLessonType];
+
+
+export const DailyLessonViewLessonType = {
+  CORE: 'CORE',
+  RECOVERY: 'RECOVERY',
+  REINFORCE: 'REINFORCE',
+} as const;
+
+export interface DailyLessonView {
+  id: number;
+  lessonCode: string;
+  lessonType: DailyLessonViewLessonType;
+  skillName: string;
+  /** @nullable */
+  learningGoal: string | null;
+  /** @nullable */
+  remember: string | null;
+  /** @nullable */
+  workedExample: string | null;
+  /** @nullable */
+  guidedPractice: string | null;
+  /** @nullable */
+  independentPractice: string | null;
+  /** @nullable */
+  studentMessage: string | null;
+  /** @nullable */
+  estimatedMinutes: number | null;
+  book: BookReference | null;
+}
+
+export interface StudentToday {
+  /**
+     * Calendar date, YYYY-MM-DD. Not an instant, so not format:date.
+     * @pattern ^\d{4}-\d{2}-\d{2}$
+     */
+  date: string;
+  dateLabel: string;
+  className: string;
+  lesson: DailyLessonView | null;
+  notice: string;
+}
+
+export interface ScheduledDay {
+  /**
+     * Calendar date, YYYY-MM-DD.
+     * @pattern ^\d{4}-\d{2}-\d{2}$
+     */
+  scheduledOn: string;
+  isToday: boolean;
+  lessonId: number;
+  lessonCode: string;
+  lessonType: string;
+  skillName: string;
+  /** @nullable */
+  note: string | null;
+}
+
+/**
+ * Derived from the class's grade, not stored on the teacher: the two workflows differ per class, and one teacher may hold both.
+ */
+export type TeacherScheduleStage = typeof TeacherScheduleStage[keyof typeof TeacherScheduleStage];
+
+
+export const TeacherScheduleStage = {
+  PRIMARY: 'PRIMARY',
+  SECONDARY: 'SECONDARY',
+} as const;
+
+export interface TeacherSchedule {
+  classId: number;
+  className: string;
+  gradeLevel: number;
+  /** Derived from the class's grade, not stored on the teacher: the two workflows differ per class, and one teacher may hold both. */
+  stage: TeacherScheduleStage;
+  days: ScheduledDay[];
+}
+
 export type UserRole = typeof UserRole[keyof typeof UserRole];
 
 
@@ -562,4 +657,18 @@ export interface CatalogItem {
   /** @nullable */
   sourceTitle: string | null;
 }
+
+export type GetTeacherScheduleParams = {
+classId: number;
+/**
+ * Inclusive start date (YYYY-MM-DD). Defaults to seven days ago.
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+from?: string;
+/**
+ * Inclusive end date (YYYY-MM-DD). Defaults to fourteen days ahead.
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+to?: string;
+};
 

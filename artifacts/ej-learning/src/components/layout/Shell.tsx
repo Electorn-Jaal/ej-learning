@@ -1,13 +1,15 @@
 import { Link, useLocation } from "wouter"
 import {
   LayoutDashboard, BookOpen, TrendingUp, User, CheckSquare, Database, LogOut,
+  CalendarDays, Sun,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { hasRole, useSession } from "@/lib/session"
 
 const STUDENT_NAV = [
-  { href: "/", label: "Сургалтын тойм", icon: LayoutDashboard },
+  { href: "/", label: "Өнөөдрийн хичээл", icon: Sun },
+  { href: "/lessons", label: "Хичээлийн сан", icon: LayoutDashboard },
   { href: "/subjects", label: "Миний хичээлүүд", icon: BookOpen },
   { href: "/progress", label: "Миний ахиц", icon: TrendingUp },
   { href: "/profile", label: "Миний бүртгэл", icon: User },
@@ -15,6 +17,7 @@ const STUDENT_NAV = [
 
 const TEACHER_NAV = [
   { href: "/teacher", label: "Хяналтын самбар", icon: LayoutDashboard },
+  { href: "/teacher/schedule", label: "Хуваарь", icon: CalendarDays },
   { href: "/teacher/reviews", label: "Шалгах ажлууд", icon: CheckSquare },
   { href: "/teacher/catalog", label: "Сургалтын сан", icon: BookOpen },
   { href: "/teacher/integrations", label: "Холболтууд", icon: Database },

@@ -29,6 +29,7 @@ import type {
   CurrentTopic,
   CurrentTopicInput,
   CurrentUser,
+  GetTeacherScheduleParams,
   HealthStatus,
   LoginInput,
   PreviewStudent,
@@ -38,10 +39,12 @@ import type {
   SessionEnvelope,
   StudentDashboard,
   StudentProgress,
+  StudentToday,
   SubjectOverview,
   SubmissionResult,
   TeacherClass,
   TeacherDashboard,
+  TeacherSchedule,
   WorkspaceIntegrationDashboard,
   WorkspaceSimulationInput
 } from './api.schemas';
@@ -1743,6 +1746,245 @@ export function useGetSession<TData = Awaited<ReturnType<typeof getSession>>, TE
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetSessionQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetStudentTodayUrl = () => {
+
+
+
+
+  return `/api/student/today`
+}
+
+/**
+ * @summary The lesson scheduled for the signed-in student today
+ */
+export const getStudentToday = async ( options?: Parameters<typeof customFetch>[1]): Promise<StudentToday> => {
+
+  return customFetch<StudentToday>(getGetStudentTodayUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStudentTodayQueryKey = () => {
+    return [
+    `/api/student/today`
+    ] as const;
+    }
+
+
+export const getGetStudentTodayQueryOptions = <TData = Awaited<ReturnType<typeof getStudentToday>>, TError = ErrorType<ApiError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStudentToday>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStudentTodayQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStudentToday>>> = ({ signal }) => getStudentToday({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStudentToday>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetStudentTodayQueryResult = NonNullable<Awaited<ReturnType<typeof getStudentToday>>>
+export type GetStudentTodayQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary The lesson scheduled for the signed-in student today
+ */
+
+export function useGetStudentToday<TData = Awaited<ReturnType<typeof getStudentToday>>, TError = ErrorType<ApiError>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStudentToday>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetStudentTodayQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetTeacherScheduleUrl = (params: GetTeacherScheduleParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/teacher/schedule?${stringifiedParams}` : `/api/teacher/schedule`
+}
+
+/**
+ * @summary A class's scheduled lessons over a date range
+ */
+export const getTeacherSchedule = async (params: GetTeacherScheduleParams, options?: Parameters<typeof customFetch>[1]): Promise<TeacherSchedule> => {
+
+  return customFetch<TeacherSchedule>(getGetTeacherScheduleUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTeacherScheduleQueryKey = (params?: GetTeacherScheduleParams,) => {
+    return [
+    `/api/teacher/schedule`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetTeacherScheduleQueryOptions = <TData = Awaited<ReturnType<typeof getTeacherSchedule>>, TError = ErrorType<ApiError>>(params: GetTeacherScheduleParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTeacherSchedule>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTeacherScheduleQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTeacherSchedule>>> = ({ signal }) => getTeacherSchedule(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTeacherSchedule>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTeacherScheduleQueryResult = NonNullable<Awaited<ReturnType<typeof getTeacherSchedule>>>
+export type GetTeacherScheduleQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary A class's scheduled lessons over a date range
+ */
+
+export function useGetTeacherSchedule<TData = Awaited<ReturnType<typeof getTeacherSchedule>>, TError = ErrorType<ApiError>>(
+ params: GetTeacherScheduleParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTeacherSchedule>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTeacherScheduleQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetMaterialFileUrl = (materialId: number,) => {
+
+
+
+
+  return `/api/content/materials/${materialId}/file`
+}
+
+/**
+ * Streams the stored file, currently always a PDF. Viewers accept a #page=N fragment, so a lesson can open the book at its own pages.
+ * @summary The approved file for a source material
+ */
+export const getMaterialFile = async (materialId: number, options?: Parameters<typeof customFetch>[1]): Promise<Blob> => {
+
+  return customFetch<Blob>(getGetMaterialFileUrl(materialId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMaterialFileQueryKey = (materialId: number,) => {
+    return [
+    `/api/content/materials/${materialId}/file`
+    ] as const;
+    }
+
+
+export const getGetMaterialFileQueryOptions = <TData = Awaited<ReturnType<typeof getMaterialFile>>, TError = ErrorType<ApiError>>(materialId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMaterialFile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMaterialFileQueryKey(materialId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMaterialFile>>> = ({ signal }) => getMaterialFile(materialId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: materialId !== null && materialId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMaterialFile>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMaterialFileQueryResult = NonNullable<Awaited<ReturnType<typeof getMaterialFile>>>
+export type GetMaterialFileQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary The approved file for a source material
+ */
+
+export function useGetMaterialFile<TData = Awaited<ReturnType<typeof getMaterialFile>>, TError = ErrorType<ApiError>>(
+ materialId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMaterialFile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMaterialFileQueryOptions(materialId,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
