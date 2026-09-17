@@ -27,6 +27,7 @@ import type {
   AssignmentStepInput,
   AssignmentSubmissionInput,
   CatalogItem,
+  ClassSkills,
   CurrentTopic,
   CurrentTopicInput,
   CurrentUser,
@@ -34,6 +35,7 @@ import type {
   ExtraWorkResult,
   GenerateScheduleInput,
   GenerateScheduleResult,
+  GetClassSkillsParams,
   GetTeacherLessonsParams,
   GetTeacherQuizAttemptsParams,
   GetTeacherScheduleParams,
@@ -2263,6 +2265,91 @@ export function useGetTeacherQuizAttempts<TData = Awaited<ReturnType<typeof getT
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetTeacherQuizAttemptsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetClassSkillsUrl = (params: GetClassSkillsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/teacher/class-skills?${stringifiedParams}` : `/api/teacher/class-skills`
+}
+
+/**
+ * Drawn from the answers students have already given, not from a separate exam. A skill nobody has attempted is absent rather than reported as zero, so the list only ever contains skills there is evidence about.
+ * @summary How a class stands on each skill it has been measured on
+ */
+export const getClassSkills = async (params: GetClassSkillsParams, options?: Parameters<typeof customFetch>[1]): Promise<ClassSkills> => {
+
+  return customFetch<ClassSkills>(getGetClassSkillsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetClassSkillsQueryKey = (params?: GetClassSkillsParams,) => {
+    return [
+    `/api/teacher/class-skills`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetClassSkillsQueryOptions = <TData = Awaited<ReturnType<typeof getClassSkills>>, TError = ErrorType<ApiError>>(params: GetClassSkillsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClassSkills>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetClassSkillsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClassSkills>>> = ({ signal }) => getClassSkills(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClassSkills>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetClassSkillsQueryResult = NonNullable<Awaited<ReturnType<typeof getClassSkills>>>
+export type GetClassSkillsQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary How a class stands on each skill it has been measured on
+ */
+
+export function useGetClassSkills<TData = Awaited<ReturnType<typeof getClassSkills>>, TError = ErrorType<ApiError>>(
+ params: GetClassSkillsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClassSkills>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetClassSkillsQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

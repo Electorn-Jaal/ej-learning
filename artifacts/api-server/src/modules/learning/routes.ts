@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import {
   GenerateScheduleBody,
   GenerateScheduleResponse,
+  GetClassSkillsResponse,
   GetQuizPaperResponse,
   GetStudentTodayResponse,
   GetTeacherDashboardResponse,
@@ -18,6 +19,7 @@ import { requireRole } from "../../middlewares/auth";
 import { badRequest, unauthorized } from "../../shared/http-error";
 import {
   assignExtraWork,
+  classSkillsForTeacher,
   generateSchedule,
   materialFile,
   quizAttemptsForTeacher,
@@ -151,6 +153,23 @@ router.post(
       }
       const attempt = await recordQuizAttemptScored(req.user!, parsed.data);
       res.status(201).json(SubmitQuizAttemptResponse.parse(attempt));
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
+  "/teacher/class-skills",
+  requireRole("TEACHER", "ADMIN"),
+  async (req, res, next) => {
+    try {
+      const classId = Number(req.query.classId);
+      if (!Number.isInteger(classId) || classId <= 0) {
+        throw badRequest("Ангийн дугаар буруу байна.", "INVALID_CLASS_ID");
+      }
+      const result = await classSkillsForTeacher(req.user!, classId);
+      res.json(GetClassSkillsResponse.parse(result));
     } catch (error) {
       next(error);
     }

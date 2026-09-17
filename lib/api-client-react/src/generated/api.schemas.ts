@@ -674,6 +674,38 @@ export interface AttentionRow {
   detail: string;
 }
 
+export interface WeakStudent {
+  studentId: number;
+  studentName: string;
+  score: number;
+}
+
+/**
+ * One skill, and how the measured students in the class stand on it. `assessed` counts students with any evidence; the three status counts add up to it.
+ */
+export interface ClassSkill {
+  skillId: number;
+  skillCode: string;
+  skillName: string;
+  /** @nullable */
+  gradeLevel: number | null;
+  assessed: number;
+  gap: number;
+  developing: number;
+  mastered: number;
+  averageScore: number;
+  /** The lowest-scoring students who have not mastered it, capped for reading. */
+  weakest: WeakStudent[];
+  /** How many have not mastered it, which may exceed the names listed. */
+  weakestTotal: number;
+}
+
+export interface ClassSkills {
+  classId: number;
+  className: string;
+  skills: ClassSkill[];
+}
+
 export interface TeacherClassToday {
   classId: number;
   className: string;
@@ -955,6 +987,10 @@ classId: number;
  * @maximum 200
  */
 limit?: number;
+};
+
+export type GetClassSkillsParams = {
+classId: number;
 };
 
 export type GetTeacherLessonsParams = {

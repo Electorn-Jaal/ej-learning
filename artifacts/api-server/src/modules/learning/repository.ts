@@ -575,6 +575,7 @@ export async function upsertStudentAssignment(row: {
 
 export type QuizItemRow = {
   itemId: number;
+  skillId: number;
   prompt: string;
   optionId: number;
   optionText: string;
@@ -591,7 +592,7 @@ export type QuizItemRow = {
  */
 export const quizItemsForLesson = (lessonId: number) =>
   readRows<QuizItemRow>(
-    `SELECT i.id::int AS "itemId", i.title_mn AS prompt,
+    `SELECT i.id::int AS "itemId", i.skill_id::int AS "skillId", i.title_mn AS prompt,
        o.id::int AS "optionId", o.option_text AS "optionText",
        o.is_correct AS "isCorrect", i.rubric_mn AS explanation
      FROM learning.daily_lessons dl
@@ -626,4 +627,57 @@ export const lessonHeader = (lessonId: number) =>
      JOIN content.skills sk ON sk.id = dl.core_skill_id
      WHERE dl.id = $1::bigint`,
     [lessonId],
+  );
+
+export type ClassSkillRow = {
+  skillId: number;
+  skillCode: string;
+  skillName: string;
+  gradeLevel: number | null;
+  assessed: number;
+  gap: number;
+  developing: number;
+  mastered: number;
+  averageScore: number;
+  weakest: { studentId: number; studentName: string; score: number }[];
+};
+
+/**
+ * How a class stands on each skill anyone in it has been measured on.
+ *
+ * Ordered by the number of students in a gap, so the skill most in need of
+ * reteaching is first - a teacher opening this wants to know what to do on
+ * Monday, not to read an alphabetical table.
+ *
+ * Skills nobody has attempted are absent rather than listed as zero: an
+ * unmeasured skill is not a weak one, and printing it as a row invites the
+ * reading that it is.
+ */
+export const classSkillMastery = (classId: number) =>
+  readRows<ClassSkillRow>(
+    `SELECT sk.id::int AS "skillId", sk.skill_code AS "skillCode",
+       sk.name_mn AS "skillName", g.grade_number::int AS "gradeLevel",
+       count(*)::int AS assessed,
+       count(*) FILTER (WHERE m.mastery_status = 'GAP')::int AS gap,
+       count(*) FILTER (WHERE m.mastery_status = 'DEVELOPING')::int AS developing,
+       count(*) FILTER (WHERE m.mastery_status = 'MASTERED')::int AS mastered,
+       round(avg(m.mastery_score))::int AS "averageScore",
+       COALESCE(
+         jsonb_agg(
+           jsonb_build_object(
+             'studentId', m.student_id::int,
+             'studentName', st.display_name,
+             'score', round(m.mastery_score)::int)
+           ORDER BY m.mastery_score
+         ) FILTER (WHERE m.mastery_status <> 'MASTERED'),
+         '[]'::jsonb) AS weakest
+     FROM learning.student_skill_mastery m
+     JOIN core.student_enrollments e ON e.student_id = m.student_id AND e.is_active
+     JOIN core.students st ON st.id = m.student_id AND st.is_active
+     JOIN content.skills sk ON sk.id = m.skill_id
+     LEFT JOIN core.grade_levels g ON g.id = sk.grade_level_id
+     WHERE e.class_id = $1::bigint AND m.mastery_status <> 'NOT_ASSESSED'
+     GROUP BY sk.id, sk.skill_code, sk.name_mn, g.grade_number
+     ORDER BY gap DESC, "averageScore", sk.skill_code`,
+    [classId],
   );

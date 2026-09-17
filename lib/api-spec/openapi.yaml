@@ -542,6 +542,34 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /teacher/class-skills:
+    get:
+      operationId: getClassSkills
+      tags: [teacher]
+      summary: How a class stands on each skill it has been measured on
+      description: >
+        Drawn from the answers students have already given, not from a separate
+        exam. A skill nobody has attempted is absent rather than reported as
+        zero, so the list only ever contains skills there is evidence about.
+      parameters:
+        - name: classId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Skill standing for the class
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClassSkills"
+        "403":
+          description: Not a teacher of that class
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /teacher/lessons:
     get:
       operationId: getTeacherLessons
@@ -1710,6 +1738,64 @@ components:
         detail:
           type: string
       required: [studentId, studentCode, studentName, level, reason, detail]
+    WeakStudent:
+      type: object
+      properties:
+        studentId:
+          type: integer
+        studentName:
+          type: string
+        score:
+          type: integer
+      required: [studentId, studentName, score]
+    ClassSkill:
+      type: object
+      description: >
+        One skill, and how the measured students in the class stand on it.
+        `assessed` counts students with any evidence; the three status counts
+        add up to it.
+      properties:
+        skillId:
+          type: integer
+        skillCode:
+          type: string
+        skillName:
+          type: string
+        gradeLevel:
+          type: ["integer", "null"]
+        assessed:
+          type: integer
+        gap:
+          type: integer
+        developing:
+          type: integer
+        mastered:
+          type: integer
+        averageScore:
+          type: integer
+        weakest:
+          description: The lowest-scoring students who have not mastered it, capped for reading.
+          type: array
+          items:
+            $ref: "#/components/schemas/WeakStudent"
+        weakestTotal:
+          description: How many have not mastered it, which may exceed the names listed.
+          type: integer
+      required:
+        [skillId, skillCode, skillName, gradeLevel, assessed, gap, developing,
+         mastered, averageScore, weakest, weakestTotal]
+    ClassSkills:
+      type: object
+      properties:
+        classId:
+          type: integer
+        className:
+          type: string
+        skills:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClassSkill"
+      required: [classId, className, skills]
     TeacherClassToday:
       type: object
       properties:
