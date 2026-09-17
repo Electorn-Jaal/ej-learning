@@ -5,11 +5,13 @@
  * EJ Learning adaptive learning API
  * OpenAPI spec version: 0.1.0
  */
-import type { QuizAnswer } from './quizAnswer';
+import type { QuizAttemptInputAnswersItem } from './quizAttemptInputAnswersItem';
 
+/**
+ * Only the choices. The server looks up which were right.
+ */
 export interface QuizAttemptInput {
   lessonId: number;
-  lessonCode: string;
   /** @minItems 1 */
-  answers: QuizAnswer[];
+  answers: QuizAttemptInputAnswersItem[];
 }

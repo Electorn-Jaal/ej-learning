@@ -436,3 +436,110 @@ export async function teacherDashboard(user: AuthenticatedUser) {
     classes: rows,
   };
 }
+
+export type QuizQuestion = {
+  itemId: number;
+  prompt: string;
+  options: { optionId: number; text: string }[];
+};
+
+/** Groups the flat option rows into questions, dropping isCorrect on the way. */
+function groupQuestions(rows: repository.QuizItemRow[]): QuizQuestion[] {
+  const byItem = new Map<number, QuizQuestion>();
+  for (const row of rows) {
+    let question = byItem.get(row.itemId);
+    if (!question) {
+      question = { itemId: row.itemId, prompt: row.prompt, options: [] };
+      byItem.set(row.itemId, question);
+    }
+    question.options.push({ optionId: row.optionId, text: row.optionText });
+  }
+  return [...byItem.values()];
+}
+
+export async function quizPaper(user: AuthenticatedUser, lessonId: number) {
+  if (user.studentId === null) {
+    throw forbidden("Сурагчийн бүртгэлгүй байна.", "NO_STUDENT_LINK");
+  }
+  if (!(await repository.lessonReachableByStudent(lessonId, user.studentId))) {
+    throw forbidden("Энэ хичээл танд оногдоогүй байна.", "LESSON_NOT_ASSIGNED");
+  }
+
+  const [header] = await repository.lessonHeader(lessonId);
+  const rows = await repository.quizItemsForLesson(lessonId);
+  return {
+    lessonId,
+    lessonCode: header?.lessonCode ?? "",
+    skillName: header?.skillName ?? "",
+    questions: groupQuestions(rows),
+  };
+}
+
+/**
+ * Marks an attempt on the server.
+ *
+ * The client sends which option it chose and nothing else. Previously it sent
+ * whether each answer was right, which was fine while a quiz was practice a
+ * student checked themselves and is not fine for anything that counts.
+ */
+export async function recordQuizAttemptScored(
+  user: AuthenticatedUser,
+  input: { lessonId: number; answers: { itemId: number; optionId: number | null }[] },
+) {
+  if (user.studentId === null) {
+    throw forbidden("Сурагчийн бүртгэлгүй байна.", "NO_STUDENT_LINK");
+  }
+  if (!(await repository.lessonReachableByStudent(input.lessonId, user.studentId))) {
+    throw forbidden("Энэ хичээл танд оногдоогүй байна.", "LESSON_NOT_ASSIGNED");
+  }
+
+  const rows = await repository.quizItemsForLesson(input.lessonId);
+  if (rows.length === 0) {
+    throw badRequest("Энэ хичээлд шалгах асуулт алга.", "NO_QUESTIONS");
+  }
+
+  const options = new Map(rows.map((row) => [row.optionId, row]));
+  const items = new Map<number, repository.QuizItemRow[]>();
+  for (const row of rows) {
+    items.set(row.itemId, [...(items.get(row.itemId) ?? []), row]);
+  }
+
+  const chosen = new Map(input.answers.map((answer) => [answer.itemId, answer.optionId]));
+  const stored: repository.QuizAnswer[] = [];
+  const results = [];
+
+  for (const [itemId, itemRows] of items) {
+    const optionId = chosen.get(itemId) ?? null;
+    const picked = optionId === null ? null : options.get(optionId);
+    // An option id belonging to a different question is treated as unanswered
+    // rather than accepted, so a crafted request cannot score a point.
+    const valid = picked && picked.itemId === itemId ? picked : null;
+    const correct = valid?.isCorrect ?? false;
+    const key = itemRows.find((row) => row.isCorrect) ?? null;
+
+    stored.push({
+      questionId: String(itemId),
+      prompt: itemRows[0].prompt,
+      chosenOptionId: valid ? String(valid.optionId) : "",
+      chosenText: valid?.optionText ?? "",
+      correct,
+    });
+    results.push({
+      itemId,
+      correct,
+      correctOptionId: key?.optionId ?? null,
+      explanation: itemRows[0].explanation,
+    });
+  }
+
+  const attempt = await repository.insertQuizAttempt({
+    studentId: user.studentId,
+    dailyLessonId: input.lessonId,
+    lessonCode: (await repository.lessonHeader(input.lessonId))[0]?.lessonCode ?? "",
+    answers: stored,
+    score: stored.filter((answer) => answer.correct).length,
+    maxScore: stored.length,
+  });
+
+  return { ...attempt, results };
+}

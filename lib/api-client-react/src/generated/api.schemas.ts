@@ -188,8 +188,26 @@ export interface ScheduleDayInput {
   lessonId: number | null;
 }
 
+export interface QuizOption {
+  optionId: number;
+  text: string;
+}
+
+export interface QuizQuestion {
+  itemId: number;
+  prompt: string;
+  options: QuizOption[];
+}
+
+export interface QuizPaper {
+  lessonId: number;
+  lessonCode: string;
+  skillName: string;
+  questions: QuizQuestion[];
+}
+
 /**
- * The prompt and the chosen text are copied in, not referenced, so an answer still reads correctly after the questions are edited.
+ * What the teacher sees afterwards, with the text copied in so it still reads after an edit.
  */
 export interface QuizAnswer {
   questionId: string;
@@ -199,11 +217,28 @@ export interface QuizAnswer {
   correct: boolean;
 }
 
+export type QuizAttemptInputAnswersItem = {
+  itemId: number;
+  /** @nullable */
+  optionId: number | null;
+};
+
+/**
+ * Only the choices. The server looks up which were right.
+ */
 export interface QuizAttemptInput {
   lessonId: number;
-  lessonCode: string;
   /** @minItems 1 */
-  answers: QuizAnswer[];
+  answers: QuizAttemptInputAnswersItem[];
+}
+
+export interface QuizResult {
+  itemId: number;
+  correct: boolean;
+  /** @nullable */
+  correctOptionId: number | null;
+  /** @nullable */
+  explanation: string | null;
 }
 
 export interface QuizAttempt {
@@ -212,6 +247,8 @@ export interface QuizAttempt {
   score: number;
   maxScore: number;
   submittedAt: string;
+  /** Marking comes back with the attempt, which is the first time the key is disclosed. */
+  results: QuizResult[];
 }
 
 export interface TeacherQuizAttemptRow {

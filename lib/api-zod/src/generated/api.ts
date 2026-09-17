@@ -665,22 +665,24 @@ export const ChangePasswordResponse = zod.void()
 
 export const SubmitQuizAttemptBody = zod.object({
   "lessonId": zod.number().int(),
-  "lessonCode": zod.string(),
   "answers": zod.array(zod.object({
-  "questionId": zod.string(),
-  "prompt": zod.string(),
-  "chosenOptionId": zod.string(),
-  "chosenText": zod.string(),
-  "correct": zod.boolean()
-}).describe('The prompt and the chosen text are copied in, not referenced, so an answer still reads correctly after the questions are edited.\n')).min(1)
-})
+  "itemId": zod.number().int(),
+  "optionId": zod.number().int().nullable()
+})).min(1)
+}).describe('Only the choices. The server looks up which were right.')
 
 export const SubmitQuizAttemptResponse = zod.object({
   "id": zod.number().int(),
   "lessonCode": zod.string(),
   "score": zod.number().int(),
   "maxScore": zod.number().int(),
-  "submittedAt": zod.string()
+  "submittedAt": zod.string(),
+  "results": zod.array(zod.object({
+  "itemId": zod.number().int(),
+  "correct": zod.boolean(),
+  "correctOptionId": zod.number().int().nullable(),
+  "explanation": zod.string().nullable()
+})).describe('Marking comes back with the attempt, which is the first time the key is disclosed.')
 })
 
 
@@ -715,7 +717,7 @@ export const GetTeacherQuizAttemptsResponse = zod.object({
   "chosenOptionId": zod.string(),
   "chosenText": zod.string(),
   "correct": zod.boolean()
-}).describe('The prompt and the chosen text are copied in, not referenced, so an answer still reads correctly after the questions are edited.\n'))
+}).describe('What the teacher sees afterwards, with the text copied in so it still reads after an edit.'))
 }))
 })
 
@@ -878,6 +880,29 @@ export const AssignExtraWorkResponse = zod.object({
   "lessonCode": zod.string(),
   "skillName": zod.string(),
   "assignedOn": zod.string()
+})
+
+
+/**
+ * The key is never sent. It used to live in the frontend bundle, where any student could read it, and it stays on the server now so that a score means something.
+ * @summary The questions for a lesson, without the answers
+ */
+export const GetQuizPaperParams = zod.object({
+  "lessonId": zod.coerce.number().int()
+})
+
+export const GetQuizPaperResponse = zod.object({
+  "lessonId": zod.number().int(),
+  "lessonCode": zod.string(),
+  "skillName": zod.string(),
+  "questions": zod.array(zod.object({
+  "itemId": zod.number().int(),
+  "prompt": zod.string(),
+  "options": zod.array(zod.object({
+  "optionId": zod.number().int(),
+  "text": zod.string()
+}))
+}))
 })
 
 

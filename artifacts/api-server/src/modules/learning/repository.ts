@@ -572,3 +572,58 @@ export async function upsertStudentAssignment(row: {
       },
     });
 }
+
+export type QuizItemRow = {
+  itemId: number;
+  prompt: string;
+  optionId: number;
+  optionText: string;
+  isCorrect: boolean;
+  explanation: string | null;
+};
+
+/**
+ * The item bank for a lesson, options included.
+ *
+ * Items hang off the skill a lesson teaches, so a lesson inherits its
+ * questions rather than owning them - which is what lets the same question
+ * serve the lesson and, later, a diagnostic covering that skill.
+ */
+export const quizItemsForLesson = (lessonId: number) =>
+  readRows<QuizItemRow>(
+    `SELECT i.id::int AS "itemId", i.title_mn AS prompt,
+       o.id::int AS "optionId", o.option_text AS "optionText",
+       o.is_correct AS "isCorrect", i.rubric_mn AS explanation
+     FROM learning.daily_lessons dl
+     JOIN assessment.diagnostic_items i ON i.skill_id = dl.core_skill_id
+       AND i.status = 'APPROVED'
+     JOIN assessment.diagnostic_item_options o ON o.diagnostic_item_id = i.id
+     WHERE dl.id = $1::bigint
+     ORDER BY i.item_order, i.id, o.sequence_no`,
+    [lessonId],
+  );
+
+/** Is this lesson one the student is actually working on today or recently? */
+export const lessonReachableByStudent = async (lessonId: number, studentId: number) =>
+  (
+    await readRows<{ ok: number }>(
+      `SELECT 1 AS ok FROM learning.daily_lessons dl
+       WHERE dl.id = $2::bigint AND dl.status = 'APPROVED' AND (
+         EXISTS (SELECT 1 FROM core.student_enrollments e
+                 JOIN learning.class_schedule cs ON cs.class_id = e.class_id
+                 WHERE e.student_id = $1::bigint AND e.is_active AND cs.daily_lesson_id = dl.id)
+         OR EXISTS (SELECT 1 FROM learning.student_assignments sa
+                    WHERE sa.student_id = $1::bigint AND sa.daily_lesson_id = dl.id))
+       LIMIT 1`,
+      [studentId, lessonId],
+    )
+  ).length > 0;
+
+export const lessonHeader = (lessonId: number) =>
+  readRows<{ lessonCode: string; skillName: string }>(
+    `SELECT dl.lesson_code AS "lessonCode", sk.name_mn AS "skillName"
+     FROM learning.daily_lessons dl
+     JOIN content.skills sk ON sk.id = dl.core_skill_id
+     WHERE dl.id = $1::bigint`,
+    [lessonId],
+  );
