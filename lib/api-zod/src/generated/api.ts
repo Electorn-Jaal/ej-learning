@@ -623,10 +623,10 @@ export const GetTeacherScheduleResponse = zod.object({
   "days": zod.array(zod.object({
   "scheduledOn": zod.string().regex(getTeacherScheduleResponseDaysItemScheduledOnRegExp).describe('Calendar date, YYYY-MM-DD.'),
   "isToday": zod.boolean(),
-  "lessonId": zod.number().int(),
-  "lessonCode": zod.string(),
-  "lessonType": zod.string(),
-  "skillName": zod.string(),
+  "lessonId": zod.number().int().nullable().describe('Null on a teaching day nothing is scheduled for yet.'),
+  "lessonCode": zod.string().nullable(),
+  "lessonType": zod.string().nullable(),
+  "skillName": zod.string().nullable(),
   "note": zod.string().nullable()
 }))
 })

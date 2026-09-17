@@ -13,10 +13,17 @@ export interface ScheduledDay {
      */
   scheduledOn: string;
   isToday: boolean;
-  lessonId: number;
-  lessonCode: string;
-  lessonType: string;
-  skillName: string;
+  /**
+     * Null on a teaching day nothing is scheduled for yet.
+     * @nullable
+     */
+  lessonId: number | null;
+  /** @nullable */
+  lessonCode: string | null;
+  /** @nullable */
+  lessonType: string | null;
+  /** @nullable */
+  skillName: string | null;
   /** @nullable */
   note: string | null;
 }

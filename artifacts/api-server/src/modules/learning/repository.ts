@@ -115,24 +115,49 @@ export const anyClass = (classId: number) =>
     [classId],
   );
 
-export const scheduleForClass = (classId: number, from: string, to: string) =>
+/**
+ * Every teaching day in the range, whether or not it has a lesson yet.
+ *
+ * It used to return only the rows that existed, which meant an empty day was
+ * not on the screen and so could not be filled: a teacher wanting Friday's
+ * lesson moved had nowhere to click. The days are generated and the schedule
+ * joined onto them, so an empty day is a row with a null lesson - something to
+ * choose, rather than an absence to wonder about.
+ *
+ * Weekends are left out. They are not school days, and listing them invites
+ * scheduling work nobody will be there to do.
+ *
+ * Scoped by subject because a class now studies several: editing the maths
+ * timetable must not show, or offer to overwrite, Tuesday's Mongolian.
+ */
+export const scheduleForClass = (
+  classId: number,
+  from: string,
+  to: string,
+  subjectId: number | null,
+) =>
   readRows<{
     scheduledOn: string;
-    lessonId: number;
-    lessonCode: string;
-    lessonType: string;
-    skillName: string;
+    lessonId: number | null;
+    lessonCode: string | null;
+    lessonType: string | null;
+    skillName: string | null;
     note: string | null;
   }>(
-    `SELECT cs.scheduled_on::text AS "scheduledOn", dl.id::int AS "lessonId",
+    // generate_series over an interval yields timestamps, so the cast to date
+    // is what keeps this a calendar day rather than "2026-09-10 00:00:00".
+    `SELECT d.day::date::text AS "scheduledOn", dl.id::int AS "lessonId",
        dl.lesson_code AS "lessonCode", dl.lesson_type AS "lessonType",
        sk.name_mn AS "skillName", cs.note
-     FROM learning.class_schedule cs
-     JOIN learning.daily_lessons dl ON dl.id = cs.daily_lesson_id
-     JOIN content.skills sk ON sk.id = dl.core_skill_id
-     WHERE cs.class_id = $1::bigint AND cs.scheduled_on BETWEEN $2::date AND $3::date
-     ORDER BY cs.scheduled_on`,
-    [classId, from, to],
+     FROM generate_series($2::date, $3::date, interval '1 day') AS d(day)
+     LEFT JOIN learning.class_schedule cs
+       ON cs.class_id = $1::bigint AND cs.scheduled_on = d.day::date
+      AND ($4::bigint IS NULL OR cs.subject_id = $4::bigint)
+     LEFT JOIN learning.daily_lessons dl ON dl.id = cs.daily_lesson_id
+     LEFT JOIN content.skills sk ON sk.id = dl.core_skill_id
+     WHERE extract(isodow FROM d.day) <= 5
+     ORDER BY d.day`,
+    [classId, from, to, subjectId],
   );
 
 /** The newest approved version of a material, which is what gets served. */
@@ -879,3 +904,60 @@ export const itemAnalysisForClass = (classId: number) =>
      ORDER BY "percentCorrect", i.item_order`,
     [classId],
   );
+
+export type TeacherClassRow = {
+  id: string;
+  name: string;
+  gradeLevel: number;
+  subject: string;
+  studentCount: number;
+  currentTopic: string;
+  needsReview: number;
+};
+
+/**
+ * The classes a teacher may actually open, with the subject they teach each.
+ *
+ * The old listing returned every active class in the school, so the picker
+ * offered rows that answered 403 the moment they were chosen. It is scoped by
+ * class_teachers now, and the subject comes with it: one class runs several
+ * subjects, and "10А" alone no longer says which timetable is being edited.
+ */
+export const teacherClassOptions = (teacherId: number | null, isAdmin: boolean) =>
+  readRows<TeacherClassRow>(
+    `SELECT c.id::text AS id, c.name_mn AS name,
+       g.grade_number::int AS "gradeLevel",
+       COALESCE(sub.name_mn, '') AS subject,
+       (SELECT count(DISTINCT e.student_id)::int
+        FROM core.student_enrollments e
+        JOIN core.students s ON s.id = e.student_id AND s.is_active
+        WHERE e.class_id = c.id AND e.is_active) AS "studentCount",
+       COALESCE(
+         (SELECT sk.name_mn FROM learning.class_schedule cs
+          JOIN learning.daily_lessons dl ON dl.id = cs.daily_lesson_id
+          JOIN content.skills sk ON sk.id = dl.core_skill_id
+          WHERE cs.class_id = c.id
+            AND cs.scheduled_on = (now() AT TIME ZONE 'Asia/Ulaanbaatar')::date
+            AND ($2::boolean OR cs.subject_id = ct.subject_id)
+          LIMIT 1),
+         'Өнөөдөр хуваарьт хичээл алга') AS "currentTopic",
+       0 AS "needsReview"
+     FROM core.class_teachers ct
+     JOIN core.classes c ON c.id = ct.class_id AND c.is_active
+     JOIN core.grade_levels g ON g.id = c.grade_level_id
+     LEFT JOIN core.subjects sub ON sub.id = ct.subject_id
+     WHERE ct.is_active AND ($2::boolean OR ct.teacher_id = $1::bigint)
+     ORDER BY g.grade_number, c.class_code, sub.name_mn`,
+    [teacherId ?? 0, isAdmin],
+  );
+
+/** Which subject this teacher holds in this class, or null for an admin. */
+export const subjectTaughtBy = async (teacherId: number | null, classId: number) => {
+  if (teacherId === null) return null;
+  const [row] = await readRows<{ subjectId: number | null }>(
+    `SELECT ct.subject_id::int AS "subjectId" FROM core.class_teachers ct
+     WHERE ct.teacher_id = $1::bigint AND ct.class_id = $2::bigint AND ct.is_active`,
+    [teacherId, classId],
+  );
+  return row?.subjectId ?? null;
+};

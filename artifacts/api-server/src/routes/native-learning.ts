@@ -1,3 +1,4 @@
+import { teacherClassOptions } from '../modules/learning/repository';
 import { Router, type IRouter, type Request } from 'express';
 import {
   GetCurrentUserResponse, GetPreviewStudentsResponse, GetStudentDashboardResponse,
@@ -121,8 +122,14 @@ router.get('/student/progress', asStudent, handle(async (req, res) => {
   })));
 }));
 
-router.get('/teacher/classes', asTeacher, handle(async (_req, res) => {
-  res.json(GetTeacherClassesResponse.parse(await data.classes()));
+router.get('/teacher/classes', asTeacher, handle(async (req, res) => {
+  // Scoped to what this teacher actually teaches. The previous listing returned
+  // every class in the school, so a picker built from it offered rows that
+  // answered 403 as soon as one was chosen.
+  const user = req.user!;
+  res.json(GetTeacherClassesResponse.parse(
+    await teacherClassOptions(user.teacherId, user.roles.includes('ADMIN')),
+  ));
 }));
 
 router.get('/teacher/catalog', asTeacher, handle(async (_req, res) => {
