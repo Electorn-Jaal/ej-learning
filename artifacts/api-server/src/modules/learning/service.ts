@@ -328,10 +328,16 @@ export async function teacherDashboard(user: AuthenticatedUser) {
   const classes = await repository.teacherClassIds(user.teacherId, isAdmin);
   const classIds = classes.map((row) => row.id);
   const onDate = todayInUlaanbaatar();
+  // A teacher teaches one subject across their classes in this data; take the
+  // first non-null rather than pretending to handle several until it happens.
+  const subjectId = classes.find((row) => row.subjectId !== null)?.subjectId ?? null;
+  const [subject] = await repository.subjectFramework(subjectId);
 
   if (classIds.length === 0) {
     return {
       teacherName: user.displayName,
+      subjectName: subject?.subjectName ?? null,
+      levelFramework: null,
       classCount: 0,
       studentCount: 0,
       placedCount: 0,
@@ -350,9 +356,12 @@ export async function teacherDashboard(user: AuthenticatedUser) {
 
   return {
     teacherName: user.displayName,
+    subjectName: subject?.subjectName ?? null,
+    levelFramework: subject?.framework ?? null,
     classCount: classIds.length,
     ...counts,
-    levels,
+    // Bands are only meaningful for a subject that is actually levelled.
+    levels: subject?.framework ? levels : [],
     attention,
   };
 }
