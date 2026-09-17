@@ -89,6 +89,24 @@ export interface ExtraWorkResult {
   assignedOn: string;
 }
 
+export interface UploadedFile {
+  materialId: number;
+  versionNo: number;
+  filename: string;
+  sizeBytes: number;
+  /**
+     * Counted from the file, approximate. The outline is what page numbers are read from.
+     * @nullable
+     */
+  totalPages: number | null;
+  pageOffset: number;
+}
+
+export interface PageOffsetInput {
+  materialId: number;
+  pageOffset: number;
+}
+
 export interface AdminMaterial {
   id: number;
   sourceCode: string;

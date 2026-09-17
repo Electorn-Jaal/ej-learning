@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label"
 import { PageHeader } from "@/components/ui/page-header"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
+import { BookUpload } from "@/components/admin/BookUpload"
 
 type Draft = {
   outlineCode: string
@@ -315,6 +316,10 @@ export default function AdminBooks() {
           </li>
         ))}
       </ul>
+
+      {materials.find((material) => material.id === current) ? (
+        <BookUpload material={materials.find((material) => material.id === current)!} />
+      ) : null}
 
       <OutlineEditor materialId={current} />
     </div>

@@ -744,6 +744,88 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /admin/materials/{materialId}/file/{filename}:
+    post:
+      operationId: uploadMaterialFile
+      tags: [admin]
+      summary: Upload a textbook PDF as a new version of this material
+      description: >
+        The bytes are checked, not the filename: a file is accepted because it
+        starts with %PDF-. Versions are added rather than replaced, because
+        outline rows and lesson alignments were made against the page numbers
+        of the file already stored. The page offset is set separately, since it
+        is nearly always discovered after looking at the book.
+      parameters:
+        - name: materialId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: filename
+          in: path
+          required: true
+          description: >
+            The original name, recorded as a column. It never becomes part of a
+            path on disk - the stored file is named from the material's own
+            source_code.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/pdf:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "201":
+          description: Stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadedFile"
+        "400":
+          description: Not a PDF, empty, or no such material
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Not an administrator
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /admin/materials/{materialId}/page-offset:
+    put:
+      operationId: setMaterialPageOffset
+      tags: [admin]
+      summary: Correct the gap between printed and file page numbers
+      parameters:
+        - name: materialId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PageOffsetInput"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PageOffsetInput"
+        "400":
+          description: No file uploaded for this material
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /admin/materials/{materialId}/outline:
     get:
       operationId: getMaterialOutline
@@ -928,6 +1010,31 @@ components:
         assignedOn:
           type: string
       required: [studentName, lessonCode, skillName, assignedOn]
+    UploadedFile:
+      type: object
+      properties:
+        materialId:
+          type: integer
+        versionNo:
+          type: integer
+        filename:
+          type: string
+        sizeBytes:
+          type: integer
+        totalPages:
+          description: Counted from the file, approximate. The outline is what page numbers are read from.
+          type: ["integer", "null"]
+        pageOffset:
+          type: integer
+      required: [materialId, versionNo, filename, sizeBytes, totalPages, pageOffset]
+    PageOffsetInput:
+      type: object
+      properties:
+        materialId:
+          type: integer
+        pageOffset:
+          type: integer
+      required: [materialId, pageOffset]
     AdminMaterial:
       type: object
       properties:

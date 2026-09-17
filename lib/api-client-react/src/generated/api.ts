@@ -46,6 +46,7 @@ import type {
   LoginInput,
   MaterialOutline,
   MaterialOutlineInput,
+  PageOffsetInput,
   PasswordChangeInput,
   PreviewStudent,
   QuizAttempt,
@@ -67,6 +68,7 @@ import type {
   TeacherDashboard,
   TeacherQuizAttempts,
   TeacherSchedule,
+  UploadedFile,
   WorkspaceIntegrationDashboard,
   WorkspaceSimulationInput
 } from './api.schemas';
@@ -2878,6 +2880,187 @@ export function useGetAdminMaterials<TData = Awaited<ReturnType<typeof getAdminM
 
 
 
+
+export const getUploadMaterialFileUrl = (materialId: number,
+    filename: string,) => {
+
+
+
+
+  return `/api/admin/materials/${materialId}/file/${filename}`
+}
+
+/**
+ * The bytes are checked, not the filename: a file is accepted because it starts with %PDF-. Versions are added rather than replaced, because outline rows and lesson alignments were made against the page numbers of the file already stored. The page offset is set separately, since it is nearly always discovered after looking at the book.
+ * @summary Upload a textbook PDF as a new version of this material
+ */
+export const uploadMaterialFile = async (materialId: number,
+    filename: string,
+    uploadMaterialFileBody: Blob, options?: Parameters<typeof customFetch>[1]): Promise<UploadedFile> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<UploadedFile>(getUploadMaterialFileUrl(materialId,filename),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/pdf', ...getHeaders(options?.headers) },
+    body: uploadMaterialFileBody
+  }
+);}
+
+
+
+
+
+export const getUploadMaterialFileMutationKey = () => ['uploadMaterialFile'] as const;
+
+export const getUploadMaterialFileMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadMaterialFile>>, TError,UploadMaterialFileMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof uploadMaterialFile>>, TError,UploadMaterialFileMutationVariables, TContext> => {
+
+const mutationKey = getUploadMaterialFileMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof uploadMaterialFile>>, UploadMaterialFileMutationVariables> = (props) => {
+          const {materialId,filename,data} = props ?? {};
+
+          return  uploadMaterialFile(materialId,filename,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UploadMaterialFileMutationResult = NonNullable<Awaited<ReturnType<typeof uploadMaterialFile>>>
+    export type UploadMaterialFileMutationBody = BodyType<Blob>
+    export type UploadMaterialFileMutationError = ErrorType<ApiError>
+    export type UploadMaterialFileMutationVariables = {materialId: number;filename: string;data: BodyType<Blob>}
+
+    /**
+ * @summary Upload a textbook PDF as a new version of this material
+ */
+export const useUploadMaterialFile = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadMaterialFile>>, TError,UploadMaterialFileMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof uploadMaterialFile>>,
+        TError,
+        UploadMaterialFileMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUploadMaterialFileMutationOptions(options));
+    }
+
+export const getSetMaterialPageOffsetUrl = (materialId: number,) => {
+
+
+
+
+  return `/api/admin/materials/${materialId}/page-offset`
+}
+
+/**
+ * @summary Correct the gap between printed and file page numbers
+ */
+export const setMaterialPageOffset = async (materialId: number,
+    pageOffsetInput: PageOffsetInput, options?: Parameters<typeof customFetch>[1]): Promise<PageOffsetInput> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<PageOffsetInput>(getSetMaterialPageOffsetUrl(materialId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(pageOffsetInput)
+  }
+);}
+
+
+
+
+
+export const getSetMaterialPageOffsetMutationKey = () => ['setMaterialPageOffset'] as const;
+
+export const getSetMaterialPageOffsetMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setMaterialPageOffset>>, TError,SetMaterialPageOffsetMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setMaterialPageOffset>>, TError,SetMaterialPageOffsetMutationVariables, TContext> => {
+
+const mutationKey = getSetMaterialPageOffsetMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setMaterialPageOffset>>, SetMaterialPageOffsetMutationVariables> = (props) => {
+          const {materialId,data} = props ?? {};
+
+          return  setMaterialPageOffset(materialId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetMaterialPageOffsetMutationResult = NonNullable<Awaited<ReturnType<typeof setMaterialPageOffset>>>
+    export type SetMaterialPageOffsetMutationBody = BodyType<PageOffsetInput>
+    export type SetMaterialPageOffsetMutationError = ErrorType<ApiError>
+    export type SetMaterialPageOffsetMutationVariables = {materialId: number;data: BodyType<PageOffsetInput>}
+
+    /**
+ * @summary Correct the gap between printed and file page numbers
+ */
+export const useSetMaterialPageOffset = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setMaterialPageOffset>>, TError,SetMaterialPageOffsetMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setMaterialPageOffset>>,
+        TError,
+        SetMaterialPageOffsetMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSetMaterialPageOffsetMutationOptions(options));
+    }
 
 export const getGetMaterialOutlineUrl = (materialId: number,) => {
 
