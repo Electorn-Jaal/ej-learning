@@ -7,6 +7,8 @@ import {
   GetTeacherLessonsResponse,
   GetTeacherQuizAttemptsResponse,
   GetTeacherScheduleResponse,
+  AssignExtraWorkBody,
+  AssignExtraWorkResponse,
   SetScheduleDayBody,
   SubmitQuizAttemptBody,
   SubmitQuizAttemptResponse,
@@ -14,6 +16,7 @@ import {
 import { requireRole } from "../../middlewares/auth";
 import { badRequest, unauthorized } from "../../shared/http-error";
 import {
+  assignExtraWork,
   generateSchedule,
   materialFile,
   quizAttemptsForTeacher,
@@ -92,6 +95,19 @@ router.post("/teacher/schedule/generate", asStaff, async (req, res, next) => {
     }
     const result = await generateSchedule(req.user!, parsed.data);
     res.json(GenerateScheduleResponse.parse(result));
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/teacher/assignments", asStaff, async (req, res, next) => {
+  try {
+    const parsed = AssignExtraWorkBody.safeParse(req.body);
+    if (!parsed.success) {
+      throw badRequest("Даалгаврын мэдээлэл буруу байна.", "INVALID_INPUT");
+    }
+    const result = await assignExtraWork(req.user!, parsed.data);
+    res.status(201).json(AssignExtraWorkResponse.parse(result));
   } catch (error) {
     next(error);
   }

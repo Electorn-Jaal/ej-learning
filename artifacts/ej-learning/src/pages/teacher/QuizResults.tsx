@@ -1,10 +1,16 @@
 import { useState } from 'react'
 import {
+  getGetTeacherLessonsQueryKey,
+  useAssignExtraWork,
   useGetTeacherClasses,
+  useGetTeacherLessons,
   useGetTeacherQuizAttempts,
+  type SchedulableLesson,
 } from '@workspace/api-client-react'
 import { Check, ChevronDown, ChevronUp, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Select,
@@ -22,8 +28,120 @@ const WHEN = new Intl.DateTimeFormat('mn-MN', {
   timeZone: 'Asia/Ulaanbaatar',
 })
 
+const tomorrow = () => {
+  const date = new Date()
+  date.setDate(date.getDate() + 1)
+  return date.toISOString().slice(0, 10)
+}
+
+/**
+ * Give one student extra work off the back of a weak attempt.
+ *
+ * The lesson list is the same one the schedule draws from, so a teacher can
+ * only send a child back to something their class could actually be taught.
+ * It defaults to tomorrow: today's work is already in front of them.
+ */
+function AssignExtra({
+  studentId,
+  studentName,
+  lessons,
+  suggestReason,
+}: {
+  studentId: number
+  studentName: string
+  lessons: SchedulableLesson[]
+  suggestReason: string
+}) {
+  const { mutate, isPending } = useAssignExtraWork()
+  const [open, setOpen] = useState(false)
+  const [lessonId, setLessonId] = useState<string>('')
+  const [reason, setReason] = useState(suggestReason)
+  const [done, setDone] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  if (done) {
+    return (
+      <p className="border-l-2 border-success py-1 pl-3 text-sm text-foreground">{done}</p>
+    )
+  }
+
+  if (!open) {
+    return (
+      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+        Нэмэлт даалгавар өгөх
+      </Button>
+    )
+  }
+
+  const assign = () => {
+    setError(null)
+    if (!lessonId) {
+      setError('Хичээл сонгоно уу.')
+      return
+    }
+    mutate(
+      {
+        data: {
+          studentId,
+          lessonId: Number(lessonId),
+          assignedOn: tomorrow(),
+          reason: reason.trim() || null,
+        },
+      },
+      {
+        onSuccess: (result) =>
+          setDone(
+            `${result.studentName} — "${result.skillName}" ${result.assignedOn}-нд оноогдлоо.`,
+          ),
+        onError: (cause) => setError(cause?.data?.error ?? 'Оноож чадсангүй.'),
+      },
+    )
+  }
+
+  return (
+    <div className="space-y-3 rounded-md border border-border p-3">
+      <p className="text-sm font-medium">{studentName} — нэмэлт даалгавар</p>
+      <Select value={lessonId} onValueChange={setLessonId}>
+        <SelectTrigger aria-label="Хичээл">
+          <SelectValue placeholder="Давтах хичээлээ сонгоно уу" />
+        </SelectTrigger>
+        <SelectContent>
+          {lessons.map((lesson) => (
+            <SelectItem key={lesson.id} value={String(lesson.id)}>
+              {lesson.skillName}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Input
+        value={reason}
+        onChange={(event) => setReason(event.target.value)}
+        placeholder="Шалтгаан — сурагчид харагдана"
+        aria-label="Шалтгаан"
+      />
+      <div className="flex flex-wrap items-center gap-2">
+        <Button size="sm" onClick={assign} disabled={isPending}>
+          {isPending ? 'Оноож байна…' : `Маргааш (${tomorrow()}) оноох`}
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
+          Болих
+        </Button>
+        {error ? (
+          <span role="alert" className="text-sm text-destructive">
+            {error}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
 function Attempts({ classId }: { classId: number }) {
   const { data, isLoading, isError, error } = useGetTeacherQuizAttempts({ classId })
+  const { data: lessons } = useGetTeacherLessons(
+    { classId },
+    { query: { queryKey: getGetTeacherLessonsQueryKey({ classId }) } },
+  )
   const [openId, setOpenId] = useState<number | null>(null)
 
   if (isLoading) return <Skeleton className="h-64 w-full" />
@@ -115,6 +233,16 @@ function Attempts({ classId }: { classId: number }) {
                         </p>
                       </li>
                     ))}
+                    {lessons?.length ? (
+                      <li className="pt-2">
+                        <AssignExtra
+                          studentId={attempt.studentId}
+                          studentName={attempt.studentName}
+                          lessons={lessons}
+                          suggestReason={`${attempt.skillName}: ${attempt.score}/${attempt.maxScore}. Суурь сэдвээ давтъя.`}
+                        />
+                      </li>
+                    ) : null}
                   </ol>
                 ) : null}
               </li>

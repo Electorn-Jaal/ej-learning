@@ -717,6 +717,41 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /teacher/assignments:
+    post:
+      operationId: assignExtraWork
+      tags: [teacher]
+      summary: Give one student extra work on a day
+      description: >
+        Recorded as a TEACHER assignment rather than an AUTO one, so the
+        algorithm that will later place remediation itself can be told to leave
+        a teacher's choice alone. One assignment per student per day: assigning
+        again replaces it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExtraWorkInput"
+      responses:
+        "201":
+          description: Assigned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExtraWorkResult"
+        "400":
+          description: A lesson the student's class cannot be taught, or a bad date
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Not a teacher of that student's class
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   parameters:
     AssignmentId:
@@ -732,6 +767,42 @@ components:
       schema:
         type: string
   schemas:
+    ExtraWork:
+      type: object
+      properties:
+        lesson:
+          $ref: "#/components/schemas/DailyLessonView"
+        source:
+          type: string
+          enum: [AUTO, TEACHER]
+        reason:
+          type: ["string", "null"]
+      required: [lesson, source, reason]
+    ExtraWorkInput:
+      type: object
+      properties:
+        studentId:
+          type: integer
+        lessonId:
+          type: integer
+        assignedOn:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+        reason:
+          type: ["string", "null"]
+      required: [studentId, lessonId, assignedOn, reason]
+    ExtraWorkResult:
+      type: object
+      properties:
+        studentName:
+          type: string
+        lessonCode:
+          type: string
+        skillName:
+          type: string
+        assignedOn:
+          type: string
+      required: [studentName, lessonCode, skillName, assignedOn]
     AdminMaterial:
       type: object
       properties:
@@ -937,6 +1008,9 @@ components:
       properties:
         id:
           type: integer
+        studentId:
+          description: Needed to assign this student extra work straight from the row.
+          type: integer
         studentName:
           type: string
         studentCode:
@@ -957,6 +1031,7 @@ components:
             $ref: "#/components/schemas/QuizAnswer"
       required:
         - id
+        - studentId
         - studentName
         - studentCode
         - lessonCode
@@ -1067,12 +1142,21 @@ components:
         className:
           type: string
         lesson:
+          description: What the class is scheduled to study today. Null when nothing is.
           oneOf:
             - $ref: "#/components/schemas/DailyLessonView"
             - type: "null"
+        extra:
+          description: >
+            Work assigned to this student personally. For a subject where the
+            class works through one book it is remediation on top; for one
+            placed by level it is the whole of the day's work.
+          oneOf:
+            - $ref: "#/components/schemas/ExtraWork"
+            - type: "null"
         notice:
           type: string
-      required: [date, dateLabel, className, lesson, notice]
+      required: [date, dateLabel, className, lesson, extra, notice]
     ScheduledDay:
       type: object
       properties:

@@ -563,7 +563,33 @@ export const GetStudentTodayResponse = zod.object({
   "filePage": zod.number().int().nullable().describe('Which page of the file to open at. Not the same as pageFrom: a scanned book carries covers and front matter the printed numbering does not count, so printed page 3 can be file page 9. The student is shown the printed numbers and the viewer opens the file page.\n'),
   "fileUrl": zod.string().nullable()
 }).describe('Where in the book this lesson sits.'),zod.null()])
-}),zod.null()]),
+}),zod.null()]).describe('What the class is scheduled to study today. Null when nothing is.'),
+  "extra": zod.union([zod.object({
+  "lesson": zod.object({
+  "id": zod.number().int(),
+  "lessonCode": zod.string(),
+  "lessonType": zod.enum(['CORE', 'RECOVERY', 'REINFORCE']),
+  "skillName": zod.string(),
+  "learningGoal": zod.string().nullable(),
+  "remember": zod.string().nullable(),
+  "workedExample": zod.string().nullable(),
+  "guidedPractice": zod.string().nullable(),
+  "independentPractice": zod.string().nullable(),
+  "studentMessage": zod.string().nullable(),
+  "estimatedMinutes": zod.number().int().nullable(),
+  "book": zod.union([zod.object({
+  "materialId": zod.number().int(),
+  "title": zod.string().nullable(),
+  "chapterTitle": zod.string().nullable(),
+  "pageFrom": zod.number().int().nullable(),
+  "pageTo": zod.number().int().nullable(),
+  "filePage": zod.number().int().nullable().describe('Which page of the file to open at. Not the same as pageFrom: a scanned book carries covers and front matter the printed numbering does not count, so printed page 3 can be file page 9. The student is shown the printed numbers and the viewer opens the file page.\n'),
+  "fileUrl": zod.string().nullable()
+}).describe('Where in the book this lesson sits.'),zod.null()])
+}),
+  "source": zod.enum(['AUTO', 'TEACHER']),
+  "reason": zod.string().nullable()
+}),zod.null()]).describe('Work assigned to this student personally. For a subject where the class works through one book it is remediation on top; for one placed by level it is the whole of the day\'s work.\n'),
   "notice": zod.string()
 })
 
@@ -674,6 +700,7 @@ export const GetTeacherQuizAttemptsResponse = zod.object({
   "className": zod.string(),
   "attempts": zod.array(zod.object({
   "id": zod.number().int(),
+  "studentId": zod.number().int().describe('Needed to assign this student extra work straight from the row.'),
   "studentName": zod.string(),
   "studentCode": zod.string(),
   "lessonCode": zod.string(),
@@ -828,6 +855,28 @@ export const SaveMaterialOutlineResponse = zod.object({
   "sequenceNo": zod.number().int(),
   "usedByLessons": zod.number().int().describe('How many lessons point at this section. Above zero means editing it moves real work.')
 }))
+})
+
+
+/**
+ * Recorded as a TEACHER assignment rather than an AUTO one, so the algorithm that will later place remediation itself can be told to leave a teacher's choice alone. One assignment per student per day: assigning again replaces it.
+ * @summary Give one student extra work on a day
+ */
+export const assignExtraWorkBodyAssignedOnRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const AssignExtraWorkBody = zod.object({
+  "studentId": zod.number().int(),
+  "lessonId": zod.number().int(),
+  "assignedOn": zod.string().regex(assignExtraWorkBodyAssignedOnRegExp),
+  "reason": zod.string().nullable()
+})
+
+export const AssignExtraWorkResponse = zod.object({
+  "studentName": zod.string(),
+  "lessonCode": zod.string(),
+  "skillName": zod.string(),
+  "assignedOn": zod.string()
 })
 
 
