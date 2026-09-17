@@ -1499,13 +1499,14 @@ components:
         isToday:
           type: boolean
         lessonId:
-          type: integer
+          description: Null on a teaching day nothing is scheduled for yet.
+          type: ["integer", "null"]
         lessonCode:
-          type: string
+          type: ["string", "null"]
         lessonType:
-          type: string
+          type: ["string", "null"]
         skillName:
-          type: string
+          type: ["string", "null"]
         note:
           type: ["string", "null"]
       required: [scheduledOn, isToday, lessonId, lessonCode, lessonType, skillName, note]

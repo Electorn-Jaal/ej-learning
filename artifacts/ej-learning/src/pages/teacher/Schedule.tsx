@@ -13,6 +13,7 @@ import {
 import { Sparkles, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -133,12 +134,14 @@ function ScheduleTable({
 
                   <div className="min-w-0 flex-1">
                     <Select
-                      value={String(day.lessonId)}
+                      value={day.lessonId === null ? '' : String(day.lessonId)}
                       disabled={saving}
                       onValueChange={(value) => change(day.scheduledOn, Number(value))}
                     >
-                      <SelectTrigger className="w-full">
-                        <SelectValue />
+                      <SelectTrigger
+                        className={cn('w-full', day.lessonId === null && 'text-muted-foreground')}
+                      >
+                        <SelectValue placeholder="Хичээл сонгох" />
                       </SelectTrigger>
                       <SelectContent>
                         {lessons.map((lesson) => (
@@ -153,16 +156,22 @@ function ScheduleTable({
 
                   {day.isToday ? <Badge>Өнөөдөр</Badge> : null}
 
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={saving}
-                    title="Энэ өдрийг хоослох"
-                    onClick={() => change(day.scheduledOn, null)}
-                  >
-                    <X className="h-4 w-4" />
-                    <span className="sr-only">Хоослох</span>
-                  </Button>
+                  {/* Nothing to clear on a day that holds nothing; an enabled
+                      button that does nothing is worse than none. */}
+                  {day.lessonId === null ? (
+                    <span className="w-9 shrink-0" aria-hidden />
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={saving}
+                      title="Энэ өдрийг хоослох"
+                      onClick={() => change(day.scheduledOn, null)}
+                    >
+                      <X className="h-4 w-4" />
+                      <span className="sr-only">Хоослох</span>
+                    </Button>
+                  )}
                 </li>
               )
             })}
@@ -211,6 +220,7 @@ export default function TeacherSchedule() {
             {classes.map((klass) => (
               <SelectItem key={klass.id} value={klass.id}>
                 {klass.name}
+                {klass.subject ? ` · ${klass.subject}` : ''}
               </SelectItem>
             ))}
           </SelectContent>

@@ -191,7 +191,10 @@ export async function teacherSchedule(
     throw forbidden("Энэ ангийн хуваарийг харах эрхгүй байна.", "NOT_YOUR_CLASS");
   }
 
-  const days = await repository.scheduleForClass(klass.classId, from, to);
+  // The teacher's own subject decides which timetable this is. An admin is
+  // tied to none and sees whatever the class has.
+  const subjectId = await repository.subjectTaughtBy(user.teacherId, klass.classId);
+  const days = await repository.scheduleForClass(klass.classId, from, to, subjectId);
   return {
     classId: klass.classId,
     className: klass.className,
