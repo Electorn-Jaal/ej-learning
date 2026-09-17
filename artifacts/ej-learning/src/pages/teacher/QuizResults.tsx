@@ -9,6 +9,7 @@ import {
 } from '@workspace/api-client-react'
 import { Check, ChevronDown, ChevronUp, X } from 'lucide-react'
 import { ClassSkills } from '@/components/teacher/ClassSkills'
+import { ItemAnalysis } from '@/components/teacher/ItemAnalysis'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -290,6 +291,7 @@ export default function TeacherQuizResults() {
         </Select>
       ) : null}
 
+      <ItemAnalysis classId={Number(classId)} />
       <ClassSkills classId={Number(classId)} />
       <Attempts classId={Number(classId)} />
     </div>

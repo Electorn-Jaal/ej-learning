@@ -362,6 +362,22 @@ export async function submitAssessment(
   };
 }
 
+/**
+ * Question-by-question results for a class, worst first.
+ *
+ * Deliberately not filtered to a threshold: a teacher scanning this wants to
+ * see where the cliff is, and a list that has already decided what counts as
+ * bad hides the judgement it made.
+ */
+export async function itemAnalysis(user: AuthenticatedUser, classId: number) {
+  const klass = await authorisedClass(user, classId);
+  return {
+    classId: klass.classId,
+    className: klass.className,
+    items: await repository.itemAnalysisForClass(klass.classId),
+  };
+}
+
 /** Resolves the class a teacher may act on, or refuses. Admins bypass. */
 async function authorisedClass(user: AuthenticatedUser, classId: number) {
   const isAdmin = user.roles.includes("ADMIN");

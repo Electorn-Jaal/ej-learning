@@ -4,6 +4,7 @@ import {
   GenerateScheduleResponse,
   GetAssessmentSheetResponse,
   GetClassSkillsResponse,
+  GetItemAnalysisResponse,
   GetQuizPaperResponse,
   GetStudentTodayResponse,
   GetTeacherDashboardResponse,
@@ -24,6 +25,7 @@ import {
   assessmentSheet,
   assignExtraWork,
   classSkillsForTeacher,
+  itemAnalysis,
   generateSchedule,
   materialFile,
   quizAttemptsForTeacher,
@@ -204,6 +206,22 @@ router.post("/teacher/assessments", requireRole("TEACHER", "ADMIN"), async (req,
     next(error);
   }
 });
+
+router.get(
+  "/teacher/item-analysis",
+  requireRole("TEACHER", "ADMIN"),
+  async (req, res, next) => {
+    try {
+      const classId = Number(req.query.classId);
+      if (!Number.isInteger(classId) || classId <= 0) {
+        throw badRequest("Ангийн дугаар буруу байна.", "INVALID_CLASS_ID");
+      }
+      res.json(GetItemAnalysisResponse.parse(await itemAnalysis(req.user!, classId)));
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 router.get(
   "/teacher/class-skills",

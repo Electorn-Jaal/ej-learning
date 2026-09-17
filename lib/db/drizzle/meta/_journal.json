@@ -71,6 +71,13 @@
       "when": 1789631171798,
       "tag": "0009_modern_prism",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789632703331,
+      "tag": "0010_true_dexter_bennett",
+      "breakpoints": true
     }
   ]
 }

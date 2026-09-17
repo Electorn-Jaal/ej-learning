@@ -761,3 +761,67 @@ export const enrolledStudentIds = async (classId: number) =>
       )
     ).map((row) => row.id),
   );
+
+export type ItemAnalysisRow = {
+  itemId: number;
+  prompt: string;
+  skillName: string;
+  answered: number;
+  correct: number;
+  percentCorrect: number;
+  commonWrongAnswer: string | null;
+  commonWrongCount: number;
+};
+
+/**
+ * Which questions a class actually got wrong.
+ *
+ * The per-skill view says "B1 grammar is weak", which is true and not very
+ * useful on a Monday morning. This says "eight of them chose 'have went' on
+ * question 4", which is a lesson.
+ *
+ * One row per student per question, their most recent answer. Counting every
+ * attempt would let one student who retook a quiz four times outvote four
+ * students who took it once, and the question being asked is how many children
+ * hold the idea, not how many times a box was ticked.
+ *
+ * The most-chosen wrong answer comes with it. A distractor that attracts half
+ * the class is usually a specific misunderstanding rather than a gap, and the
+ * two want different teaching.
+ */
+export const itemAnalysisForClass = (classId: number) =>
+  readRows<ItemAnalysisRow>(
+    `WITH latest AS (
+       SELECT DISTINCT ON (qa.student_id, answer->>'questionId')
+         qa.student_id,
+         (answer->>'questionId')::bigint AS item_id,
+         (answer->>'correct')::boolean AS correct,
+         NULLIF(answer->>'chosenText', '') AS chosen
+       FROM learning.quiz_attempts qa
+       JOIN core.student_enrollments e
+         ON e.student_id = qa.student_id AND e.is_active AND e.class_id = $1::bigint
+       CROSS JOIN LATERAL jsonb_array_elements(qa.answers) AS answer
+       WHERE answer->>'questionId' ~ '^[0-9]+$'
+       ORDER BY qa.student_id, answer->>'questionId', qa.submitted_at DESC
+     ),
+     wrong AS (
+       SELECT item_id, chosen, count(*)::int AS n,
+         row_number() OVER (PARTITION BY item_id ORDER BY count(*) DESC, chosen) AS rank
+       FROM latest WHERE NOT correct AND chosen IS NOT NULL
+       GROUP BY item_id, chosen
+     )
+     SELECT i.id::int AS "itemId", i.title_mn AS prompt,
+       COALESCE(sk.name_mn, '—') AS "skillName",
+       count(*)::int AS answered,
+       count(*) FILTER (WHERE l.correct)::int AS correct,
+       round(100.0 * count(*) FILTER (WHERE l.correct) / count(*))::int AS "percentCorrect",
+       max(w.chosen) FILTER (WHERE w.rank = 1) AS "commonWrongAnswer",
+       COALESCE(max(w.n) FILTER (WHERE w.rank = 1), 0)::int AS "commonWrongCount"
+     FROM latest l
+     JOIN assessment.diagnostic_items i ON i.id = l.item_id
+     LEFT JOIN content.skills sk ON sk.id = i.skill_id
+     LEFT JOIN wrong w ON w.item_id = l.item_id AND w.rank = 1
+     GROUP BY i.id, i.title_mn, sk.name_mn, i.item_order
+     ORDER BY "percentCorrect", i.item_order`,
+    [classId],
+  );
