@@ -1,0 +1,945 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: EJ Learning adaptive learning API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: session
+    description: Current authenticated identity
+  - name: student
+    description: Student learning journey
+  - name: teacher
+    description: Teacher classroom and review workflow
+paths:
+  /preview/students:
+    get:
+      operationId: getPreviewStudents
+      tags: [teacher]
+      summary: Read-only local database preview
+      responses:
+        "200":
+          description: Database records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PreviewStudent"
+  /teacher/catalog:
+    get:
+      operationId: getTeacherCatalog
+      tags: [teacher]
+      summary: Read-only local database preview
+      responses:
+        "200":
+          description: Database records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CatalogItem"
+  /student/subjects:
+    get:
+      operationId: getStudentSubjects
+      tags: [student]
+      summary: Read-only local database preview
+      responses:
+        "200":
+          description: Database records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SubjectOverview"
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /session/me:
+    get:
+      operationId: getCurrentUser
+      tags: [session]
+      summary: Get the current user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentUser"
+  /student/dashboard:
+    get:
+      operationId: getStudentDashboard
+      tags: [student]
+      summary: Get the student's daily work
+      responses:
+        "200":
+          description: Student dashboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentDashboard"
+  /student/assignments/{assignmentId}:
+    get:
+      operationId: getStudentAssignment
+      tags: [student]
+      summary: Get an assignment and its learning material
+      parameters:
+        - $ref: "#/components/parameters/AssignmentId"
+      responses:
+        "200":
+          description: Assignment detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssignmentDetail"
+        "404":
+          description: Assignment not found
+  /student/assignments/{assignmentId}/start:
+    post:
+      operationId: startStudentAssignment
+      tags: [student]
+      summary: Start or resume an assignment
+      parameters:
+        - $ref: "#/components/parameters/AssignmentId"
+      responses:
+        "200":
+          description: Assignment state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssignmentState"
+  /student/assignments/{assignmentId}/steps:
+    post:
+      operationId: saveStudentAssignmentStep
+      tags: [student]
+      summary: Save reading, example, or practice step progress
+      parameters:
+        - $ref: "#/components/parameters/AssignmentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignmentStepInput"
+      responses:
+        "200":
+          description: Saved step progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssignmentState"
+  /student/assignments/{assignmentId}/submit:
+    post:
+      operationId: submitStudentAssignment
+      tags: [student]
+      summary: Submit an understanding check
+      parameters:
+        - $ref: "#/components/parameters/AssignmentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignmentSubmissionInput"
+      responses:
+        "200":
+          description: Submission result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubmissionResult"
+        "400":
+          description: Invalid submission
+  /student/progress:
+    get:
+      operationId: getStudentProgress
+      tags: [student]
+      summary: Get skill progress and attempt history
+      responses:
+        "200":
+          description: Student progress
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentProgress"
+  /teacher/dashboard:
+    get:
+      operationId: getTeacherDashboard
+      tags: [teacher]
+      summary: Get teacher dashboard summary
+      responses:
+        "200":
+          description: Teacher dashboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeacherDashboard"
+  /teacher/classes:
+    get:
+      operationId: getTeacherClasses
+      tags: [teacher]
+      summary: List authorized classes
+      responses:
+        "200":
+          description: Authorized classes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TeacherClass"
+  /teacher/review-queue:
+    get:
+      operationId: getTeacherReviewQueue
+      tags: [teacher]
+      summary: List written answers awaiting review
+      responses:
+        "200":
+          description: Review queue
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReviewItem"
+  /teacher/reviews/{attemptId}:
+    post:
+      operationId: reviewTeacherAttempt
+      tags: [teacher]
+      summary: Review a written answer using the rubric
+      parameters:
+        - $ref: "#/components/parameters/AttemptId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewInput"
+      responses:
+        "200":
+          description: Reviewed attempt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReviewResult"
+  /teacher/current-topic:
+    post:
+      operationId: setTeacherCurrentTopic
+      tags: [teacher]
+      summary: Set the current topic for an authorized class
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CurrentTopicInput"
+      responses:
+        "200":
+          description: Current topic
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentTopic"
+  /teacher/integrations/workspace:
+    get:
+      operationId: getWorkspaceIntegrationDashboard
+      tags: [teacher]
+      summary: Get the mock Google Workspace integration model and audit state
+      responses:
+        "200":
+          description: Workspace integration dashboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceIntegrationDashboard"
+  /teacher/integrations/workspace/simulate:
+    post:
+      operationId: simulateWorkspaceIntegration
+      tags: [teacher]
+      summary: Simulate an idempotent Classroom, Sheets, Drive, or coursework operation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceSimulationInput"
+      responses:
+        "200":
+          description: Updated workspace integration dashboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceIntegrationDashboard"
+components:
+  parameters:
+    AssignmentId:
+      name: assignmentId
+      in: path
+      required: true
+      schema:
+        type: string
+    AttemptId:
+      name: attemptId
+      in: path
+      required: true
+      schema:
+        type: string
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+    Role:
+      type: string
+      enum: [student, teacher, admin]
+    AssignmentStatus:
+      type: string
+      enum: [not_started, in_progress, pending_review, completed, unavailable]
+    ActivityStep:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [read, example, practice, check]
+        label:
+          type: string
+        state:
+          type: string
+          enum: [todo, current, done, unavailable]
+      required: [kind, label, state]
+    ActivitySummary:
+      type: object
+      properties:
+        id:
+          type: string
+        subject:
+          type: string
+        subjectCode:
+          type: string
+        activityType:
+          type: string
+          enum: [diagnostic, prerequisite_check, lesson, understanding_check]
+        topic:
+          type: string
+        goal:
+          type: string
+        reason:
+          type: string
+        estimatedMinutes:
+          type: integer
+        status:
+          $ref: "#/components/schemas/AssignmentStatus"
+        actionLabel:
+          type: string
+        actionPath:
+          type: string
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivityStep"
+        materialAvailable:
+          type: boolean
+        gradeLevel:
+          type: integer
+      required:
+        - id
+        - subject
+        - subjectCode
+        - activityType
+        - topic
+        - goal
+        - reason
+        - estimatedMinutes
+        - status
+        - actionLabel
+        - actionPath
+        - steps
+        - materialAvailable
+        - gradeLevel
+    SubjectSummary:
+      type: object
+      properties:
+        subject:
+          type: string
+        completed:
+          type: integer
+        total:
+          type: integer
+        minutes:
+          type: integer
+        accent:
+          type: string
+      required: [subject, completed, total, minutes, accent]
+    CurrentUser:
+      type: object
+      properties:
+        id:
+          type: string
+        displayName:
+          type: string
+        role:
+          $ref: "#/components/schemas/Role"
+        gradeLevel:
+          type: integer
+        className:
+          type: string
+        isDemo:
+          type: boolean
+        authConfigured:
+          type: boolean
+      required:
+        - id
+        - displayName
+        - role
+        - gradeLevel
+        - className
+        - isDemo
+        - authConfigured
+    StudentDashboard:
+      type: object
+      properties:
+        displayName:
+          type: string
+        dateLabel:
+          type: string
+        currentStreak:
+          type: integer
+        completedToday:
+          type: integer
+        totalToday:
+          type: integer
+        focusTopic:
+          type: string
+        activities:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivitySummary"
+        subjects:
+          type: array
+          items:
+            $ref: "#/components/schemas/SubjectSummary"
+        dataNotice:
+          type: string
+      required:
+        - displayName
+        - dateLabel
+        - currentStreak
+        - completedToday
+        - totalToday
+        - focusTopic
+        - activities
+        - subjects
+        - dataNotice
+    MaterialBlock:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [explanation, example, pdf, practice]
+        title:
+          type: string
+        body:
+          type: string
+        pageLabel:
+          type: ["string", "null"]
+        available:
+          type: boolean
+      required: [kind, title, body, pageLabel, available]
+    CheckQuestion:
+      type: object
+      properties:
+        id:
+          type: string
+        prompt:
+          type: string
+        type:
+          type: string
+          enum: [single_choice, written]
+        options:
+          type: array
+          items:
+            type: string
+        maxScore:
+          type: number
+      required: [id, prompt, type, options, maxScore]
+    AssignmentDetail:
+      type: object
+      properties:
+        readOnly:
+          type: boolean
+        id:
+          type: string
+        subject:
+          type: string
+        activityType:
+          type: string
+          enum: [diagnostic, prerequisite_check, lesson, understanding_check]
+        topic:
+          type: string
+        targetSkill:
+          type: string
+        targetSkillCode:
+          type: string
+        reason:
+          type: string
+        estimatedMinutes:
+          type: integer
+        status:
+          $ref: "#/components/schemas/AssignmentStatus"
+        materialVersion:
+          type: ["string", "null"]
+        materialBlocks:
+          type: array
+          items:
+            $ref: "#/components/schemas/MaterialBlock"
+        question:
+          oneOf:
+            - $ref: "#/components/schemas/CheckQuestion"
+            - type: "null"
+        answerKeyVisible:
+          type: boolean
+        dataNotice:
+          type: string
+        completedSteps:
+          type: array
+          items:
+            type: string
+      required:
+        - id
+        - subject
+        - activityType
+        - topic
+        - targetSkill
+        - targetSkillCode
+        - reason
+        - estimatedMinutes
+        - status
+        - materialVersion
+        - materialBlocks
+        - question
+        - answerKeyVisible
+        - dataNotice
+        - completedSteps
+    AssignmentState:
+      type: object
+      properties:
+        assignmentId:
+          type: string
+        status:
+          $ref: "#/components/schemas/AssignmentStatus"
+        startedAt:
+          type: string
+        attemptId:
+          type: ["string", "null"]
+        completedSteps:
+          type: array
+          items:
+            type: string
+      required: [assignmentId, status, startedAt, attemptId, completedSteps]
+    AssignmentStepInput:
+      type: object
+      properties:
+        step:
+          type: string
+          enum: [read, example, practice]
+        completed:
+          type: boolean
+      required: [step, completed]
+    AssignmentSubmissionInput:
+      type: object
+      properties:
+        answer:
+          type: string
+          minLength: 1
+        idempotencyKey:
+          type: string
+          minLength: 8
+      required: [answer, idempotencyKey]
+    NextAction:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [reinforce, prerequisite, return_to_target, next_skill, teacher_support, unavailable]
+        label:
+          type: string
+        description:
+          type: string
+      required: [kind, label, description]
+    SubmissionResult:
+      type: object
+      properties:
+        attemptId:
+          type: string
+        status:
+          type: string
+          enum: [submitted, pending_review, reviewed]
+        score:
+          type: ["number", "null"]
+        maxScore:
+          type: integer
+        feedback:
+          type: ["string", "null"]
+        nextAction:
+          $ref: "#/components/schemas/NextAction"
+        message:
+          type: string
+      required: [attemptId, status, score, maxScore, feedback, nextAction, message]
+    SkillProgress:
+      type: object
+      properties:
+        skill:
+          type: string
+        code:
+          type: string
+        gradeLevel:
+          type: integer
+        status:
+          type: string
+          enum: [mastered, developing, needs_support, unassessed]
+        percentage:
+          type: ["integer", "null"]
+        evidenceCount:
+          type: integer
+        lastEvidenceDate:
+          type: ["string", "null"]
+      required: [skill, code, gradeLevel, status, percentage, evidenceCount, lastEvidenceDate]
+    AttemptHistoryItem:
+      type: object
+      properties:
+        id:
+          type: string
+        assignment:
+          type: string
+        submittedAt:
+          type: string
+        status:
+          type: string
+        score:
+          type: ["number", "null"]
+        maxScore:
+          type: ["number", "null"]
+        reviewer:
+          type: ["string", "null"]
+      required: [id, assignment, submittedAt, status, score, maxScore, reviewer]
+    StudentProgress:
+      type: object
+      properties:
+        skills:
+          type: array
+          items:
+            $ref: "#/components/schemas/SkillProgress"
+        attempts:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttemptHistoryItem"
+        dataNotice:
+          type: string
+      required: [skills, attempts, dataNotice]
+    TeacherDashboard:
+      type: object
+      properties:
+        teacherName:
+          type: string
+        classCount:
+          type: integer
+        studentCount:
+          type: integer
+        awaitingReview:
+          type: integer
+        currentTopic:
+          type: string
+        insight:
+          type: string
+      required: [teacherName, classCount, studentCount, awaitingReview, currentTopic, insight]
+    TeacherClass:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        gradeLevel:
+          type: integer
+        subject:
+          type: string
+        studentCount:
+          type: integer
+        currentTopic:
+          type: string
+        needsReview:
+          type: integer
+      required: [id, name, gradeLevel, subject, studentCount, currentTopic, needsReview]
+    ReviewItem:
+      type: object
+      properties:
+        maxScore:
+          type: number
+        attemptId:
+          type: string
+        studentName:
+          type: string
+        className:
+          type: string
+        topic:
+          type: string
+        skill:
+          type: string
+        answer:
+          type: string
+        submittedAt:
+          type: string
+        rubric:
+          type: array
+          items:
+            type: string
+      required: [attemptId, studentName, className, topic, skill, answer, submittedAt, rubric]
+    ReviewInput:
+      type: object
+      properties:
+        score:
+          type: number
+          minimum: 0
+        feedback:
+          type: string
+          minLength: 1
+        rubricNotes:
+          type: string
+          minLength: 1
+        idempotencyKey:
+          type: string
+          minLength: 8
+      required: [score, feedback, rubricNotes, idempotencyKey]
+    ReviewResult:
+      type: object
+      properties:
+        attemptId:
+          type: string
+        status:
+          type: string
+          enum: [reviewed]
+        score:
+          type: number
+        feedback:
+          type: string
+        nextAction:
+          $ref: "#/components/schemas/NextAction"
+      required: [attemptId, status, score, feedback, nextAction]
+    CurrentTopicInput:
+      type: object
+      properties:
+        classId:
+          type: string
+        subjectCode:
+          type: string
+        topic:
+          type: string
+        topicCode:
+          type: string
+      required: [classId, subjectCode, topic, topicCode]
+    CurrentTopic:
+      type: object
+      properties:
+        classId:
+          type: string
+        subjectCode:
+          type: string
+        topic:
+          type: string
+        topicCode:
+          type: string
+        effectiveDate:
+          type: string
+      required: [classId, subjectCode, topic, topicCode, effectiveDate]
+    WorkspaceSource:
+      type: object
+      properties:
+        source:
+          type: string
+          enum: [classroom, sheets, drive, forms]
+        role:
+          type: string
+        status:
+          type: string
+          enum: [mock_ready, optional, not_connected]
+        recordCount:
+          type: integer
+        lastSyncAt:
+          type: ["string", "null"]
+      required: [source, role, status, recordCount, lastSyncAt]
+    WorkspaceEntity:
+      type: object
+      properties:
+        name:
+          type: string
+        ownership:
+          type: string
+          enum: [postgresql, external_reference]
+        fields:
+          type: array
+          items:
+            type: string
+        relation:
+          type: string
+      required: [name, ownership, fields, relation]
+    WorkspaceCourse:
+      type: object
+      properties:
+        externalCourseId:
+          type: string
+        internalClassId:
+          type: string
+        name:
+          type: string
+        teacher:
+          type: string
+        studentCount:
+          type: integer
+        syncStatus:
+          type: string
+      required: [externalCourseId, internalClassId, name, teacher, studentCount, syncStatus]
+    WorkspaceImportBatch:
+      type: object
+      properties:
+        id:
+          type: string
+        source:
+          type: string
+        fileName:
+          type: string
+        status:
+          type: string
+          enum: [draft, validated, approved, rejected]
+        rowCount:
+          type: integer
+        validCount:
+          type: integer
+        errorCount:
+          type: integer
+        version:
+          type: integer
+      required: [id, source, fileName, status, rowCount, validCount, errorCount, version]
+    WorkspaceAuditEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        action:
+          type: string
+        source:
+          type: string
+        summary:
+          type: string
+        idempotencyKey:
+          type: string
+        createdAt:
+          type: string
+      required: [id, action, source, summary, idempotencyKey, createdAt]
+    WorkspaceIntegrationDashboard:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [mock, not_connected]
+        systemOfRecord:
+          type: string
+        principle:
+          type: string
+        sources:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspaceSource"
+        entities:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspaceEntity"
+        pipeline:
+          type: array
+          items:
+            type: string
+        courses:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspaceCourse"
+        importBatches:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspaceImportBatch"
+        auditEvents:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspaceAuditEvent"
+        dataNotice:
+          type: string
+      required: [mode, systemOfRecord, principle, sources, entities, pipeline, courses, importBatches, auditEvents, dataNotice]
+    WorkspaceSimulationInput:
+      type: object
+      properties:
+        action:
+          type: string
+          enum: [sync_classroom, import_sheet, import_drive, publish_coursework]
+        idempotencyKey:
+          type: string
+          minLength: 8
+      required: [action, idempotencyKey]
+
+    PreviewStudent:
+      type: object
+      properties:
+        id: {type: string}
+        code: {type: string}
+        displayName: {type: string}
+        className: {type: string}
+        gradeLevel: {type: integer}
+      required: [id, code, displayName, className, gradeLevel]
+    SubjectOverview:
+      type: object
+      properties:
+        code: {type: string}
+        name: {type: string}
+        assessedSkills: {type: integer}
+        masteredSkills: {type: integer}
+        approvedLessons: {type: integer}
+      required: [code, name, assessedSkills, masteredSkills, approvedLessons]
+    CatalogItem:
+      type: object
+      properties:
+        id: {type: string}
+        kind: {type: string, enum: [lesson, task, check]}
+        code: {type: string}
+        subject: {type: string}
+        skill: {type: string}
+        skillCode: {type: string}
+        gradeLevel: {type: [integer, "null"]}
+        status: {type: string}
+        skillStatus: {type: string}
+        title: {type: string}
+        materialBlocks:
+          type: array
+          items:
+            $ref: "#/components/schemas/MaterialBlock"
+        estimatedMinutes: {type: [integer, "null"]}
+        maxScore: {type: [number, "null"]}
+        sourceTitle: {type: [string, "null"]}
+      required: [id, kind, code, subject, skill, skillCode, gradeLevel, status, skillStatus, title, materialBlocks, estimatedMinutes, maxScore, sourceTitle]

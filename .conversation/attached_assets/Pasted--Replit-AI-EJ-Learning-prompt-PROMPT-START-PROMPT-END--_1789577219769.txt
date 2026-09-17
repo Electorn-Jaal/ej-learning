@@ -1,0 +1,320 @@
+# Replit AI-д өгөх EJ Learning системийн prompt
+
+Энэ файлын **“PROMPT START” → “PROMPT END”** хэсгийг Replit AI-д бүтнээр нь өгнө. Хавсаргах файлууд:
+
+1. `EJ_LEARNING_SYSTEM_DESIGN.md` — системийн тайлбар, урсгал, өгөгдлийн шалтгаан.
+2. `EJ_LEARNING_SYSTEM/database/migrations/` — DB бүтцийн SQL файлууд. V9–V11 нь бэлтгэсэн өөрчлөлтүүд; үндсэн DB-д суусан гэж таамаглаж болохгүй.
+3. `schema_details.txt` эсвэл шинээр гаргасан schema-only `schema.sql` — бодит DB-ийн бүтцийн лавлагаа.
+4. `EJ_LEARNING_SYSTEM/EJ_9r_Mongol_ADAPTIVE_SYSTEM_DAILY_FINAL.xlsx` — агуулга болон урсгалын жишиг. Сурагчийн хувийн мэдээлэл байвал нэргүй болгосон хуулбарыг ашиглана.
+
+Зөвхөн schema SQL өгвөл хүснэгтүүдийн бүтэц очно; ном, сурагч, дасгалын бодит мөрүүд автоматаар очихгүй. Replit дээр холбогдох DB эсвэл импортлох файл хэрэгтэй. Local PostgreSQL-ийн `localhost` хаяг нь Replit дээр тухайн компьютерыг заахгүй. Холболтын нууц үгийг prompt-д бичихгүй, Replit-ийн secret тохиргоонд оруулна.
+
+Prompt-ийг англиар бичсэн боловч бүтээгдэхүүний хэрэглэгчийн бүх интерфейс монгол хэлтэй байх шаардлага тавьсан. Доорх нь эцсийн бүтээгдэхүүний шаардлага; хавсаргасан SQL бүрэн backend, authentication эсвэл бэлэн агуулга гэсэн үг биш.
+
+---
+
+## PROMPT START
+
+You are building **EJ Learning**, a Mongolian-language adaptive learning web application for students in grades 6–11, their teachers, and content administrators.
+
+Build a working application with a real PostgreSQL-backed learning workflow. Use the attached design document, database schema/migrations, and grade 9 Mongolian-language workbook as references. Read them before choosing or changing the data model.
+
+The first complete pilot is **grade 9 Mongolian language**, with relevant prerequisite skills from lower grades. The architecture must support other subjects and grades without creating a separate application for each one.
+
+### 1. Product purpose
+
+The product helps a student understand what they need to learn next, study appropriate material, practice, and demonstrate understanding.
+
+The core journey is:
+
+**Current classroom topic → topic-specific diagnostic → skill-level evidence → prerequisite check when needed → assigned learning activities → reading and practice → understanding check → updated progress and next activity.**
+
+Example:
+
+- A grade 9 student is studying a specific Mongolian-language topic.
+- A diagnostic identifies difficulty in a particular skill.
+- The curriculum links that skill to a grade 8 prerequisite.
+- The application checks whether that prerequisite actually needs support.
+- If confirmed, it assigns the relevant grade 8 explanation and practice.
+- The student completes a check of that prerequisite, then returns to the grade 9 target skill.
+- Mastering a prerequisite does not automatically mark the grade 9 target skill as mastered.
+
+This is a learning-support workflow. A collection of PDFs, a quiz dashboard, or a static timetable alone does not satisfy it.
+
+### 2. Inspect the supplied project and data first
+
+Before implementing:
+
+1. Read `EJ_LEARNING_SYSTEM_DESIGN.md`.
+2. Inspect the supplied migrations and the actual database schema if a connection is available.
+3. Inspect the workbook's sheet names, headers, codes, representative content rows, and formulas relevant to the workflow.
+4. Distinguish existing tables from proposed or unapplied migrations. Inspect installed migration history; do not blindly rerun all SQL files against an existing database.
+5. Produce a concise implementation checklist, then implement the application. Do not stop after presenting the checklist.
+
+If the live DB or real content is unavailable, continue building the application and import/setup workflow against a separate development database using the supplied schema. Clearly report the missing connection or content. Do not pretend real data was imported.
+
+Preserve working supplied code where suitable. If no app code is supplied, choose a maintainable React/TypeScript frontend and server-side API with PostgreSQL. Keep database access, scoring, authorization, and recommendation logic on the server. Use versioned migrations and environment-based configuration.
+
+### 3. Data model: preserve the distinctions
+
+Use and extend the supplied schema instead of replacing it with unrelated generic LMS tables.
+
+Existing foundations:
+
+- `core.subjects`, `grade_levels`, `classes`, `students`, `student_enrollments`: subject, grade, class, student, enrollment.
+- `content.content_nodes`: curriculum/content hierarchy.
+- `content.skills`: measurable learning skills.
+- `content.content_skill_maps`: topic-to-skill mappings.
+- `content.skill_dependencies`: target skill and prerequisite skill relationships.
+- `content.source_materials`, `source_material_grades`, `source_versions`, `source_outline_nodes`, `content_source_alignments`: source material, grade applicability, file version, outline, and topic/page alignment.
+- `assessment.diagnostic_items`, `diagnostic_attempts`, `diagnostic_responses`: diagnostic content and recorded results.
+- `assessment.web_diagnostic_submissions`, `web_diagnostic_answers`: the existing web submission workflow.
+- `learning.daily_lessons`, `tasks`, `mastery_checks`: reusable content banks.
+- `learning.student_skill_mastery`: the current per-student, per-skill state.
+- `staging.import_jobs`, `import_rows`, `audit.change_logs`: import and change tracking.
+
+The supplied V9–V11 migration files add structures for current topics, approved evaluation policies, assessment forms and items, daily assignments, task and assessment attempts, mastery events, source-version links, identity mappings, and a web-diagnostic bridge. Inspect their definitions and integration requirements. Their presence as files does not mean they are installed, fully integrated, or sufficient for every requirement below.
+
+Important distinctions:
+
+- A student's enrolled grade is different from the grade of the material they need today.
+- A curriculum topic is different from a measurable skill.
+- A textbook outline is different from a curriculum topic hierarchy.
+- A lesson template is different from a lesson assigned to a particular student on a particular date.
+- A question bank is different from a versioned test containing specific questions.
+- An assigned activity is different from an attempt to complete it.
+- Current mastery is different from the evidence and history that produced it.
+- Reading completion is different from demonstrated understanding.
+
+Store relationships using real foreign keys. Avoid comma-separated task IDs or human-readable code ranges as the only machine-readable links. Preserve stable content codes for import/export, but resolve them to validated IDs internally.
+
+Add narrowly scoped migrations for any missing functionality, such as teacher-to-class authorization mappings, content attachments, idempotency, or rule configuration. Explain the reason for each addition. Do not delete existing data or rewrite applied migrations.
+
+### 4. Roles and authorization
+
+Implement actual login and server-side authorization for:
+
+**Student**
+
+- Access only their own assigned activities, attempts, results, and progress.
+- View published learning material relevant to their activities.
+- Submit answers and resume unfinished work.
+
+**Teacher**
+
+- Access only authorized classes and their students.
+- Set the current topic for each class and subject.
+- Review student work, score written answers using a rubric, and provide feedback.
+- Inspect the evidence behind recommendations and mastery changes.
+- Adjust assignments with a recorded reason.
+
+**Content administrator**
+
+- Manage subjects, grades, content hierarchy, skills, dependencies, materials, lessons, questions, and imports.
+- Review and approve content and evaluation policies before student use.
+- Manage permitted user/class relationships.
+
+A role dropdown or a student code in localStorage is not authentication. Do not trust a student ID or role supplied by the browser. Bind identity to the authenticated server-side user. The supplied `core.user_profiles` table is an identity mapping, not a complete authentication or permission system.
+
+Do not expose answer guides, correct options, private rubrics, or grading secrets in student API responses before the intended feedback stage. Hiding a field in the UI is insufficient.
+
+### 5. Current topic and diagnostic
+
+For the initial pilot, the teacher selects the current topic for a class and subject. Store dates and status. Do not assume grade number determines the current topic.
+
+The diagnostic must:
+
+- Use a defined test version and ordered questions mapped to specific skills.
+- Display actual question text and supporting material.
+- Save answers reliably and distinguish unanswered, submitted, awaiting review, and reviewed states.
+- Score objective questions server-side when a verified answer key exists.
+- Send written answers to a teacher with a rubric. Do not claim automated essay grading is implemented unless it actually is.
+- Report results by skill, not only a total percentage.
+- Store the exact test/question version or immutable snapshot and maximum score used for the attempt.
+
+A failed target-skill question must not automatically mark every prerequisite as weak. Dependencies identify candidate skills to check. Mark a prerequisite gap only from relevant assessment evidence or a recorded teacher assessment. If there is insufficient evidence, display “Нэмэлт шалгалт хэрэгтэй”.
+
+The current workbook contains different threshold examples. Do not silently hardcode 60% or 80% as a universal final rule. Provide an admin/teacher-reviewed evaluation policy with explicit thresholds, sufficient-evidence requirements, and a version. Require an approved policy before production assignment and grading decisions use it.
+
+### 6. Daily assignments and learning activities
+
+The student's main screen is **“Өнөөдрийн ажил”**.
+
+Each subject card should explain:
+
+- Subject and topic.
+- A plain-language learning goal.
+- A short reason this activity is recommended.
+- What to read, practice, and check.
+- Estimated time and current completion state.
+- One clear next action.
+
+Persist daily assignments. Reloading, logging in twice, or retrying a request must not generate duplicate work or silently change today's assigned content.
+
+An activity sequence may include:
+
+1. Read an explanation or a specific PDF section.
+2. Study a worked example.
+3. Complete guided or independent practice.
+4. Submit an understanding check.
+5. Receive feedback or see that teacher review is pending.
+
+Use a configurable daily time budget across subjects. Show unfinished work before assigning an excessive new workload. Make ordering deterministic, including tied scores. Store the selection reason and rule version. If no suitable approved content exists, show a useful empty state and notify the teacher; do not invent a lesson or label missing content as completed.
+
+For PDF reading, connect the exact file version and page range. Distinguish printed page numbers from PDF page positions. Provide open/download fallback when embedding is unsupported. Store files in suitable file/object storage and keep metadata/storage references in PostgreSQL.
+
+Do not show answer keys while the student is completing the assessed work.
+
+### 7. Understanding checks and next actions
+
+After studying, the student completes a check tied to the target skill.
+
+- Keep every attempt and response; retries must not overwrite earlier attempts.
+- Store the submitted answer, score, maximum score, feedback, reviewer, timestamps, and policy/test version.
+- A pending written answer keeps the result pending. Do not publish a final score from partially reviewed work.
+- A completed lesson alone does not update mastery.
+- A reviewed check updates only the skills actually supported by its evidence.
+- Append an immutable mastery event and update the current mastery state consistently in one transaction.
+- Repeated submission/review requests must not double-count attempts or mastery events.
+
+The next action may be reinforcement, a different exercise, a confirmed prerequisite activity, return to the original target skill, the next skill, a scheduled review, or teacher support. Make these actions explicit and configurable. Avoid endlessly sending the same failing exercise without explanation or escalation.
+
+For the initial version, transparent deterministic rules and teacher review are appropriate. An AI model is not required to make the core workflow work. Do not add invented AI-generated curriculum or claim that recommendations are AI-powered when they are rule-based.
+
+### 8. Required screens
+
+Build a coherent, responsive interface in Mongolian Cyrillic.
+
+**Student screens**
+
+- Login and account access.
+- “Өнөөдрийн ажил”: prioritized daily activities across subjects.
+- Subject/topic overview with current focus.
+- Diagnostic or understanding-check player.
+- Lesson reader: explanation, example, PDF/material, practice, next step.
+- Submission confirmation and pending-review state.
+- Results and next recommended action.
+- “Миний ахиц”: skill progress and attempt history, with evidence dates.
+
+**Teacher screens**
+
+- Class overview and student list.
+- Current-topic planning by class/subject.
+- Student detail: target skills, assessed gaps, unassessed prerequisites, assigned work, attempts.
+- Review queue and rubric-based marking screen.
+- Assignment adjustment with reason.
+
+**Content administrator screens**
+
+- Curriculum/content tree and skill editor.
+- Prerequisite relationship editor with a readable dependency graph.
+- Material/file registry with version and page mapping.
+- Lesson, exercise, and assessment-form editors.
+- Draft/review/approval workflow and completeness checks.
+- Evaluation-policy configuration and approval.
+- Excel import preview, validation errors, and import history.
+
+Use clean typography, readable spacing, restrained color, accessible contrast, keyboard-friendly controls, and mobile-friendly learning screens. Choose appropriate education-oriented visuals only where useful. Do not fill the student experience with database table names, internal codes, debug states, or implementation jargon.
+
+Use supportive messages. For example, “Энэ чадварыг хамт бататгая” is preferable to labeling the child as a weak student. Technical codes belong in administrative detail views.
+
+Loading, empty, unavailable-content, validation-error, pending-review, and successful-submission states must be implemented. Every visible primary action must work end to end.
+
+### 9. How to use the grade 9 workbook
+
+The workbook combines reusable content, example calculations, student records, daily-work selection, and reporting views. Do not create one database table per sheet automatically.
+
+Map relevant sheets as follows:
+
+- `ЧАДВАРЫН_ХОЛБОО`: skills, diagnostic mappings, prerequisites.
+- `ДАСГАЛЫН_САН` and `AUTO_TASK_BANK`: exercise banks; reconcile codes and overlaps before import.
+- `SKILL_CONTENT_BANK` and `DAILY_LESSON_BANK`: lesson content and objectives.
+- `AUTO_MASTERY_CHECK` and `ХАРИУ_ҮНЭЛГЭЭ`: check items and marking guidance, with purpose verified.
+- `2_ОНОО_ОРУУЛАХ`: diagnostic result import when student identity and assessment provenance are available.
+- `ӨДРИЙН_ҮР_ДҮН_БҮРТГЭЛ` and `ДАВТАЛТ_ДААЛГАВРЫН_ТҮҮХ`: requirements for persisted activity/attempt history.
+- `AUTO_ASSIGNMENT`, `AUTO_DAILY_PLAN`, `DAILY_ASSIGNMENT`, and `NEXT_DAY_ENGINE`: examples to translate into explicit reviewed application rules.
+- Student/teacher/management views: reporting requirements derived from stored data.
+
+The workbook is a reference and content candidate, not proof that all entries are complete, curriculum-verified, or ready for students. A row saying “work on five examples” needs the actual five examples or a resolvable material link. “Grade by rubric” needs an actual rubric.
+
+Provide an import workflow:
+
+**Upload → detect sheets/headers → preview mapped rows → validate → show errors with sheet and row → authorized confirmation → transactional import → audit result.**
+
+Check required fields, stable codes, subject consistency, references, duplicates, score bounds, prerequisite cycles, source version/page references, and complete question/answer content. Reject or quarantine invalid rows with actionable explanations. Do not silently fabricate missing fields or mark draft content approved.
+
+Make repeated import idempotent. Define whether a changed content code produces a new version or an explicit update, and preserve historical snapshots. Do not re-import a student's old worksheet score over a newer learning result.
+
+### 10. Database integration and operational requirements
+
+- Keep credentials in environment secrets, never source code or frontend bundles.
+- A Replit runtime cannot use the developer's laptop `localhost` as its database. Use an intentionally provisioned accessible PostgreSQL instance or import into a separate development instance.
+- Keep the existing schemas and use controlled migrations. Back up an existing DB before migration, check applied versions, and make migration failures transactional.
+- Never drop tables, overwrite real student data, or replace the database with demo data to make the interface appear populated.
+- Use parameterized queries, transactions, foreign keys, unique constraints, and appropriate indexes.
+- Enforce ownership and teacher/class access on every read and write endpoint.
+- Validate score bounds and exact test membership on the server.
+- Preserve the existing web-diagnostic API behavior if supplied code depends on it. If using the bridge, verify one reviewed web submission maps to exactly one canonical diagnostic attempt.
+- Legacy diagnostic bridging alone does not establish the new policy-based mastery and daily-assignment workflow. Implement and test that integration explicitly.
+- Expose safe student DTOs separately from teacher/admin grading data.
+- Keep demo/test fixtures separate and clearly labeled. The default experience should display real data or honest empty states.
+
+### 11. Implement in this order
+
+**Phase A: inspect and connect**
+
+Confirm the schema, migration state, available real content, and application structure. Establish the server/database connection, authentication, role boundaries, and basic catalog reads.
+
+**Phase B: one complete pilot**
+
+Implement one grade 9 Mongolian topic with its real, reviewed prerequisite content through the whole journey: topic selection, diagnostic, evidence, assignment, learning, submission, teacher review, mastery event, next action. Support two students with different outcomes.
+
+**Phase C: content management and import**
+
+Complete content approval, materials, skill/dependency editing, versioned assessment forms/policies, and validated workbook import. Use this to scale the pilot, not copied hardcoded frontend objects.
+
+**Phase D: progress and expansion**
+
+Finish history and teacher reports, cross-subject daily budgeting, and reusable support for grades 6–11. Missing content in another grade must produce an honest empty state.
+
+Continue implementing after each phase. Keep a short progress checklist and state material blockers. If a required external secret, file, or content decision is missing, ask a focused question while continuing independent work.
+
+### 12. Acceptance tests: demonstrate actual behavior
+
+Before claiming completion, verify at least these cases:
+
+1. Two students in the same class receive different activities when their evidence differs.
+2. A grade 9 student can use grade 8 material without changing their enrolled grade.
+3. An unassessed prerequisite is not automatically marked as a confirmed gap.
+4. Refreshing or retrying assignment generation preserves the same daily work without duplicates.
+5. Reading completion alone never marks a skill mastered.
+6. A second attempt preserves the first attempt and its original questions, scores, and policy version.
+7. A pending written response prevents final grading and mastery updates.
+8. Mastering a prerequisite does not automatically master its dependent target skill.
+9. Draft, missing, or broken content is not assigned to students.
+10. Re-importing the same file does not duplicate records or overwrite newer student progress.
+11. A student cannot access another student's results or the pre-submission answer key by changing API parameters.
+12. A teacher cannot review students outside their authorized classes.
+13. Score values outside the allowed range are rejected server-side.
+14. A prerequisite cycle and invalid source/version mapping are rejected with useful messages.
+15. Reviewed results can be traced to the exact evidence and produce a clear next action.
+16. Concurrent/retried submissions and reviews do not double-count results.
+
+Use automated tests for database integrity, authorization, scoring, and persistence, plus a real browser walkthrough of the student and teacher journey. Show what was actually tested and identify any unverified integration.
+
+### 13. Delivery expectations
+
+Deliver working code, required migrations, setup instructions, and a brief explanation of:
+
+- How to run the application and configure the database and file storage.
+- How to create the first authorized administrator/teacher/student accounts securely.
+- Which real content was imported and which still needs review.
+- How the data model supports diagnosis, prerequisites, assignments, attempts, and mastery.
+- Which business rules are configurable and which decisions remain open.
+- Test results and any remaining incomplete work.
+
+Do not call the application complete because the screens look finished. Completion means the pilot learning journey persists real data correctly, respects role permissions, and passes the acceptance checks above.
+
+Start by inspecting the supplied files, summarize the concrete implementation approach briefly, and begin building.
+
+## PROMPT END
