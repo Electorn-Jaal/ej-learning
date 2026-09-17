@@ -50,6 +50,13 @@
       "when": 1789620800069,
       "tag": "0006_wonderful_vision",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789621141215,
+      "tag": "0007_tearful_lester",
+      "breakpoints": true
     }
   ]
 }
