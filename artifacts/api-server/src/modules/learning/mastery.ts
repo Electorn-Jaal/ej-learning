@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, readRows } from "@workspace/db";
+import { recordChange } from "../../shared/audit";
 
 /**
  * Turning answers into a judgement about a skill.
@@ -77,7 +78,7 @@ export async function recordSkillEvidence(
       )
       INSERT INTO learning.student_skill_mastery
         (student_id, skill_id, mastery_status, mastery_score,
-         attempt_count, last_assessed_at, updated_at)
+         attempt_count, last_assessed_at, updated_at, source, assessed_by)
       SELECT ${studentId}, ${item.skillId},
         CASE
           WHEN b.score >= ${MASTERED_AT} AND b.attempts >= ${SITTINGS_FOR_MASTERY}
@@ -85,14 +86,21 @@ export async function recordSkillEvidence(
           WHEN b.score >= ${DEVELOPING_AT} THEN 'DEVELOPING'
           ELSE 'GAP'
         END,
-        b.score, b.attempts, COALESCE(${assessedAt}::timestamptz, now()), now()
+        b.score, b.attempts, COALESCE(${assessedAt}::timestamptz, now()), now(),
+        'AUTO', NULL
       FROM blended b
       ON CONFLICT ON CONSTRAINT student_skill_mastery_pkey DO UPDATE SET
         mastery_status = EXCLUDED.mastery_status,
         mastery_score = EXCLUDED.mastery_score,
         attempt_count = EXCLUDED.attempt_count,
         last_assessed_at = EXCLUDED.last_assessed_at,
-        updated_at = now()`);
+        updated_at = now(),
+        -- A teacher's figure is the prior the blend starts from, not a lock:
+        -- the answers a child has just given are newer evidence about the same
+        -- skill. Once blended the number is no longer purely the teacher's, so
+        -- it stops claiming to be. The original stays in audit.change_logs.
+        source = 'AUTO',
+        assessed_by = NULL`);
   }
 }
 
@@ -144,3 +152,64 @@ export const orphanedAttempts = () =>
         AND i.id = (answer->>'questionId')::bigint
        WHERE i.skill_id IS NOT NULL)`,
   );
+
+/**
+ * A teacher's own judgement of where a student stands.
+ *
+ * The primary-grade workflow is paper: the child works in a notebook, the
+ * teacher marks it, and what reaches the system is the teacher's conclusion.
+ * There is no quiz to blend, so this replaces the standing outright rather
+ * than folding into it.
+ *
+ * A status may be given without a score. That is the case the requirements
+ * ask for by name - the teacher overriding the arithmetic - and forcing them
+ * to invent a percentage to express "this child has not got it" would put a
+ * number in the database that nobody measured.
+ */
+export async function recordTeacherMastery(input: {
+  studentId: number;
+  skillId: number;
+  status: "MASTERED" | "DEVELOPING" | "GAP";
+  score: number | null;
+  teacherUsername: string;
+}) {
+  const [before] = await readRows<{
+    masteryStatus: string;
+    masteryScore: string | null;
+    attemptCount: number;
+    source: string;
+  }>(
+    `SELECT mastery_status AS "masteryStatus", mastery_score AS "masteryScore",
+       attempt_count AS "attemptCount", source
+     FROM learning.student_skill_mastery
+     WHERE student_id = $1::bigint AND skill_id = $2::bigint`,
+    [input.studentId, input.skillId],
+  );
+
+  await db.execute(sql`
+    INSERT INTO learning.student_skill_mastery
+      (student_id, skill_id, mastery_status, mastery_score,
+       attempt_count, last_assessed_at, updated_at, source, assessed_by)
+    VALUES (${input.studentId}, ${input.skillId}, ${input.status}, ${input.score},
+      ${(before?.attemptCount ?? 0) + 1}, now(), now(), 'TEACHER', ${input.teacherUsername})
+    ON CONFLICT ON CONSTRAINT student_skill_mastery_pkey DO UPDATE SET
+      mastery_status = EXCLUDED.mastery_status,
+      mastery_score = EXCLUDED.mastery_score,
+      attempt_count = EXCLUDED.attempt_count,
+      last_assessed_at = EXCLUDED.last_assessed_at,
+      updated_at = now(),
+      source = 'TEACHER',
+      assessed_by = EXCLUDED.assessed_by`);
+
+  await recordChange({
+    schemaName: "learning",
+    tableName: "student_skill_mastery",
+    recordPk: `${input.studentId}:${input.skillId}`,
+    action: before ? "UPDATE" : "INSERT",
+    changedBy: input.teacherUsername,
+    oldData: before ?? undefined,
+    newData: { masteryStatus: input.status, masteryScore: input.score, source: "TEACHER" },
+  });
+
+  return { replaced: before ?? null };
+}

@@ -1,0 +1,3 @@
+ALTER TABLE "learning"."student_skill_mastery" ADD COLUMN "source" varchar(20) DEFAULT 'AUTO' NOT NULL;--> statement-breakpoint
+ALTER TABLE "learning"."student_skill_mastery" ADD COLUMN "assessed_by" varchar(200);--> statement-breakpoint
+ALTER TABLE "learning"."student_skill_mastery" ADD CONSTRAINT "student_skill_mastery_source_check" CHECK ((source)::text = ANY ((ARRAY['AUTO'::character varying, 'TEACHER'::character varying])::text[]));

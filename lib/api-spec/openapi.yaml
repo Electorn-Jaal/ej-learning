@@ -542,6 +542,75 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /teacher/assessment-sheet:
+    get:
+      operationId: getAssessmentSheet
+      tags: [teacher]
+      summary: The register for marking a paper assessment
+      description: >
+        Primary grades do the monthly assessment in a notebook, so nothing
+        reaches the system until a teacher has marked it. Returns the skills
+        this class may be marked against and where every student currently
+        stands on the one chosen. A student nobody has assessed is present
+        with empty values rather than absent.
+      parameters:
+        - name: classId
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: skillId
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The register
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssessmentSheet"
+        "403":
+          description: Not a teacher of that class
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /teacher/assessments:
+    post:
+      operationId: submitAssessment
+      tags: [teacher]
+      summary: Record a teacher's own marking of a paper assessment
+      description: >
+        The level may be given without a score. That is the teacher overriding
+        the arithmetic, which the requirements ask for by name, and demanding
+        a percentage would put a number in the database nobody measured.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssessmentSubmission"
+      responses:
+        "201":
+          description: Recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubmitAssessmentResult"
+        "400":
+          description: A skill or student that does not belong to the class
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Not a teacher of that class
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /teacher/class-skills:
     get:
       operationId: getClassSkills
@@ -1738,6 +1807,103 @@ components:
         detail:
           type: string
       required: [studentId, studentCode, studentName, level, reason, detail]
+    MasteryStatus:
+      type: string
+      enum: [MASTERED, DEVELOPING, GAP]
+    AssessableSkill:
+      type: object
+      properties:
+        skillId:
+          type: integer
+        skillCode:
+          type: string
+        skillName:
+          type: string
+      required: [skillId, skillCode, skillName]
+    RosterEntry:
+      type: object
+      description: >
+        One student's standing on the chosen skill. Every field but the
+        identity is null for a student nobody has assessed yet.
+      properties:
+        studentId:
+          type: integer
+        studentCode:
+          type: string
+        studentName:
+          type: string
+        masteryStatus:
+          type: ["string", "null"]
+        masteryScore:
+          type: ["integer", "null"]
+        source:
+          description: TEACHER where a person entered it, AUTO where the system computed it.
+          type: ["string", "null"]
+        assessedBy:
+          type: ["string", "null"]
+        lastAssessedAt:
+          type: ["string", "null"]
+      required:
+        [studentId, studentCode, studentName, masteryStatus, masteryScore,
+         source, assessedBy, lastAssessedAt]
+    AssessmentSheet:
+      type: object
+      properties:
+        classId:
+          type: integer
+        className:
+          type: string
+        gradeLevel:
+          type: integer
+        stage:
+          type: string
+          enum: [PRIMARY, SECONDARY]
+        skills:
+          type: array
+          items:
+            $ref: "#/components/schemas/AssessableSkill"
+        skillId:
+          type: ["integer", "null"]
+        students:
+          type: array
+          items:
+            $ref: "#/components/schemas/RosterEntry"
+      required: [classId, className, gradeLevel, stage, skills, skillId, students]
+    AssessmentEntry:
+      type: object
+      properties:
+        studentId:
+          type: integer
+        status:
+          $ref: "#/components/schemas/MasteryStatus"
+        score:
+          type: ["integer", "null"]
+          minimum: 0
+          maximum: 100
+      required: [studentId, status, score]
+    AssessmentSubmission:
+      type: object
+      properties:
+        classId:
+          type: integer
+        skillId:
+          type: integer
+        entries:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/AssessmentEntry"
+      required: [classId, skillId, entries]
+    SubmitAssessmentResult:
+      type: object
+      properties:
+        classId:
+          type: integer
+        skillId:
+          type: integer
+        recorded:
+          type: integer
+      required: [classId, skillId, recorded]
     WeakStudent:
       type: object
       properties:

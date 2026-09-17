@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import {
   GenerateScheduleBody,
   GenerateScheduleResponse,
+  GetAssessmentSheetResponse,
   GetClassSkillsResponse,
   GetQuizPaperResponse,
   GetStudentTodayResponse,
@@ -12,12 +13,15 @@ import {
   AssignExtraWorkBody,
   AssignExtraWorkResponse,
   SetScheduleDayBody,
+  SubmitAssessmentBody,
+  SubmitAssessmentResponse,
   SubmitQuizAttemptBody,
   SubmitQuizAttemptResponse,
 } from "@workspace/api-zod";
 import { requireRole } from "../../middlewares/auth";
 import { badRequest, unauthorized } from "../../shared/http-error";
 import {
+  assessmentSheet,
   assignExtraWork,
   classSkillsForTeacher,
   generateSchedule,
@@ -27,6 +31,7 @@ import {
   recordQuizAttemptScored,
   schedulableLessons,
   setScheduleDay,
+  submitAssessment,
   studentToday,
   teacherDashboard,
   teacherSchedule,
@@ -158,6 +163,47 @@ router.post(
     }
   },
 );
+
+router.get(
+  "/teacher/assessment-sheet",
+  requireRole("TEACHER", "ADMIN"),
+  async (req, res, next) => {
+    try {
+      const classId = Number(req.query.classId);
+      if (!Number.isInteger(classId) || classId <= 0) {
+        throw badRequest("Ангийн дугаар буруу байна.", "INVALID_CLASS_ID");
+      }
+      // Absent means "whichever comes first"; present but unparseable is a
+      // caller mistake and should not be quietly treated as absent.
+      const raw = req.query.skillId;
+      let skillId: number | null = null;
+      if (raw !== undefined) {
+        skillId = Number(raw);
+        if (!Number.isInteger(skillId) || skillId <= 0) {
+          throw badRequest("Чадварын дугаар буруу байна.", "INVALID_SKILL_ID");
+        }
+      }
+
+      const sheet = await assessmentSheet(req.user!, classId, skillId);
+      res.json(GetAssessmentSheetResponse.parse(sheet));
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.post("/teacher/assessments", requireRole("TEACHER", "ADMIN"), async (req, res, next) => {
+  try {
+    const parsed = SubmitAssessmentBody.safeParse(req.body);
+    if (!parsed.success) {
+      throw badRequest("Үнэлгээний бүрдэл буруу байна.", "INVALID_ASSESSMENT");
+    }
+    const result = await submitAssessment(req.user!, parsed.data);
+    res.status(201).json(SubmitAssessmentResponse.parse(result));
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.get(
   "/teacher/class-skills",
