@@ -593,6 +593,72 @@ ${run.output}`);
       assert.equal(after.length, 1, "only the chosen subject should have gone");
       assert.equal(after[0].subject, Number(physicsId));
     });
+
+    it("tells two subjects on one day apart", async () => {
+      // A timetable row is a day and a subject. On the combined view a day
+      // taught twice comes back twice, and the screen needs something on the
+      // row to say which is which - without it the two are indistinguishable
+      // and the lesson picker cannot know which timetable it is writing to.
+      const client = createClient(harness.baseUrl);
+      await client.signIn(byName["demo-teacher"]);
+
+      // The day is built here rather than borrowed, so that what an earlier
+      // test cleared or filled cannot decide whether this one has anything
+      // to look at. The template row is read before the delete: this class
+      // may hold only the one day, and then there would be nothing to copy.
+      const [template] = await harness.sql(
+        `SELECT scheduled_on::text AS day, term_id::int AS term,
+            daily_lesson_id::int AS lesson, created_by::int AS author
+           FROM learning.class_schedule WHERE class_id = $1 LIMIT 1`,
+        [classA],
+      );
+      const day = template.day;
+      await harness.sql(
+        "DELETE FROM learning.class_schedule WHERE class_id = $1 AND scheduled_on = $2::date",
+        [classA, day],
+      );
+      for (const subject of [mathsId, physicsId]) {
+        await harness.sql(
+          `INSERT INTO learning.class_schedule
+             (class_id, term_id, daily_lesson_id, scheduled_on, subject_id, created_by)
+           VALUES ($1, $2, $3, $4::date, $5, $6)`,
+          [classA, template.term, template.lesson, day, subject, template.author],
+        );
+      }
+
+      const res = await client.request(
+        `/teacher/schedule?classId=${classA}&from=${day}&to=${day}`,
+      );
+      assert.equal(res.status, 200);
+
+      const rows = res.payload.days.filter((row) => row.scheduledOn === day);
+      assert.equal(rows.length, 2, "both subjects should be on the day");
+
+      const keys = rows.map((row) => `${row.scheduledOn}:${row.subjectId}`);
+      assert.deepEqual(keys, [...new Set(keys)], `rows repeat: ${keys.join(", ")}`);
+      for (const row of rows) {
+        assert.ok(row.subject, "a scheduled row should name its subject");
+      }
+      assert.deepEqual(
+        rows.map((row) => row.subjectId).sort((a, b) => a - b),
+        [Number(mathsId), Number(physicsId)].sort((a, b) => a - b),
+      );
+    });
+
+    it("lays out the current term when none is named", async () => {
+      // The screen has no way to look a term id up, so it used to send 1 -
+      // correct only where the terms happen to start there. Asking for the
+      // term today falls in is what pressing the button means.
+      const client = createClient(harness.baseUrl);
+      await client.signIn(byName["demo-teacher"]);
+
+      const res = await client.request("/teacher/schedule/generate", {
+        method: "POST",
+        body: { classId: Number(classA), subjectId: Number(mathsId) },
+      });
+      assert.equal(res.status, 200, JSON.stringify(res.payload));
+      assert.ok(typeof res.payload.notice === "string" && res.payload.notice.length > 0);
+    });
   });
 
   describe("a class teacher sees the whole class and marks only their own", () => {

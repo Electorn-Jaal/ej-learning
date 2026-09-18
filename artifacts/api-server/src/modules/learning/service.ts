@@ -540,11 +540,24 @@ function schoolDays(from: string, to: string): string[] {
 
 export async function generateSchedule(
   user: AuthenticatedUser,
-  input: { classId: number; termId: number; subjectId?: number | null },
+  input: { classId: number; termId?: number | null; subjectId?: number | null },
 ) {
   const klass = await authorisedClass(user, input.classId);
   const subjectIds = await editableSubjects(user, klass.classId, input.subjectId ?? null);
-  const [term] = await repository.termById(input.termId);
+
+  // No term named means the one we are in. The screen used to send 1, which
+  // is a term id only on a database whose terms happen to start at 1.
+  const termId =
+    input.termId ??
+    (await repository.termCovering(todayInUlaanbaatar()))[0]?.id ??
+    null;
+  if (termId === null) {
+    throw badRequest(
+      "Өнөөдөр ямар ч улиралд хамаарахгүй байна. Улирлаа бүртгэнэ үү.",
+      "NO_CURRENT_TERM",
+    );
+  }
+  const [term] = await repository.termById(termId);
   if (!term) throw badRequest("Улирал олдсонгүй.", "TERM_NOT_FOUND");
 
   const lessons = await repository.schedulableLessons(klass.classId, subjectIds);

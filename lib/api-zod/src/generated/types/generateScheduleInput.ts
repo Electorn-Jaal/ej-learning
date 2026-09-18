@@ -13,5 +13,9 @@ export interface GenerateScheduleInput {
      * @nullable
      */
   subjectId?: number | null;
-  termId: number;
+  /**
+     * Which term to lay out. Omit it for the term today falls in, which is what a teacher pressing the button means.
+     * @nullable
+     */
+  termId?: number | null;
 }

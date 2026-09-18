@@ -1240,8 +1240,11 @@ components:
             Lay out one subject's term. Null means every subject the teacher
             holds in this class.
         termId:
-          type: integer
-      required: [classId, termId]
+          description: >
+            Which term to lay out. Omit it for the term today falls in, which
+            is what a teacher pressing the button means.
+          type: ["integer", "null"]
+      required: [classId]
     GenerateScheduleResult:
       type: object
       properties:
@@ -1556,6 +1559,14 @@ components:
           pattern: '^\d{4}-\d{2}-\d{2}$'
         isToday:
           type: boolean
+        subjectId:
+          description: >
+            The subject this row's lesson belongs to, null on a day nothing is
+            scheduled for. A day appears once per subject taught that day, so
+            this is what tells two rows of the same date apart.
+          type: ["integer", "null"]
+        subject:
+          type: ["string", "null"]
         lessonId:
           description: Null on a teaching day nothing is scheduled for yet.
           type: ["integer", "null"]
@@ -1567,7 +1578,9 @@ components:
           type: ["string", "null"]
         note:
           type: ["string", "null"]
-      required: [scheduledOn, isToday, lessonId, lessonCode, lessonType, skillName, note]
+      required:
+        [scheduledOn, isToday, subjectId, subject, lessonId, lessonCode,
+         lessonType, skillName, note]
     TeacherSchedule:
       type: object
       properties:

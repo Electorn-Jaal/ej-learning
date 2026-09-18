@@ -42,6 +42,37 @@ const WHEN = new Intl.DateTimeFormat('mn-MN', {
   timeZone: 'Asia/Ulaanbaatar',
 })
 
+/** Marks out of marks available, as a whole percent. */
+const percent = (rows: { score: number; maxScore: number }[]) => {
+  const possible = rows.reduce((sum, row) => sum + row.maxScore, 0)
+  if (possible === 0) return 0
+  return Math.round((rows.reduce((sum, row) => sum + row.score, 0) / possible) * 100)
+}
+
+/** Three bands, the same everywhere: good, shaky, needs the teacher. */
+const dot = (share: number) =>
+  share >= 80 ? 'bg-success' : share >= 50 ? 'bg-pending' : 'bg-destructive'
+
+/**
+ * A percentage as a number and a length.
+ *
+ * A bar beside the figure is what makes a column of topics comparable at a
+ * glance - which is the whole question a teacher scanning a day is asking.
+ */
+function Share({ value }: { value: number }) {
+  return (
+    <span className="flex shrink-0 items-center gap-2">
+      <span className="hidden h-1.5 w-20 overflow-hidden rounded-full bg-secondary sm:block">
+        <span
+          className={`block h-full rounded-full ${dot(value)}`}
+          style={{ width: `${value}%` }}
+        />
+      </span>
+      <span className="w-10 text-right text-sm font-semibold tabular-nums">{value}%</span>
+    </span>
+  )
+}
+
 const tomorrow = () => {
   const date = new Date()
   date.setDate(date.getDate() + 1)
@@ -150,6 +181,18 @@ function AssignExtra({
   )
 }
 
+/**
+ * How a class did, read the way a teacher asks the question.
+ *
+ * The order is date, then topic, then the children - because "how did 9А go
+ * on fractions on Tuesday" is one question, and a flat list of every attempt
+ * ever made answers it only by reading until the dates change. The class and
+ * the subject are already chosen above, so those are not repeated here.
+ *
+ * Nothing below a day is opened for you. Spreading every child's every answer
+ * across the page buries the one number a teacher came for; the levels open
+ * when asked, one at a time.
+ */
 function Attempts({ classId, subjectId }: { classId: number; subjectId: number | null }) {
   const { data, isLoading, isError, error } = useGetTeacherQuizAttempts({
     classId,
@@ -159,6 +202,7 @@ function Attempts({ classId, subjectId }: { classId: number; subjectId: number |
   const { data: lessons } = useGetTeacherLessons(lessonParams, {
     query: { queryKey: getGetTeacherLessonsQueryKey(lessonParams) },
   })
+  const [openTopic, setOpenTopic] = useState<string | null>(null)
   const [openId, setOpenId] = useState<number | null>(null)
 
   if (isLoading) return <Skeleton className="h-64 w-full" />
@@ -180,10 +224,6 @@ function Attempts({ classId, subjectId }: { classId: number; subjectId: number |
     )
   }
 
-  // Grouped by the day the work was done, newest first. The class and the
-  // subject are already chosen above, so the day is the layer that was
-  // missing: a flat run of every attempt ever made answers "what happened
-  // today" only by reading until the dates change.
   const byDay = new Map<string, typeof data.attempts>()
   for (const attempt of data.attempts) {
     const day = dayOf(attempt.submittedAt)
@@ -197,16 +237,28 @@ function Attempts({ classId, subjectId }: { classId: number; subjectId: number |
       <CardHeader>
         <CardTitle className="text-lg">{data.className} — шалгах асуултын үр дүн</CardTitle>
         <p className="text-sm text-muted-foreground">
-          {data.attempts.length} хариулт, {days.length} өдөрт. Мөр дээр дарж
-          асуулт бүрийн хариултыг харна.
+          Огноо, дараа нь сэдвээр. Сэдэв дээр дарж хэн хэрхэн хариулсныг,
+          сурагч дээр дарж асуулт бүрийг харна.
         </p>
       </CardHeader>
       <CardContent className="space-y-6">
-        {days.map(([day, attempts]) => {
-          const scored = attempts.reduce((sum, a) => sum + a.score, 0)
-          const possible = attempts.reduce((sum, a) => sum + a.maxScore, 0)
+        {days.map(([day, dayAttempts]) => {
+          // One topic is one lesson: lessonCode is the thing that is the same
+          // between two children who sat the same quiz, where the name is only
+          // what it is called.
+          const byTopic = new Map<string, typeof data.attempts>()
+          for (const attempt of dayAttempts) {
+            byTopic.set(attempt.lessonCode, [
+              ...(byTopic.get(attempt.lessonCode) ?? []),
+              attempt,
+            ])
+          }
+          const topics = [...byTopic.entries()].sort(([, a], [, b]) =>
+            a[0]!.skillName.localeCompare(b[0]!.skillName, 'mn'),
+          )
+
           return (
-            <section key={day}>
+            <section key={day} className="space-y-2">
               <h3 className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-border pb-2">
                 <span className="font-semibold">
                   {DAY_LABEL.format(new Date(day + 'T00:00:00Z'))}
@@ -217,83 +269,120 @@ function Attempts({ classId, subjectId }: { classId: number; subjectId: number |
                   </span>
                 ) : null}
                 <span className="text-sm font-normal text-muted-foreground">
-                  {attempts.length} хариулт
-                  {possible > 0 ? ` · дундаж ${Math.round((scored / possible) * 100)}%` : ''}
+                  {topics.length} сэдэв · {dayAttempts.length} хариулт ·{' '}
+                  {percent(dayAttempts)}%
                 </span>
               </h3>
 
               <ul className="divide-y">
-                {attempts.map((attempt) => {
-                  const open = openId === attempt.id
-                  const ratio = attempt.score / attempt.maxScore
+                {topics.map(([lessonCode, attempts]) => {
+                  const topicKey = `${day}:${lessonCode}`
+                  const topicOpen = openTopic === topicKey
+                  const share = percent(attempts)
                   return (
-                    <li key={attempt.id}>
+                    <li key={topicKey}>
                       <button
                         type="button"
-                        onClick={() => setOpenId(open ? null : attempt.id)}
-                        aria-expanded={open}
+                        onClick={() => {
+                          setOpenTopic(topicOpen ? null : topicKey)
+                          setOpenId(null)
+                        }}
+                        aria-expanded={topicOpen}
                         className="flex w-full flex-wrap items-center gap-3 py-3 text-left transition-colors hover:bg-secondary/50"
                       >
                         <div className="min-w-0 flex-1">
                           <div className="truncate text-sm font-medium">
-                            {attempt.studentName}
-                            <span className="ml-2 font-normal text-muted-foreground">
-                              {attempt.studentCode}
-                            </span>
+                            {attempts[0]!.skillName}
                           </div>
-                          <div className="truncate text-xs text-muted-foreground">
-                            {attempt.skillName} · {WHEN.format(new Date(attempt.submittedAt))}
+                          <div className="text-xs text-muted-foreground">
+                            {attempts.length} сурагч хариулсан
                           </div>
                         </div>
 
-                        <span className="flex items-center gap-2 text-sm font-semibold">
-                          <span
-                            className={`h-1.5 w-1.5 rounded-full ${
-                              ratio === 1
-                                ? 'bg-success'
-                                : ratio >= 0.5
-                                  ? 'bg-pending'
-                                  : 'bg-destructive'
-                            }`}
-                          />
-                          {attempt.score}/{attempt.maxScore}
-                        </span>
+                        <Share value={share} />
 
-                        {open ? (
-                          <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                        {topicOpen ? (
+                          <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
                         ) : (
-                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
                         )}
                       </button>
 
-                      {open ? (
-                        <ol className="space-y-3 pb-4 pl-1">
-                    {attempt.answers.map((answer, index) => (
-                      <li key={answer.questionId} className="text-sm">
-                        <p className="font-medium">
-                          {index + 1}. {answer.prompt}
-                        </p>
-                        <p className="mt-0.5 flex items-start gap-2 text-muted-foreground">
-                          {answer.correct ? (
-                            <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" />
-                          ) : (
-                            <X className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-                          )}
-                          <span>{answer.chosenText || '(хариулаагүй)'}</span>
-                        </p>
-                      </li>
-                    ))}
-                    {lessons?.length ? (
-                      <li className="pt-2">
-                        <AssignExtra
-                          studentId={attempt.studentId}
-                          studentName={attempt.studentName}
-                          lessons={lessons}
-                          suggestReason={`${attempt.skillName}: ${attempt.score}/${attempt.maxScore}. Суурь сэдвээ давтъя.`}
-                        />
-                      </li>
-                    ) : null}
-                        </ol>
+                      {topicOpen ? (
+                        <ul className="divide-y border-l-2 border-border pb-3 pl-3">
+                          {attempts.map((attempt) => {
+                            const open = openId === attempt.id
+                            return (
+                              <li key={attempt.id}>
+                                <button
+                                  type="button"
+                                  onClick={() => setOpenId(open ? null : attempt.id)}
+                                  aria-expanded={open}
+                                  className="flex w-full flex-wrap items-center gap-3 py-2.5 text-left transition-colors hover:bg-secondary/50"
+                                >
+                                  <div className="min-w-0 flex-1">
+                                    <div className="truncate text-sm">
+                                      {attempt.studentName}
+                                      <span className="ml-2 text-muted-foreground">
+                                        {attempt.studentCode}
+                                      </span>
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                      {WHEN.format(new Date(attempt.submittedAt))}
+                                    </div>
+                                  </div>
+
+                                  <span className="flex items-center gap-2 text-sm font-semibold tabular-nums">
+                                    <span
+                                      className={`h-1.5 w-1.5 rounded-full ${dot(
+                                        attempt.maxScore === 0
+                                          ? 0
+                                          : (attempt.score / attempt.maxScore) * 100,
+                                      )}`}
+                                    />
+                                    {attempt.score}/{attempt.maxScore}
+                                  </span>
+
+                                  {open ? (
+                                    <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                  ) : (
+                                    <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                  )}
+                                </button>
+
+                                {open ? (
+                                  <ol className="space-y-3 pb-4 pl-1">
+                                    {attempt.answers.map((answer, index) => (
+                                      <li key={answer.questionId} className="text-sm">
+                                        <p className="font-medium">
+                                          {index + 1}. {answer.prompt}
+                                        </p>
+                                        <p className="mt-0.5 flex items-start gap-2 text-muted-foreground">
+                                          {answer.correct ? (
+                                            <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                                          ) : (
+                                            <X className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                                          )}
+                                          <span>{answer.chosenText || '(хариулаагүй)'}</span>
+                                        </p>
+                                      </li>
+                                    ))}
+                                    {lessons?.length ? (
+                                      <li className="pt-2">
+                                        <AssignExtra
+                                          studentId={attempt.studentId}
+                                          studentName={attempt.studentName}
+                                          lessons={lessons}
+                                          suggestReason={`${attempt.skillName}: ${attempt.score}/${attempt.maxScore}. Суурь сэдвээ давтъя.`}
+                                        />
+                                      </li>
+                                    ) : null}
+                                  </ol>
+                                ) : null}
+                              </li>
+                            )
+                          })}
+                        </ul>
                       ) : null}
                     </li>
                   )

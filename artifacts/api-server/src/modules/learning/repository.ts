@@ -147,6 +147,12 @@ export const anyClass = (classId: number) =>
  *
  * Scoped by subject because a class now studies several: editing the maths
  * timetable must not show, or offer to overwrite, Tuesday's Mongolian.
+ *
+ * Each row carries its own subject. A timetable row is a (day, subject) pair,
+ * not a day: when several subjects are in scope one Tuesday comes back once
+ * per subject taught that Tuesday. Without the subject on the row those read
+ * as the same day repeated, and the screen could neither tell them apart nor
+ * write to the right one.
  */
 export const scheduleForClass = (
   classId: number,
@@ -156,6 +162,8 @@ export const scheduleForClass = (
 ) =>
   readRows<{
     scheduledOn: string;
+    subjectId: number | null;
+    subject: string | null;
     lessonId: number | null;
     lessonCode: string | null;
     lessonType: string | null;
@@ -164,17 +172,20 @@ export const scheduleForClass = (
   }>(
     // generate_series over an interval yields timestamps, so the cast to date
     // is what keeps this a calendar day rather than "2026-09-10 00:00:00".
-    `SELECT d.day::date::text AS "scheduledOn", dl.id::int AS "lessonId",
+    `SELECT d.day::date::text AS "scheduledOn",
+       cs.subject_id::int AS "subjectId", sub.name_mn AS subject,
+       dl.id::int AS "lessonId",
        dl.lesson_code AS "lessonCode", dl.lesson_type AS "lessonType",
        sk.name_mn AS "skillName", cs.note
      FROM generate_series($2::date, $3::date, interval '1 day') AS d(day)
      LEFT JOIN learning.class_schedule cs
        ON cs.class_id = $1::bigint AND cs.scheduled_on = d.day::date
       AND ($4::bigint[] IS NULL OR cs.subject_id = ANY($4::bigint[]))
+     LEFT JOIN core.subjects sub ON sub.id = cs.subject_id
      LEFT JOIN learning.daily_lessons dl ON dl.id = cs.daily_lesson_id
      LEFT JOIN content.skills sk ON sk.id = dl.core_skill_id
      WHERE extract(isodow FROM d.day) <= 5
-     ORDER BY d.day`,
+     ORDER BY d.day, sub.name_mn NULLS FIRST`,
     [classId, from, to, subjectIds],
   );
 

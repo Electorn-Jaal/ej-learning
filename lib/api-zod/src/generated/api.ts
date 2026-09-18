@@ -629,6 +629,8 @@ export const GetTeacherScheduleResponse = zod.object({
   "days": zod.array(zod.object({
   "scheduledOn": zod.string().regex(getTeacherScheduleResponseDaysItemScheduledOnRegExp).describe('Calendar date, YYYY-MM-DD.'),
   "isToday": zod.boolean(),
+  "subjectId": zod.number().int().nullable().describe('The subject this row\'s lesson belongs to, null on a day nothing is scheduled for. A day appears once per subject taught that day, so this is what tells two rows of the same date apart.\n'),
+  "subject": zod.string().nullable(),
   "lessonId": zod.number().int().nullable().describe('Null on a teaching day nothing is scheduled for yet.'),
   "lessonCode": zod.string().nullable(),
   "lessonType": zod.string().nullable(),
@@ -876,7 +878,7 @@ export const GetTeacherLessonsResponse = zod.array(GetTeacherLessonsResponseItem
 export const GenerateScheduleBody = zod.object({
   "classId": zod.number().int(),
   "subjectId": zod.number().int().nullish().describe('Lay out one subject\'s term. Null means every subject the teacher holds in this class.\n'),
-  "termId": zod.number().int()
+  "termId": zod.number().int().nullish().describe('Which term to lay out. Omit it for the term today falls in, which is what a teacher pressing the button means.\n')
 })
 
 export const GenerateScheduleResponse = zod.object({
