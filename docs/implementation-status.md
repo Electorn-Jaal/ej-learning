@@ -45,7 +45,7 @@
 ## Local орчин ба шалгалт
 
 - test:db нь EJ_LOCAL_PREVIEW, X-Preview-Student-Id болон нэвтрэлтгүй preview API-г хүлээдэг. Идэвхтэй route-ууд auth шаарддаг тул одоогийн regression suite биш. Script-ийг энэ баримтын засвараар өөрчлөөгүй, ажиллуулаагүй.
-- 0000 migration нь commented introspection baseline. Хоосон database-ийг clone-оос аюулгүй босгох урсгал дутуу.
+- 0000 migration нь commented introspection baseline хэвээр. Хоосон database-ийг clone-оос босгох урсгалыг db:setup нөхсөн — тусдаа туршилтын database дээр эхнээс нь шалгасан.
 - README болон .env.example дэх preview startup зааврыг шинэчилсэн.
 - Build/typecheck үр дүнг доорх шалгалтын тэмдэглэлд бичнэ; build давсан нь runtime зөв гэсэн баталгаа биш.
 
