@@ -70,26 +70,68 @@ if (!(Test-Path .env)) { Copy-Item .env.example .env }
 
 Нууц утгыг issue, баримт, screenshot, commit-д оруулахгүй. .env.example нь зөвхөн placeholder байна. Backend-ийн файл хадгалалтын fallback нь process-ийн working directory-оос хамаардаг тул EJ_STORAGE_DIR-ийг ил тод тохируулна.
 
-### 3. Database-ийн анхааруулга
+### 3. Database бэлтгэх
 
-**Шинэ хоосон database дээр clone → migrate хангалттай биш.** Эхний migration нь өмнө байсан database-ийн commented introspection baseline. Шинэ орчин босгох аюулгүй baseline урсгал хараахан баталгаажаагүй. [Дэлгэрэнгүй](docs/database-mapping.md#migration-ба-baseline).
+Хоёр тохиолдол байна. Шинэ компьютер дээр эхнийхийг сонгоно.
 
-### 4. Ажиллуулах
+**А. Шинэ хоосон database (шинэ компьютер, шинэ clone)**
 
-Бүтэц нь нийцсэн local database болон хэрэглэгчийн бүртгэл бэлэн үед:
+PostgreSQL дотор хоосон database үүсгэнэ. Нэр нь `ej_learning_local` эсвэл `ej_learning_test` байх ба ард нь нэмэлт үг залгаж болно (`ej_learning_local_nurlan`). Setup нь `ej_learning_dev` нэрийг зориуд хүлээж авдаггүй — байгаа хөгжүүлэлтийн database-ыг санамсаргүй дарж бичихээс хамгаалсан.
+
+~~~powershell
+psql -U postgres -c "CREATE DATABASE ej_learning_local"
+~~~
+
+.env доторх `DATABASE_URL`-ыг тэр database руу заана, дараа нь:
+
+~~~powershell
+corepack pnpm db:setup
+~~~
+
+Энэ нэг команд дараах зүйлийг хийнэ:
+
+- Database үнэхээр хоосон эсэхийг шалгана. Хоосон биш бол юу ч өөрчлөхгүйгээр зогсоно.
+- 12 migration-ыг journal-ийн дарааллаар үүсгэж, `drizzle.__drizzle_migrations`-д бүртгэнэ. Дараа нь `migrate` ажиллуулахад дахин хэрэглэгдэхгүй.
+- Зохиомол өгөгдөл суулгана: нэг анги, нэг сурагч, нэг хичээл, өнөөдрийн хуваарь, гурван сонголттой нэг асуулт, нэг хуудас PDF.
+- `demo-admin`, `demo-teacher`, `demo-student` гэсэн гурван бүртгэл үүсгэж, санамсаргүй нууц үгийг `local-data/generated/<database>-accounts.json`-д бичнэ.
+
+Бодит сурагчийн мэдээлэл, `backups/` доторх dump шаардахгүй. Бүх зохиомол мөр `MOCK-LOCAL-` угтвартай тул хожим ялгахад хялбар.
+
+**Б. Аль хэдийн бүтэц нь байгаа database**
+
+`db:setup` ажиллуулахгүй — хоосон биш тул татгалзана. Оронд нь хянасан migration урсгалыг ашиглана: [database-mapping.md](docs/database-mapping.md#migration-ба-baseline).
+
+### 4. Ажиллуулах ба нэвтрэх
 
 ~~~powershell
 corepack pnpm db:check
 corepack pnpm dev
 ~~~
 
-db:check нь холболт ба хүснэгтийн нэрийг шалгана; schema бүрэн нийцсэн эсэхийг батлахгүй.
+`db:check` нь холболт, database-ийн нэр, хүснэгтийн жагсаалтыг харуулна; schema бүрэн нийцсэн эсэхийг батлахгүй.
 
-Вэб: http://localhost:5173 · API: http://localhost:5000/api. Хэрэглэгчийн нэр, нууц үг ба session cookie-гоор нэвтэрнэ. Хуучин EJ_LOCAL_PREVIEW/header сонголт нь одоогийн нэвтрэх заавар биш.
+Вэб: http://localhost:5173 · API: http://localhost:5000/api
 
-Frontend өөрчлөлтөө шууд шинэчилнэ; backend-ийн өөрчлөлтийн дараа dev процессыг дахин асаана. Vite /api хүсэлтийг backend рүү дамжуулна. Энэ нь production hosting-ийн тохиргоо биш.
+`db:setup`-аар бэлтгэсэн бол `local-data/generated/<database>-accounts.json` доторх нууц үгээр `demo-student` эсвэл `demo-teacher` нэрээр нэвтэрнэ. Сурагчийн хуудсанд өнөөдрийн зохиомол хичээл, багшийн хуудсанд тухайн анги харагдана. Энэ файлыг хуваалцахгүй.
 
-Хэрэглэгч үүсгэх CLI artifacts/api-server/scripts/create-user.ts-д байна. Энэ нь database-д бичдэг тул эхлээд зөв орчин, дүр, сурагч/багшийн холбоог шалгана. Автоматаар үүсгэсэн нууц үгийг нэг удаа хэвлэдэг; логийг хуваалцахгүй. Одоогийн баримт, commit-д shared password хадгалахгүй.
+Хуучин `EJ_LOCAL_PREVIEW`/header сонголт нь одоогийн нэвтрэх заавар биш.
+
+Frontend өөрчлөлтөө шууд шинэчилнэ; backend-ийн өөрчлөлтийн дараа dev процессыг дахин асаана. Vite `/api` хүсэлтийг backend рүү дамжуулна. Энэ нь production hosting-ийн тохиргоо биш.
+
+Бодит хэрэглэгч үүсгэх CLI `artifacts/api-server/scripts/create-user.ts`-д байна. Энэ нь database-д бичдэг тул эхлээд зөв орчин, дүр, сурагч/багшийн холбоог шалгана. Автоматаар үүсгэсэн нууц үгийг нэг удаа хэвлэдэг; логийг хуваалцахгүй. Одоогийн баримт, commit-д shared password хадгалахгүй.
+
+### 5. Эхнээс нь дахин эхлэх
+
+Зохиомол орчноо цэвэрлэх бол database-ыг устгаад дахин үүсгэнэ. `db:setup` нь хоосон database-д л ажилладаг тул энэ нь давтагдах цорын ганц зам:
+
+~~~powershell
+psql -U postgres -c "DROP DATABASE ej_learning_local"
+psql -U postgres -c "CREATE DATABASE ej_learning_local"
+Remove-Item local-data/generated/ej_learning_local-accounts.json
+corepack pnpm db:setup
+~~~
+
+`reset-dev` script нь өөр зүйл: тэр нь байгаа database дотроос бүх мөрийг устгадаг. Ердийн startup алхам биш.
 
 ## Шалгалт
 

@@ -33,7 +33,9 @@ class_teachers-ийн primary key одоогоор анги × багш тул �
 
 lib/db/drizzle/0000_flowery_morlun.sql нь өмнө байсан database-аас гаргасан introspection бөгөөд comment дотор байна. Ердийн шинэ database initializer биш. mark-baseline нь бүтэц үүсгэдэггүй, зөвхөн migration history-д тэмдэглэдэг; хоосон database дээр үүнийг ажиллуулахгүй.
 
-Шинэ орчинд зориулсан schema-only baseline, зохиомол seed, migration дарааллыг тусдаа database дээр шалгаж баримтжуулах ажил үлдсэн. Үүнийг бодит сурагчийн backup-аас заавал хамааралтай болгохгүй.
+**Хоосон database дээр:** `corepack pnpm db:setup` (lib/db/scripts/setup-local.mjs). Энэ нь 0000-ийн comment дотроос SQL-ийг гаргаж ажиллуулаад, journal-ийн үлдсэн migration-уудыг дарааллаар хэрэглэнэ. Миграцийн бүртгэлд drizzle-ийн тооцдог hash (файлын бүтэн эхээс sha256) бичигддэг тул дараа нь `migrate` ажиллуулахад юу ч давхардахгүй. Migration файлуудыг өөрчлөөгүй.
+
+Хамгаалалт: зөвхөн loopback холболт, зөвхөн `ej_learning_local` / `ej_learning_test` нэр, зөвхөн бүрэн хоосон database. `ej_learning_dev` зориуд хүлээн авагддаггүй. Бүх ажиллагаа нэг transaction дотор; алдаа гарвал юу ч үлдэхгүй.
 
 Одоо байгаа database-д migration хэрэглэхээс өмнө холболт, schema, migration history болон нөөц/сэргээх боломжийг шалгана. Хянасан өөрчлөлтөд ашиглах команд:
 
@@ -52,6 +54,7 @@ corepack pnpm --filter @workspace/db run migrate
 - run-remediation болон seed/import script-үүд мөн database-д бичнэ.
 - import-cefr, import-daily-schedule, import-resource-map нь local-data/extracted доторх JSON-оос уншина. Эдгээр файлыг эхлээд extract script-ээр гаргана; [өгөгдөл бэлтгэх](data-requirements.md)-ийг үзнэ.
 - create-english-accounts нь бодит сурагчид бүртгэл үүсгээд нууц үгийг local-data/generated/english-accounts.csv-д бичнэ. Энэ файлыг хуваалцахгүй; хэрэглэгдэж байгаа бол нууц үгийг солино.
+- db:setup нь эсрэгээрээ зөвхөн зохиомол өгөгдөл суулгадаг бөгөөд хоосон database шаарддаг. Бодит өгөгдөлтэй database дээр ажиллахгүй.
 
 Эдгээрийг ердийн ажиллуулах зааварт автоматаар нэмэхгүй. Script бүрийн эхний тайлбарыг ажиллуулахаас өмнө уншина.
 
