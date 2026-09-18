@@ -10,7 +10,7 @@
     "preinstall": "node scripts/check-package-manager.mjs",
     "dev": "corepack pnpm --parallel --filter @workspace/api-server --filter @workspace/ej-learning run dev",
     "db:check": "corepack pnpm --filter @workspace/db run check",
-    "test:db": "node --env-file-if-exists=.env scripts/test-db.mjs",
+    "test": "corepack pnpm --filter @workspace/api-server run test",
     "build": "corepack pnpm run typecheck && corepack pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build --force",
     "typecheck": "corepack pnpm run typecheck:libs && corepack pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
