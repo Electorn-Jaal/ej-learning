@@ -207,10 +207,28 @@ export const sessionsInCore = core.table(
  * The stage is therefore derived from the class's grade rather than stored on
  * core.teachers. A teacher who takes both a 5th and a 6th grade class needs
  * both workflows, and a column on the account could only name one of them.
+ *
+ * The row is keyed on its own id rather than on (class, teacher). That pair
+ * was the key until it met a small school, where one person takes maths and
+ * physics for the same year group: the second subject had nowhere to go, and
+ * the seed scripts worked around it by inventing a second teacher. The unique
+ * constraint carries the real rule instead - a teacher holds a given subject
+ * in a given class once - and NULLS NOT DISTINCT keeps the "covers every
+ * subject" row unique too, which a plain UNIQUE would not, since SQL counts
+ * two NULLs as different values.
  */
 export const classTeachersInCore = core.table(
   "class_teachers",
   {
+    id: bigint({ mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity({
+        name: "core.class_teachers_id_seq",
+        startWith: 1,
+        increment: 1,
+        minValue: 1,
+        cache: 1,
+      }),
     classId: bigint("class_id", { mode: "number" }).notNull(),
     teacherId: bigint("teacher_id", { mode: "number" }).notNull(),
     // Nullable: a primary-grade teacher usually covers every subject.
@@ -221,10 +239,9 @@ export const classTeachersInCore = core.table(
       .notNull(),
   },
   (table) => [
-    primaryKey({
-      columns: [table.classId, table.teacherId],
-      name: "class_teachers_pkey",
-    }),
+    unique("class_teachers_class_teacher_subject_key")
+      .on(table.classId, table.teacherId, table.subjectId)
+      .nullsNotDistinct(),
     index("idx_class_teachers_teacher").using(
       "btree",
       table.teacherId.asc().nullsLast().op("int8_ops"),

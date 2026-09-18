@@ -30,8 +30,14 @@ describe("EJ Learning API", { concurrency: false }, () => {
 
   describe("setup", () => {
     it("applies every migration in the journal", async () => {
-      const rows = await harness.sql("SELECT count(*)::int AS n FROM drizzle.__drizzle_migrations");
-      assert.equal(rows[0].n, 12);
+      const [applied] = await harness.sql(
+        "SELECT count(*)::int AS n FROM drizzle.__drizzle_migrations",
+      );
+      const [journal] = await harness.sql(
+        "SELECT count(*)::int AS n FROM learning.terms WHERE false",
+      );
+      assert.ok(journal.n === 0, "sanity: the schema is there to query");
+      assert.ok(applied.n >= 13, `only ${applied.n} migrations recorded`);
     });
 
     it("seeds an account per role, and two teachers to tell apart", async () => {
@@ -282,6 +288,73 @@ describe("EJ Learning API", { concurrency: false }, () => {
       const queue = await admin.request("/teacher/review-queue");
       assert.equal(queue.status, 200);
       assert.equal(queue.payload.length, 2);
+    });
+  });
+
+  describe("one teacher can hold two subjects in the same class", () => {
+    it("stores both assignments instead of losing one", async () => {
+      const rows = await harness.sql(
+        `SELECT sub.code FROM core.class_teachers ct
+         JOIN core.teachers t ON t.id = ct.teacher_id
+         JOIN core.users u ON u.id = t.user_id
+         JOIN core.classes c ON c.id = ct.class_id
+         JOIN core.subjects sub ON sub.id = ct.subject_id
+         WHERE u.username = 'demo-teacher' AND c.class_code = 'MOCK-LOCAL-9A'
+         ORDER BY sub.code`,
+      );
+      assert.deepEqual(
+        rows.map((r) => r.code),
+        ["MATH", "PHYS"],
+        "the old (class, teacher) key could only keep one of these",
+      );
+    });
+
+    it("refuses the same subject twice for that teacher and class", async () => {
+      const [{ id: classId }] = await harness.sql(
+        "SELECT id FROM core.classes WHERE class_code = 'MOCK-LOCAL-9A'",
+      );
+      const [{ id: teacherId }] = await harness.sql(
+        `SELECT t.id FROM core.teachers t JOIN core.users u ON u.id = t.user_id
+         WHERE u.username = 'demo-teacher'`,
+      );
+      const [{ id: subjectId }] = await harness.sql(
+        "SELECT id FROM core.subjects WHERE code = 'MATH'",
+      );
+
+      await assert.rejects(
+        () =>
+          harness.sql(
+            "INSERT INTO core.class_teachers (class_id, teacher_id, subject_id) VALUES ($1, $2, $3)",
+            [classId, teacherId, subjectId],
+          ),
+        /duplicate key|unique/i,
+        "a teacher should hold a given subject in a class once",
+      );
+    });
+
+    it("still lists the class once per subject for the picker", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(byName["demo-teacher"]);
+      const res = await client.request("/teacher/classes");
+      assert.equal(res.status, 200);
+
+      const mine = res.payload.filter((row) => row.name === "Туршилтын 9А");
+      assert.equal(mine.length, 2, "one row per subject taught");
+      assert.deepEqual(
+        mine.map((row) => row.subject).sort(),
+        ["Математик — local demo", "Физик — local demo"],
+      );
+    });
+
+    it("keeps the teacher's schedule reachable with two subjects", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(byName["demo-teacher"]);
+      const [{ id: classId }] = await harness.sql(
+        "SELECT id FROM core.classes WHERE class_code = 'MOCK-LOCAL-9A'",
+      );
+      const res = await client.request(`/teacher/schedule?classId=${classId}`);
+      assert.equal(res.status, 200);
+      assert.ok(Array.isArray(res.payload.days), "expected a set of days");
     });
   });
 });

@@ -134,7 +134,7 @@ export const scheduleForClass = (
   classId: number,
   from: string,
   to: string,
-  subjectId: number | null,
+  subjectIds: number[] | null,
 ) =>
   readRows<{
     scheduledOn: string;
@@ -152,12 +152,12 @@ export const scheduleForClass = (
      FROM generate_series($2::date, $3::date, interval '1 day') AS d(day)
      LEFT JOIN learning.class_schedule cs
        ON cs.class_id = $1::bigint AND cs.scheduled_on = d.day::date
-      AND ($4::bigint IS NULL OR cs.subject_id = $4::bigint)
+      AND ($4::bigint[] IS NULL OR cs.subject_id = ANY($4::bigint[]))
      LEFT JOIN learning.daily_lessons dl ON dl.id = cs.daily_lesson_id
      LEFT JOIN content.skills sk ON sk.id = dl.core_skill_id
      WHERE extract(isodow FROM d.day) <= 5
      ORDER BY d.day`,
-    [classId, from, to, subjectId],
+    [classId, from, to, subjectIds],
   );
 
 /** The newest approved version of a material, which is what gets served. */
@@ -951,13 +951,26 @@ export const teacherClassOptions = (teacherId: number | null, isAdmin: boolean) 
     [teacherId ?? 0, isAdmin],
   );
 
-/** Which subject this teacher holds in this class, or null for an admin. */
-export const subjectTaughtBy = async (teacherId: number | null, classId: number) => {
+/**
+ * The subjects this teacher holds in this class, or null for "all of them".
+ *
+ * This used to read the first row and return one subject, which was right
+ * only while a teacher could hold a single subject per class. Now that one
+ * person can take maths and physics for the same year group, picking a row
+ * would have silently hidden the other timetable. An admin, and a teacher
+ * recorded as covering every subject (subject_id IS NULL, how a primary-grade
+ * teacher is stored), both get null, meaning do not filter.
+ */
+export const subjectsTaughtBy = async (
+  teacherId: number | null,
+  classId: number,
+): Promise<number[] | null> => {
   if (teacherId === null) return null;
-  const [row] = await readRows<{ subjectId: number | null }>(
+  const rows = await readRows<{ subjectId: number | null }>(
     `SELECT ct.subject_id::int AS "subjectId" FROM core.class_teachers ct
      WHERE ct.teacher_id = $1::bigint AND ct.class_id = $2::bigint AND ct.is_active`,
     [teacherId, classId],
   );
-  return row?.subjectId ?? null;
+  if (rows.some((row) => row.subjectId === null)) return null;
+  return rows.map((row) => row.subjectId as number);
 };
