@@ -916,18 +916,29 @@ export type TeacherClassRow = {
 };
 
 /**
- * The classes a teacher may actually open, with the subject they teach each.
+ * The classes a teacher may actually open, naming the subjects they teach in
+ * each. One row per class.
  *
- * The old listing returned every active class in the school, so the picker
+ * The listing once returned every active class in the school, so the picker
  * offered rows that answered 403 the moment they were chosen. It is scoped by
- * class_teachers now, and the subject comes with it: one class runs several
- * subjects, and "10А" alone no longer says which timetable is being edited.
+ * class_teachers now - and one row per class_teachers row was fine only while
+ * a teacher could hold a single subject in a class. Once they could hold two,
+ * 9А came back twice carrying the same id, and everything downstream keys on
+ * that id: the select rendered its label twice ("9А9А"), and picking either
+ * row asked for the same class anyway.
+ *
+ * So the subjects are aggregated into the row instead. A teacher who takes
+ * maths and physics in 9А sees one 9А, labelled with both, and opening it
+ * shows the work they are responsible for there - which is both subjects.
+ * Splitting the screens per subject is a product decision, not this fix; it
+ * needs the subject threaded through the schedule, the register and the
+ * results, and somebody to say whether that is what a teacher wants.
  */
 export const teacherClassOptions = (teacherId: number | null, isAdmin: boolean) =>
   readRows<TeacherClassRow>(
     `SELECT c.id::text AS id, c.name_mn AS name,
        g.grade_number::int AS "gradeLevel",
-       COALESCE(sub.name_mn, '') AS subject,
+       COALESCE(string_agg(DISTINCT sub.name_mn, ', ' ORDER BY sub.name_mn), '') AS subject,
        (SELECT count(DISTINCT e.student_id)::int
         FROM core.student_enrollments e
         JOIN core.students s ON s.id = e.student_id AND s.is_active
@@ -938,7 +949,10 @@ export const teacherClassOptions = (teacherId: number | null, isAdmin: boolean) 
           JOIN content.skills sk ON sk.id = dl.core_skill_id
           WHERE cs.class_id = c.id
             AND cs.scheduled_on = (now() AT TIME ZONE 'Asia/Ulaanbaatar')::date
-            AND ($2::boolean OR cs.subject_id = ct.subject_id)
+            AND ($2::boolean OR cs.subject_id IN (
+                  SELECT mine.subject_id FROM core.class_teachers mine
+                  WHERE mine.class_id = c.id AND mine.is_active
+                    AND mine.teacher_id = $1::bigint))
           LIMIT 1),
          'Өнөөдөр хуваарьт хичээл алга') AS "currentTopic",
        0 AS "needsReview"
@@ -947,7 +961,8 @@ export const teacherClassOptions = (teacherId: number | null, isAdmin: boolean) 
      JOIN core.grade_levels g ON g.id = c.grade_level_id
      LEFT JOIN core.subjects sub ON sub.id = ct.subject_id
      WHERE ct.is_active AND ($2::boolean OR ct.teacher_id = $1::bigint)
-     ORDER BY g.grade_number, c.class_code, sub.name_mn`,
+     GROUP BY c.id, c.class_code, c.name_mn, g.grade_number
+     ORDER BY g.grade_number, c.class_code`,
     [teacherId ?? 0, isAdmin],
   );
 
