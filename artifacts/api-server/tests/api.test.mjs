@@ -357,4 +357,77 @@ describe("EJ Learning API", { concurrency: false }, () => {
       assert.ok(Array.isArray(res.payload.days), "expected a set of days");
     });
   });
+
+  // Runs last: rebuild-mastery rewrites the mastery table for the whole
+  // database, so anything asserting on it afterwards would be reading the
+  // rebuild's output rather than the live path's.
+  describe("rebuilding mastery keeps what a teacher decided", () => {
+    let studentId;
+    let skillId;
+    let classId;
+
+    before(async () => {
+      [{ id: studentId }] = await harness.sql(
+        "SELECT id FROM core.students WHERE student_code = 'MOCK-LOCAL-STUDENT'",
+      );
+      [{ id: skillId }] = await harness.sql(
+        "SELECT id FROM content.skills WHERE skill_code = 'MOCK-LOCAL-SKILL'",
+      );
+      [{ id: classId }] = await harness.sql(
+        "SELECT id FROM core.classes WHERE class_code = 'MOCK-LOCAL-9A'",
+      );
+
+      const teacher = createClient(harness.baseUrl);
+      await teacher.signIn(byName["demo-teacher"]);
+      const res = await teacher.request("/teacher/assessments", {
+        method: "POST",
+        body: {
+          classId: Number(classId),
+          skillId: Number(skillId),
+          entries: [{ studentId: Number(studentId), status: "MASTERED", score: 95 }],
+        },
+      });
+      assert.equal(res.status, 201, "the teacher's mark should be recorded");
+    });
+
+    it("records the mark as the teacher's, not the system's", async () => {
+      const [row] = await harness.sql(
+        `SELECT source, mastery_status AS status, mastery_score::float8 AS score
+         FROM learning.student_skill_mastery
+         WHERE student_id = $1 AND skill_id = $2`,
+        [studentId, skillId],
+      );
+      assert.equal(row.source, "TEACHER");
+      assert.equal(row.status, "MASTERED");
+      assert.equal(row.score, 95);
+    });
+
+    it("leaves the mark standing after a rebuild", async () => {
+      const run = harness.runScript("scripts/rebuild-mastery.ts", ["--yes"]);
+      assert.equal(run.status, 0, `rebuild-mastery failed:
+${run.output}`);
+
+      const [row] = await harness.sql(
+        `SELECT source, mastery_status AS status, mastery_score::float8 AS score
+         FROM learning.student_skill_mastery
+         WHERE student_id = $1 AND skill_id = $2`,
+        [studentId, skillId],
+      );
+      assert.ok(row, "the teacher's mark was deleted by the rebuild");
+      assert.equal(row.source, "TEACHER", "the rebuild overwrote the teacher's mark");
+      assert.equal(row.status, "MASTERED");
+      assert.equal(row.score, 95, "the teacher's figure changed");
+    });
+
+    it("says what it kept and what it skipped", async () => {
+      const run = harness.runScript("scripts/rebuild-mastery.ts", ["--yes"]);
+      assert.equal(run.status, 0, run.output);
+      assert.match(run.output, /teacher mark\(s\) kept/);
+      assert.match(
+        run.output,
+        /sitting\(s\) skipped: a teacher marked that skill afterwards/,
+        "the quiz attempts predate the mark, so they should be reported as superseded",
+      );
+    });
+  });
 });

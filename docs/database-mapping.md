@@ -50,7 +50,7 @@ corepack pnpm --filter @workspace/db run migrate
 ## Maintenance нь startup биш
 
 - reset-dev бүх мөрийг устгах үйлдэлтэй.
-- rebuild-mastery нь чадварын үнэлгээг устгаад quiz evidence-ээс дахин боддог. Багшийн гараар оруулсан үнэлгээг бүрэн сэргээнэ гэж үзэж болохгүй.
+- rebuild-mastery нь AUTO мөрүүдийг устгаад quiz evidence-ээс дахин боддог. Багшийн (TEACHER) үнэлгээг хөндөхгүй — түүнийг сэргээх эх сурвалж байхгүй тул устгахгүй. Багшийн үнэлгээнээс өмнөх сорилыг алгасаж, хойшхийг нь дээр нь холино.
 - run-remediation болон seed/import script-үүд мөн database-д бичнэ.
 - import-cefr, import-daily-schedule, import-resource-map нь local-data/extracted доторх JSON-оос уншина. Эдгээр файлыг эхлээд extract script-ээр гаргана; [өгөгдөл бэлтгэх](data-requirements.md)-ийг үзнэ.
 - create-english-accounts нь бодит сурагчид бүртгэл үүсгээд нууц үгийг local-data/generated/english-accounts.csv-д бичнэ. Энэ файлыг хуваалцахгүй; хэрэглэгдэж байгаа бол нууц үгийг солино.
