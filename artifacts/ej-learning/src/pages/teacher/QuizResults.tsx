@@ -23,6 +23,17 @@ import {
 } from '@/components/ui/select'
 import { currentSelection, entryKey, subjectParam } from '@/lib/teacher-class'
 
+/** The calendar day an attempt belongs to, in the school's own timezone. */
+const dayOf = (iso: string) =>
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ulaanbaatar' }).format(new Date(iso))
+
+const DAY_LABEL = new Intl.DateTimeFormat('mn-MN', {
+  month: 'long',
+  day: 'numeric',
+  weekday: 'long',
+  timeZone: 'Asia/Ulaanbaatar',
+})
+
 const WHEN = new Intl.DateTimeFormat('mn-MN', {
   month: 'short',
   day: 'numeric',
@@ -169,61 +180,94 @@ function Attempts({ classId, subjectId }: { classId: number; subjectId: number |
     )
   }
 
+  // Grouped by the day the work was done, newest first. The class and the
+  // subject are already chosen above, so the day is the layer that was
+  // missing: a flat run of every attempt ever made answers "what happened
+  // today" only by reading until the dates change.
+  const byDay = new Map<string, typeof data.attempts>()
+  for (const attempt of data.attempts) {
+    const day = dayOf(attempt.submittedAt)
+    byDay.set(day, [...(byDay.get(day) ?? []), attempt])
+  }
+  const days = [...byDay.entries()].sort(([a], [b]) => b.localeCompare(a))
+  const today = dayOf(new Date().toISOString())
+
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-lg">{data.className} — шалгах асуултын үр дүн</CardTitle>
         <p className="text-sm text-muted-foreground">
-          {data.attempts.length} хариулт. Мөр дээр дарж хариулт бүрийг харна.
+          {data.attempts.length} хариулт, {days.length} өдөрт. Мөр дээр дарж
+          асуулт бүрийн хариултыг харна.
         </p>
       </CardHeader>
-      <CardContent>
-        <ul className="divide-y">
-          {data.attempts.map((attempt) => {
-            const open = openId === attempt.id
-            const ratio = attempt.score / attempt.maxScore
-            return (
-              <li key={attempt.id}>
-                <button
-                  type="button"
-                  onClick={() => setOpenId(open ? null : attempt.id)}
-                  aria-expanded={open}
-                  className="flex w-full flex-wrap items-center gap-3 py-3 text-left transition-colors hover:bg-secondary/50"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">
-                      {attempt.studentName}
-                      <span className="ml-2 font-normal text-muted-foreground">
-                        {attempt.studentCode}
-                      </span>
-                    </div>
-                    <div className="truncate text-xs text-muted-foreground">
-                      {attempt.skillName} · {WHEN.format(new Date(attempt.submittedAt))}
-                    </div>
-                  </div>
-
-                  <span className="flex items-center gap-2 text-sm font-semibold">
-                    <span
-                      className={`h-1.5 w-1.5 rounded-full ${
-                        ratio === 1
-                          ? 'bg-success'
-                          : ratio >= 0.5
-                            ? 'bg-pending'
-                            : 'bg-destructive'
-                      }`}
-                    />
-                    {attempt.score}/{attempt.maxScore}
+      <CardContent className="space-y-6">
+        {days.map(([day, attempts]) => {
+          const scored = attempts.reduce((sum, a) => sum + a.score, 0)
+          const possible = attempts.reduce((sum, a) => sum + a.maxScore, 0)
+          return (
+            <section key={day}>
+              <h3 className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-border pb-2">
+                <span className="font-semibold">
+                  {DAY_LABEL.format(new Date(day + 'T00:00:00Z'))}
+                </span>
+                {day === today ? (
+                  <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
+                    Өнөөдөр
                   </span>
+                ) : null}
+                <span className="text-sm font-normal text-muted-foreground">
+                  {attempts.length} хариулт
+                  {possible > 0 ? ` · дундаж ${Math.round((scored / possible) * 100)}%` : ''}
+                </span>
+              </h3>
 
-                  {open ? (
-                    <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                  )}
-                </button>
+              <ul className="divide-y">
+                {attempts.map((attempt) => {
+                  const open = openId === attempt.id
+                  const ratio = attempt.score / attempt.maxScore
+                  return (
+                    <li key={attempt.id}>
+                      <button
+                        type="button"
+                        onClick={() => setOpenId(open ? null : attempt.id)}
+                        aria-expanded={open}
+                        className="flex w-full flex-wrap items-center gap-3 py-3 text-left transition-colors hover:bg-secondary/50"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium">
+                            {attempt.studentName}
+                            <span className="ml-2 font-normal text-muted-foreground">
+                              {attempt.studentCode}
+                            </span>
+                          </div>
+                          <div className="truncate text-xs text-muted-foreground">
+                            {attempt.skillName} · {WHEN.format(new Date(attempt.submittedAt))}
+                          </div>
+                        </div>
 
-                {open ? (
-                  <ol className="space-y-3 pb-4 pl-1">
+                        <span className="flex items-center gap-2 text-sm font-semibold">
+                          <span
+                            className={`h-1.5 w-1.5 rounded-full ${
+                              ratio === 1
+                                ? 'bg-success'
+                                : ratio >= 0.5
+                                  ? 'bg-pending'
+                                  : 'bg-destructive'
+                            }`}
+                          />
+                          {attempt.score}/{attempt.maxScore}
+                        </span>
+
+                        {open ? (
+                          <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </button>
+
+                      {open ? (
+                        <ol className="space-y-3 pb-4 pl-1">
                     {attempt.answers.map((answer, index) => (
                       <li key={answer.questionId} className="text-sm">
                         <p className="font-medium">
@@ -249,12 +293,15 @@ function Attempts({ classId, subjectId }: { classId: number; subjectId: number |
                         />
                       </li>
                     ) : null}
-                  </ol>
-                ) : null}
-              </li>
-            )
-          })}
-        </ul>
+                        </ol>
+                      ) : null}
+                    </li>
+                  )
+                })}
+              </ul>
+            </section>
+          )
+        })}
       </CardContent>
     </Card>
   )
