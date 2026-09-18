@@ -281,7 +281,7 @@ try {
     for (let i = 0; i < PER_CLASS; i += 1) {
       const name = FIRST_NAMES[studentIndex];
       const code = `DEMO-S-${String(studentIndex + 1).padStart(2, "0")}`;
-      const username = `demo-surgach-${String(studentIndex + 1).padStart(2, "0")}`;
+      const username = `demo-suragch-${String(studentIndex + 1).padStart(2, "0")}`;
       const row = await one<{ id: number }>(sql`
         INSERT INTO core.students (student_code, display_name, data_origin)
         VALUES (${code}, ${name}, 'MOCK') RETURNING id`);
