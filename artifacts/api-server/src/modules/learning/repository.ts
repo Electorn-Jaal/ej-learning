@@ -94,16 +94,34 @@ export const studentClass = (studentId: number) =>
   );
 
 /** Empty unless this teacher is assigned to this class; admins bypass it. */
+/**
+ * The class, if this teacher may open it at all: either they teach something
+ * in it, or they are the class teacher, who is answerable for it whether or
+ * not any of its subjects is theirs.
+ */
 export const teacherClass = (teacherId: number, classId: number) =>
   readRows<{ classId: number; className: string; gradeLevel: number }>(
     `SELECT c.id::int AS "classId", c.name_mn AS "className",
        g.grade_number::int AS "gradeLevel"
-     FROM core.class_teachers ct
-     JOIN core.classes c ON c.id = ct.class_id AND c.is_active
+     FROM core.classes c
      JOIN core.grade_levels g ON g.id = c.grade_level_id
-     WHERE ct.teacher_id = $1::bigint AND ct.class_id = $2::bigint AND ct.is_active`,
+     WHERE c.id = $2::bigint AND c.is_active
+       AND (c.class_teacher_id = $1::bigint OR EXISTS (
+             SELECT 1 FROM core.class_teachers ct
+              WHERE ct.teacher_id = $1::bigint AND ct.class_id = c.id AND ct.is_active))`,
     [teacherId, classId],
   );
+
+/** Whether this teacher carries the class as a whole. */
+export const isClassTeacher = async (teacherId: number | null, classId: number) => {
+  if (teacherId === null) return false;
+  const rows = await readRows<{ n: number }>(
+    `SELECT count(*)::int AS n FROM core.classes
+      WHERE id = $2::bigint AND is_active AND class_teacher_id = $1::bigint`,
+    [teacherId, classId],
+  );
+  return rows[0].n > 0;
+};
 
 export const anyClass = (classId: number) =>
   readRows<{ classId: number; className: string; gradeLevel: number }>(
@@ -446,17 +464,25 @@ export const teacherClasses = (teacherId: number | null, isAdmin: boolean) =>
         subjectId: number | null;
         subjectName: string;
       }>(
+        // One card per subject this teacher may look at in the class: the
+        // subjects they take, or every subject the class runs where they are
+        // the class teacher. A class teacher used to get a single blank card
+        // showing whichever lesson came first.
         `SELECT c.id::int AS "classId", c.name_mn AS "className",
            g.grade_number::int AS "gradeLevel",
-           COALESCE(ct.subject_id, t.subject_id)::int AS "subjectId",
+           v.subject_id::int AS "subjectId",
            COALESCE(sub.name_mn, '') AS "subjectName"
-         FROM core.class_teachers ct
-         JOIN core.classes c ON c.id = ct.class_id AND c.is_active
+         FROM core.classes c
          JOIN core.grade_levels g ON g.id = c.grade_level_id
-         JOIN core.teachers t ON t.id = ct.teacher_id
-         LEFT JOIN core.subjects sub ON sub.id = COALESCE(ct.subject_id, t.subject_id)
-         WHERE ct.teacher_id = $1::bigint AND ct.is_active
-         ORDER BY g.grade_number, c.class_code`,
+         JOIN LATERAL (
+           SELECT DISTINCT ct.subject_id
+             FROM core.class_teachers ct
+            WHERE ct.class_id = c.id AND ct.is_active AND ct.subject_id IS NOT NULL
+              AND (c.class_teacher_id = $1::bigint OR ct.teacher_id = $1::bigint)
+         ) v ON true
+         LEFT JOIN core.subjects sub ON sub.id = v.subject_id
+         WHERE c.is_active
+         ORDER BY g.grade_number, c.class_code, sub.name_mn`,
         [teacherId ?? 0],
       );
 
@@ -981,25 +1007,40 @@ export type TeacherClassRow = {
  * class_teachers row - a primary-grade teacher, or a class teacher answerable
  * for the whole class - produces the "all subjects" entry on its own.
  */
+/**
+ * The entries in a teacher's class picker: one per subject they may look at in
+ * a class, plus one standing for all of them where there is more than one.
+ *
+ * What a teacher may look at is not the same as what they take. A subject
+ * teacher gets their own subjects. A class teacher gets every subject the
+ * class runs, because that is what being answerable for a class means - the
+ * English lessons of a primary class belong to somebody else and the class
+ * teacher still has to see them. What may be *changed* is narrower, and lives
+ * in editableSubjects.
+ *
+ * An entry is the pair (id, subjectId): the id alone repeats, which is what
+ * once made the register render "9А9А" and the two entries indistinguishable.
+ */
 export const teacherClassOptions = (teacherId: number | null, isAdmin: boolean) =>
   readRows<TeacherClassRow>(
-    `WITH held AS (
-       SELECT ct.class_id, ct.subject_id
-         FROM core.class_teachers ct
-        WHERE ct.is_active AND ($2::boolean OR ct.teacher_id = $1::bigint)
-        GROUP BY ct.class_id, ct.subject_id
+    `WITH visible AS (
+       SELECT c.id AS class_id, ct.subject_id
+         FROM core.classes c
+         JOIN core.class_teachers ct
+           ON ct.class_id = c.id AND ct.is_active AND ct.subject_id IS NOT NULL
+        WHERE c.is_active
+          AND ($2::boolean OR c.class_teacher_id = $1::bigint OR ct.teacher_id = $1::bigint)
+        GROUP BY c.id, ct.subject_id
      ),
      entries AS (
-       -- One entry per subject the teacher actually holds.
-       SELECT class_id, subject_id FROM held WHERE subject_id IS NOT NULL
+       SELECT class_id, subject_id FROM visible
        UNION ALL
-       -- And one standing for all of them, worth offering only when there is
-       -- more than one to stand for - or when the teacher carries the whole
-       -- class, which is what a subject-less row records.
+       -- One entry standing for all of them, worth offering only when there
+       -- is more than one to stand for.
        SELECT class_id, NULL::bigint
-         FROM held
+         FROM visible
         GROUP BY class_id
-       HAVING bool_or(subject_id IS NULL) OR count(DISTINCT subject_id) > 1
+       HAVING count(DISTINCT subject_id) > 1
      )
      SELECT c.id::text AS id, c.name_mn AS name,
        g.grade_number::int AS "gradeLevel",
@@ -1017,10 +1058,9 @@ export const teacherClassOptions = (teacherId: number | null, isAdmin: boolean) 
             AND cs.scheduled_on = (now() AT TIME ZONE 'Asia/Ulaanbaatar')::date
             AND CASE
                   WHEN e.subject_id IS NOT NULL THEN cs.subject_id = e.subject_id
-                  ELSE $2::boolean OR EXISTS (
-                    SELECT 1 FROM held h
-                     WHERE h.class_id = c.id
-                       AND (h.subject_id IS NULL OR h.subject_id = cs.subject_id))
+                  ELSE EXISTS (
+                    SELECT 1 FROM visible v
+                     WHERE v.class_id = c.id AND v.subject_id = cs.subject_id)
                 END
           LIMIT 1),
          'Өнөөдөр хуваарьт хичээл алга') AS "currentTopic",
@@ -1034,25 +1074,34 @@ export const teacherClassOptions = (teacherId: number | null, isAdmin: boolean) 
   );
 
 /**
- * The subjects this teacher holds in this class, or null for "all of them".
+ * The subjects this teacher actually takes in this class.
  *
- * This used to read the first row and return one subject, which was right
- * only while a teacher could hold a single subject per class. Now that one
- * person can take maths and physics for the same year group, picking a row
- * would have silently hidden the other timetable. An admin, and a teacher
- * recorded as covering every subject (subject_id IS NULL, how a primary-grade
- * teacher is stored), both get null, meaning do not filter.
+ * Only these may be timetabled and marked, whoever the teacher is: a primary
+ * class teacher takes maths and Mongolian and sees the English, but the
+ * English marks are not theirs to enter. Being the class teacher widens what
+ * is shown, never what may be written, so it is deliberately not consulted
+ * here - see isClassTeacher.
+ *
+ * A row with no subject grants nothing. It once meant "covers everything",
+ * which turned out to describe nobody: the teacher it was meant for takes two
+ * subjects of three.
  */
-export const subjectsTaughtBy = async (
-  teacherId: number | null,
-  classId: number,
-): Promise<number[] | null> => {
-  if (teacherId === null) return null;
+export const subjectsTaughtBy = async (teacherId: number | null, classId: number) => {
+  if (teacherId === null) return [] as number[];
   const rows = await readRows<{ subjectId: number | null }>(
     `SELECT ct.subject_id::int AS "subjectId" FROM core.class_teachers ct
-     WHERE ct.teacher_id = $1::bigint AND ct.class_id = $2::bigint AND ct.is_active`,
+     WHERE ct.teacher_id = $1::bigint AND ct.class_id = $2::bigint
+       AND ct.is_active AND ct.subject_id IS NOT NULL`,
     [teacherId, classId],
   );
-  if (rows.some((row) => row.subjectId === null)) return null;
   return rows.map((row) => row.subjectId as number);
 };
+
+/** Every subject a class actually runs, whoever teaches it. */
+export const subjectsOfClass = (classId: number) =>
+  readRows<{ subjectId: number }>(
+    `SELECT DISTINCT ct.subject_id::int AS "subjectId"
+       FROM core.class_teachers ct
+      WHERE ct.class_id = $1::bigint AND ct.is_active AND ct.subject_id IS NOT NULL`,
+    [classId],
+  ).then((rows) => rows.map((row) => row.subjectId));

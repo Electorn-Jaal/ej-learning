@@ -81,6 +81,7 @@ router.get(
         classId,
         from: req.query.from,
         to: req.query.to,
+        subjectId: readSubjectId(req.query.subjectId),
       });
       res.json(GetTeacherScheduleResponse.parse(schedule));
     } catch (error) {

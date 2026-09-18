@@ -566,4 +566,109 @@ ${run.output}`);
       assert.equal(after[0].subject, Number(physicsId));
     });
   });
+
+  describe("a class teacher sees the whole class and marks only their own", () => {
+    let classA;
+    let mathsId;
+    let physicsId;
+    let teacherARow;
+
+    before(async () => {
+      [{ id: classA }] = await harness.sql(
+        "SELECT id FROM core.classes WHERE class_code = 'MOCK-LOCAL-9A'",
+      );
+      [{ id: mathsId }] = await harness.sql("SELECT id FROM core.subjects WHERE code = 'MATH'");
+      [{ id: physicsId }] = await harness.sql("SELECT id FROM core.subjects WHERE code = 'PHYS'");
+      [teacherARow] = await harness.sql(
+        `SELECT t.id FROM core.teachers t JOIN core.users u ON u.id = t.user_id
+          WHERE u.username = 'demo-teacher'`,
+      );
+
+      // demo-teacher-b takes nothing in 9А. Make them its class teacher, and
+      // drop demo-teacher's physics so the class runs a subject its class
+      // teacher does not take - the primary-school shape.
+      const [teacherB] = await harness.sql(
+        `SELECT t.id FROM core.teachers t JOIN core.users u ON u.id = t.user_id
+          WHERE u.username = 'demo-teacher-b'`,
+      );
+      await harness.sql("UPDATE core.classes SET class_teacher_id = $1 WHERE id = $2", [
+        teacherB.id,
+        classA,
+      ]);
+      await harness.sql(
+        `INSERT INTO core.class_teachers (class_id, teacher_id, subject_id)
+         VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+        [classA, teacherB.id, physicsId],
+      );
+      await harness.sql(
+        "DELETE FROM core.class_teachers WHERE class_id = $1 AND teacher_id = $2 AND subject_id = $3",
+        [classA, teacherARow.id, physicsId],
+      );
+    });
+
+    after(async () => {
+      // Put 9А back, or later runs of this file would inherit the arrangement.
+      await harness.sql("UPDATE core.classes SET class_teacher_id = NULL WHERE id = $1", [classA]);
+    });
+
+    it("shows the class teacher every subject the class runs", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(byName["demo-teacher-b"]);
+
+      const res = await client.request("/teacher/classes");
+      assert.equal(res.status, 200);
+
+      const entries = res.payload.filter((row) => row.name === "Туршилтын 9А");
+      const subjects = entries.filter((row) => row.subjectId !== null).map((row) => row.subject);
+      assert.deepEqual(
+        subjects.sort(),
+        ["Математик — local demo", "Физик — local demo"],
+        "the class teacher should see the maths they do not take",
+      );
+    });
+
+    it("lets them read the subject they do not take", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(byName["demo-teacher-b"]);
+
+      const res = await client.request(
+        `/teacher/quiz-attempts?classId=${classA}&subjectId=${mathsId}`,
+      );
+      assert.equal(res.status, 200, "reading another subject's results is the point of the role");
+    });
+
+    it("refuses to let them mark a subject they do not take", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(byName["demo-teacher-b"]);
+
+      // The register lists only what they may mark.
+      const sheet = await client.request(
+        `/teacher/assessment-sheet?classId=${classA}&subjectId=${mathsId}`,
+      );
+      assert.equal(sheet.status, 403, "the maths register is not theirs to fill in");
+
+      const [skill] = await harness.sql(
+        "SELECT id FROM content.skills WHERE skill_code = 'MOCK-LOCAL-SKILL'",
+      );
+      const [student] = await harness.sql(
+        "SELECT id FROM core.students WHERE student_code = 'MOCK-LOCAL-STUDENT'",
+      );
+      const submitted = await client.request("/teacher/assessments", {
+        method: "POST",
+        body: {
+          classId: Number(classA),
+          skillId: Number(skill.id),
+          entries: [{ studentId: Number(student.id), status: "MASTERED", score: 90 }],
+        },
+      });
+      assert.equal(submitted.status, 403, "nor is the mark theirs to enter");
+    });
+
+    it("still lets the subject teacher mark their own", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(byName["demo-teacher"]);
+      const sheet = await client.request(`/teacher/assessment-sheet?classId=${classA}`);
+      assert.equal(sheet.status, 200);
+    });
+  });
 });

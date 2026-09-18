@@ -108,8 +108,10 @@ const SKILLS = [
   { code: "D-M2", subject: "MATH", name: "Натурал тоо хасах", outcome: "Хоёр оронтой тоог хасна", needs: ["D-M1"] },
   { code: "D-M3", subject: "MATH", name: "Үржвэр олох", outcome: "Нэг оронтой тоогоор үржүүлнэ", needs: ["D-M2"] },
   { code: "D-M4", subject: "MATH", name: "Энгийн тэгшитгэл", outcome: "x + a = b хэлбэрийн тэгшитгэл бодно", needs: ["D-M3"] },
-  { code: "D-P1", subject: "PHYS", name: "Хэмжих нэгж", outcome: "Урт, массын нэгжийг хөрвүүлнэ", needs: [] },
-  { code: "D-P2", subject: "PHYS", name: "Хурд бодох", outcome: "Зам, хугацаанаас хурдыг олно", needs: ["D-P1", "D-M3"] },
+  { code: "D-G1", subject: "MGL", name: "Үе таних", outcome: "Үгийг үеэр нь салгаж уншина", needs: [] },
+  { code: "D-G2", subject: "MGL", name: "Өгүүлбэр зохиох", outcome: "Гурван үгтэй өгүүлбэр зохионо", needs: ["D-G1"] },
+  { code: "D-E1", subject: "ENG", name: "Alphabet", outcome: "Латин цагаан толгойг таньж бичнэ", needs: [] },
+  { code: "D-E2", subject: "ENG", name: "Greetings", outcome: "Энгийн мэндчилгээг хэрэглэнэ", needs: ["D-E1"] },
 ];
 
 const CLASSES = [
@@ -173,13 +175,21 @@ try {
     INSERT INTO core.grade_levels (grade_number, name_mn) VALUES (9, '9-р анги') RETURNING id`));
 
   const subjectIds = new Map<string, number>();
-  for (const [code, name] of [["MATH", "Математик"], ["PHYS", "Физик"]]) {
+  for (const [code, name] of [
+    ["MATH", "Математик"],
+    ["MGL", "Монгол хэл"],
+    ["ENG", "Англи хэл"],
+  ]) {
     const [found] = await readRows<{ id: number }>(
       `SELECT id::int FROM core.subjects WHERE code = $1`,
       [code],
     );
     const row = found ?? (await one<{ id: number }>(sql`
       INSERT INTO core.subjects (code, name_mn) VALUES (${code}, ${name}) RETURNING id`));
+    // db:setup's own fixture names its subjects "... — local demo", which is
+    // fine for a two-row test and wrong on a screen somebody is being shown.
+    await db.execute(sql`
+      UPDATE core.subjects SET name_mn = ${name} WHERE id = ${row.id}`);
     subjectIds.set(code, row.id);
   }
 
@@ -233,49 +243,53 @@ try {
   });
 
   // Three shapes a teacher can take, because the screens treat them
-  // differently: one who holds two subjects in the same room, one who holds a
-  // single subject in rooms somebody else also teaches in, and one who carries
-  // a whole class regardless of subject.
+  // differently: a class teacher who takes some of their class's subjects and
+  // not others, a subject teacher who appears in rooms somebody else also
+  // teaches in, and a class teacher who takes nothing in their own class.
   const teacherPlan: {
     username: string;
     name: string;
     code: string;
-    holds: { klass: string; subject: string | null }[];
+    holds: { klass: string; subject: string }[];
+    classTeacherOf?: string;
   }[] = [
     {
       username: "demo-bagsh-a",
-      name: "Багш А (математик, физик)",
+      name: "Багш А (9А-гийн ангийн багш)",
       code: "DEMO-T-A",
       holds: [
         { klass: "DEMO-9A", subject: "MATH" },
-        { klass: "DEMO-9A", subject: "PHYS" },
+        { klass: "DEMO-9A", subject: "MGL" },
         { klass: "DEMO-9B", subject: "MATH" },
       ],
+      // Answerable for 9А, so they see its English too - and may not mark it.
+      classTeacherOf: "DEMO-9A",
     },
     {
       username: "demo-bagsh-b",
-      name: "Багш Б (математик, физик)",
+      name: "Багш Б (англи хэл, математик)",
       code: "DEMO-T-B",
       holds: [
+        { klass: "DEMO-9A", subject: "ENG" },
+        { klass: "DEMO-9B", subject: "MGL" },
+        { klass: "DEMO-9B", subject: "ENG" },
         { klass: "DEMO-9V", subject: "MATH" },
-        { klass: "DEMO-9B", subject: "PHYS" },
-        { klass: "DEMO-9V", subject: "PHYS" },
       ],
     },
     {
-      // A class teacher: recorded against the class with no subject of their
-      // own, which is also how a primary-grade teacher is stored. They see
-      // every subject 9А runs, not just one.
+      // Carries 9Б and takes none of its lessons: sees everything there,
+      // changes nothing.
       username: "demo-angiin-bagsh",
-      name: "Ангийн багш (9А)",
+      name: "Ангийн багш (9Б, хичээл заадаггүй)",
       code: "DEMO-T-CLASS",
-      holds: [{ klass: "DEMO-9A", subject: null }],
+      holds: [],
+      classTeacherOf: "DEMO-9B",
     },
   ];
 
   for (const plan of teacherPlan) {
     const account = await makeAccount(plan.username, "TEACHER", plan.name, null);
-    const ownSubject = plan.holds[0].subject;
+    const ownSubject = plan.holds[0]?.subject ?? null;
     const teacher = await one<{ id: number }>(sql`
       INSERT INTO core.teachers (user_id, teacher_code, subject_id, data_origin)
       VALUES (${account.userId}, ${plan.code},
@@ -284,16 +298,25 @@ try {
     for (const hold of plan.holds) {
       await db.execute(sql`
         INSERT INTO core.class_teachers (class_id, teacher_id, subject_id)
-        VALUES (${classIds.get(hold.klass)!}, ${teacher.id},
-          ${hold.subject === null ? null : subjectIds.get(hold.subject)!})`);
+        VALUES (${classIds.get(hold.klass)!}, ${teacher.id}, ${subjectIds.get(hold.subject)!})`);
     }
+    if (plan.classTeacherOf) {
+      await db.execute(sql`
+        UPDATE core.classes SET class_teacher_id = ${teacher.id}
+         WHERE id = ${classIds.get(plan.classTeacherOf)!}`);
+    }
+    const taught = plan.holds
+      .map((h) => `${h.klass.replace("DEMO-", "")}/${h.subject}`)
+      .join(" ");
     accounts.push({
       username: plan.username,
       password: account.password,
       role: "TEACHER",
-      note: plan.holds
-        .map((h) => `${h.klass.replace("DEMO-", "")}/${h.subject ?? "бүх хичээл"}`)
-        .join(" "),
+      note:
+        (taught || "хичээл заадаггүй") +
+        (plan.classTeacherOf
+          ? `  ·  ${plan.classTeacherOf.replace("DEMO-", "")}-гийн ангийн багш`
+          : ""),
     });
   }
 
@@ -443,13 +466,7 @@ try {
   // ---- a term of timetable --------------------------------------------
   let scheduled = 0;
   const classSubjects: { klass: string; subject: string }[] = [];
-  for (const plan of teacherPlan) {
-    for (const hold of plan.holds) {
-      // A class teacher holds the class, not a subject, so they add no
-      // timetable of their own - they look at what the others laid out.
-      if (hold.subject !== null) classSubjects.push({ klass: hold.klass, subject: hold.subject });
-    }
-  }
+  for (const plan of teacherPlan) for (const hold of plan.holds) classSubjects.push(hold);
 
   for (const { klass, subject } of classSubjects) {
     const subjectSkills = SKILLS.filter((s) => s.subject === subject);
@@ -520,7 +537,9 @@ try {
   // "rebuild keeps it" rule has something to protect here too.
   await recordTeacherMastery({
     studentId: students[1].id,
-    skillId: skillIds.get("D-P1")!,
+    // A Mongolian skill: багш А takes Mongolian in 9А, so this is a mark they
+    // are actually entitled to enter.
+    skillId: skillIds.get("D-G1")!,
     status: "DEVELOPING",
     score: 62,
     teacherUsername: "demo-bagsh-a",
@@ -587,12 +606,11 @@ try {
     await check("teacher -> class x subject",
       `SELECT count(*)::int AS n FROM core.class_teachers ct
        JOIN core.classes c ON c.id = ct.class_id WHERE c.class_code LIKE 'DEMO-%'`,
-      (n) => n === classSubjects.length + 1),
-    await check("a class teacher carries a class with no subject",
-      `SELECT count(*)::int AS n FROM core.class_teachers ct
-       JOIN core.classes c ON c.id = ct.class_id
-       WHERE c.class_code LIKE 'DEMO-%' AND ct.subject_id IS NULL`,
-      (n) => n === 1),
+      (n) => n === classSubjects.length),
+    await check("two classes have a class teacher",
+      `SELECT count(*)::int AS n FROM core.classes
+       WHERE class_code LIKE 'DEMO-%' AND class_teacher_id IS NOT NULL`,
+      (n) => n === 2),
     await check("one teacher, two subjects, same class",
       `SELECT count(*)::int AS n FROM (
          SELECT ct.class_id, ct.teacher_id FROM core.class_teachers ct
