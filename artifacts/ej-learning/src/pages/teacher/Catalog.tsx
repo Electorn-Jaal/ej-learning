@@ -57,7 +57,7 @@ export default function Catalog() {
   )
 
   if (isLoading) return <Skeleton className="h-64 w-full" />
-  if (isError || !items) return <p role="alert">Сургалтын санг уншиж чадсангүй.</p>
+  if (isError || !items) return <p role="alert">Хичээлийн материалыг уншиж чадсангүй.</p>
 
   const needle = search.toLocaleLowerCase()
   const visible = items.filter(
@@ -83,7 +83,7 @@ export default function Catalog() {
   return (
     <div className="space-y-6 pb-10">
       <PageHeader
-        title="Сургалтын сан"
+        title="Хичээлийн материал"
         description="Сурагчид оноогддог материалын бүрэн жагсаалт."
         stats={[
           { label: "Нийт", value: items.length },

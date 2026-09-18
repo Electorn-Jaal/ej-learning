@@ -22,7 +22,6 @@ import TeacherSchedule from '@/pages/teacher/Schedule';
 import TeacherQuizResults from '@/pages/teacher/QuizResults';
 import TeacherAssessment from '@/pages/teacher/Assessment';
 import AdminBooks from '@/pages/admin/Books';
-import TeacherReviews from '@/pages/teacher/Reviews';
 import TeacherIntegrations from '@/pages/teacher/Integrations';
 import TeacherCatalog from '@/pages/teacher/Catalog';
 
@@ -68,9 +67,6 @@ function StaffRoutes({ admin, takesLessons }: { admin: boolean; takesLessons: bo
       <Route path="/teacher/results" component={TeacherQuizResults} />
       {takesLessons || admin ? (
         <Route path="/teacher/assessment" component={TeacherAssessment} />
-      ) : null}
-      {takesLessons || admin ? (
-        <Route path="/teacher/reviews" component={TeacherReviews} />
       ) : null}
       <Route path="/teacher/catalog" component={TeacherCatalog} />
       <Route path="/teacher/password" component={Password} />

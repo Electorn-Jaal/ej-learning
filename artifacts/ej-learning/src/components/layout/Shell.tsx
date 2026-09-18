@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter"
 import {
-  LayoutDashboard, BookOpen, TrendingUp, User, CheckSquare, Database, LogOut,
+  LayoutDashboard, BookOpen, TrendingUp, User, Database, LogOut,
   CalendarDays, Sun, KeyRound, ClipboardCheck, Library, PenLine,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -23,14 +23,18 @@ const TEACHER_NAV = [
   { href: "/teacher", label: "Хяналтын самбар", icon: LayoutDashboard },
   { href: "/teacher/schedule", label: "Хуваарь", icon: CalendarDays },
   { href: "/teacher/results", label: "Шалгалтын үр дүн", icon: ClipboardCheck },
-  { href: "/teacher/catalog", label: "Сургалтын сан", icon: BookOpen },
+  { href: "/teacher/catalog", label: "Хичээлийн материал", icon: BookOpen },
 ]
 
 // Screens for entering things. An account that takes no lesson has nothing to
 // enter, and offering a page that answers 403 is worse than not offering it.
+//
+// "Шалгах ажлууд" is not here on purpose. It lists written answers waiting to
+// be marked and says on its own face that a mark entered there is not saved -
+// a screen that takes a teacher's judgement and drops it. It comes back when
+// marking is finished; the page and its endpoint are still in the tree.
 const TEACHING_ONLY = [
   { href: "/teacher/assessment", label: "Дэвтрийн үнэлгээ", icon: PenLine },
-  { href: "/teacher/reviews", label: "Шалгах ажлууд", icon: CheckSquare },
 ]
 
 // Only an administrator configures the books, or looks at an integration that
