@@ -16,10 +16,12 @@ import { createClient, startHarness } from "./harness.mjs";
 describe("EJ Learning API", { concurrency: false }, () => {
   let harness;
   let accountsByRole;
+  let byName;
 
   before(async () => {
     harness = await startHarness();
     accountsByRole = Object.fromEntries(harness.accounts.map((a) => [a.role, a]));
+    byName = Object.fromEntries(harness.accounts.map((a) => [a.username, a]));
   });
 
   after(async () => {
@@ -32,10 +34,10 @@ describe("EJ Learning API", { concurrency: false }, () => {
       assert.equal(rows[0].n, 12);
     });
 
-    it("seeds one account per role", async () => {
+    it("seeds an account per role, and two teachers to tell apart", async () => {
       assert.deepEqual(
-        harness.accounts.map((a) => a.role).sort(),
-        ["ADMIN", "STUDENT", "TEACHER"],
+        harness.accounts.map((a) => a.username).sort(),
+        ["demo-admin", "demo-student", "demo-teacher", "demo-teacher-b"],
       );
     });
 
@@ -198,13 +200,88 @@ describe("EJ Learning API", { concurrency: false }, () => {
       assert.equal(rows[0].n, 2, "both attempts should be stored");
     });
 
-    it("shows the attempts to the teacher", async () => {
+    it("shows the attempts to that class's teacher, and nobody else's", async () => {
       const teacher = createClient(harness.baseUrl);
-      await teacher.signIn(accountsByRole.TEACHER);
+      await teacher.signIn(byName["demo-teacher"]);
 
-      const classes = await harness.sql("SELECT id FROM core.classes LIMIT 1");
-      const res = await teacher.request(`/teacher/quiz-attempts?classId=${classes[0].id}`);
-      assert.equal(res.status, 200);
+      const [own] = await harness.sql(
+        "SELECT id FROM core.classes WHERE class_code = 'MOCK-LOCAL-9A'",
+      );
+      const [other] = await harness.sql(
+        "SELECT id FROM core.classes WHERE class_code = 'MOCK-LOCAL-9B'",
+      );
+
+      assert.equal((await teacher.request(`/teacher/quiz-attempts?classId=${own.id}`)).status, 200);
+
+      const refused = await teacher.request(`/teacher/quiz-attempts?classId=${other.id}`);
+      assert.ok(
+        refused.status === 403 || refused.status === 404,
+        `asking for another class's attempts answered ${refused.status}`,
+      );
+    });
+  });
+
+  describe("a teacher sees their own students and no others", () => {
+    it("lists only the students in the classes they teach", async () => {
+      const a = createClient(harness.baseUrl);
+      await a.signIn(byName["demo-teacher"]);
+      const mine = await a.request("/preview/students");
+      assert.equal(mine.status, 200);
+
+      const codes = mine.payload.map((s) => s.code);
+      assert.deepEqual(codes, ["MOCK-LOCAL-STUDENT"]);
+      assert.ok(
+        !codes.includes("MOCK-LOCAL-STUDENT-B"),
+        "teacher A must not see the other class's student",
+      );
+    });
+
+    it("gives the other teacher their own class instead", async () => {
+      const b = createClient(harness.baseUrl);
+      await b.signIn(byName["demo-teacher-b"]);
+      const theirs = await b.request("/preview/students");
+      assert.equal(theirs.status, 200);
+      assert.deepEqual(
+        theirs.payload.map((s) => s.code),
+        ["MOCK-LOCAL-STUDENT-B"],
+      );
+    });
+
+    it("shows an admin every student", async () => {
+      const admin = createClient(harness.baseUrl);
+      await admin.signIn(accountsByRole.ADMIN);
+      const all = await admin.request("/preview/students");
+      assert.equal(all.status, 200);
+      assert.deepEqual(
+        all.payload.map((s) => s.code).sort(),
+        ["MOCK-LOCAL-STUDENT", "MOCK-LOCAL-STUDENT-B"],
+      );
+    });
+
+    it("keeps written answers in the review queue to the right teacher", async () => {
+      const seeded = await harness.sql(
+        "SELECT count(*)::int AS n FROM assessment.web_diagnostic_submissions WHERE status = 'PENDING_REVIEW'",
+      );
+      assert.equal(seeded[0].n, 2, "both students should have work waiting");
+
+      const a = createClient(harness.baseUrl);
+      await a.signIn(byName["demo-teacher"]);
+      const queue = await a.request("/teacher/review-queue");
+      assert.equal(queue.status, 200);
+      assert.equal(queue.payload.length, 1);
+      assert.equal(queue.payload[0].studentName, "Туршилтын сурагч");
+
+      const serialized = JSON.stringify(queue.payload);
+      assert.ok(!serialized.includes("Туршилтын сурагч Б"), "leaked the other class's student");
+      assert.ok(!serialized.includes("Гурав"), "leaked the other student's written answer");
+    });
+
+    it("shows an admin the whole review queue", async () => {
+      const admin = createClient(harness.baseUrl);
+      await admin.signIn(accountsByRole.ADMIN);
+      const queue = await admin.request("/teacher/review-queue");
+      assert.equal(queue.status, 200);
+      assert.equal(queue.payload.length, 2);
     });
   });
 });

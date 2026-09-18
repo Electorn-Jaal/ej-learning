@@ -1,15 +1,50 @@
 import { readRows } from '@workspace/db';
 
-export const students = () => readRows<{
+type StudentRow = {
   id: string; code: string; displayName: string; className: string; gradeLevel: number;
-}>(`SELECT s.id::text AS id, s.student_code AS code, s.display_name AS "displayName",
+};
+
+const STUDENT_COLUMNS = `SELECT s.id::text AS id, s.student_code AS code,
+    s.display_name AS "displayName",
     COALESCE(string_agg(DISTINCT c.name_mn, ', ' ORDER BY c.name_mn), '') AS "className",
     COALESCE(max(g.grade_number), 0)::int AS "gradeLevel"
   FROM core.students s
   LEFT JOIN core.student_enrollments e ON e.student_id=s.id AND e.is_active
   LEFT JOIN core.classes c ON c.id=e.class_id AND c.is_active
-  LEFT JOIN core.grade_levels g ON g.id=c.grade_level_id
-  WHERE s.is_active GROUP BY s.id ORDER BY s.student_code`);
+  LEFT JOIN core.grade_levels g ON g.id=c.grade_level_id`;
+
+/**
+ * Students the signed-in teacher is responsible for: the ones enrolled in a
+ * class they are assigned to teach. An admin sees everybody.
+ *
+ * The listing used to be every active student in the school, for any account
+ * holding TEACHER. The role check answered "is this a teacher" and nothing
+ * asked "whose students are these", so one teacher's account read the whole
+ * roll - names, student codes and classes included.
+ */
+export const studentsForTeacher = (teacherId: number | null, isAdmin: boolean) =>
+  readRows<StudentRow>(
+    `${STUDENT_COLUMNS}
+  WHERE s.is_active AND ($2::boolean OR EXISTS (
+      SELECT 1 FROM core.student_enrollments se
+      JOIN core.class_teachers ct ON ct.class_id = se.class_id AND ct.is_active
+      WHERE se.student_id = s.id AND se.is_active AND ct.teacher_id = $1::bigint))
+  GROUP BY s.id ORDER BY s.student_code`,
+    [teacherId ?? 0, isAdmin],
+  );
+
+/**
+ * One student by id, for the account that owns that record. Reading the whole
+ * table and filtering in JavaScript, which is what this replaced, got slower
+ * with every student enrolled and put every row on the wire to find one.
+ */
+export const studentById = (studentId: number | string) =>
+  readRows<StudentRow>(
+    `${STUDENT_COLUMNS}
+  WHERE s.is_active AND s.id = $1::bigint
+  GROUP BY s.id`,
+    [studentId],
+  );
 
 export const classes = () => readRows(`SELECT c.id::text AS id,c.name_mn AS name,
   g.grade_number::int AS "gradeLevel", ''::text AS subject,
@@ -113,7 +148,13 @@ export async function catalog() {
   }));
 }
 
-export const reviewQueue = () => readRows(`SELECT w.id||':'||i.id AS "attemptId",
+/**
+ * Work waiting to be marked, for this teacher's students only. Each row
+ * carries a student's name, class and their written answer, so an unscoped
+ * queue handed every teacher the whole school's submissions.
+ */
+export const reviewQueue = (teacherId: number | null, isAdmin: boolean) =>
+  readRows(`SELECT w.id||':'||i.id AS "attemptId",
   s.display_name AS "studentName",
   COALESCE((SELECT string_agg(DISTINCT c.name_mn, ', ' ORDER BY c.name_mn)
     FROM core.student_enrollments e JOIN core.classes c ON c.id=e.class_id AND c.is_active
@@ -125,7 +166,12 @@ export const reviewQueue = () => readRows(`SELECT w.id||':'||i.id AS "attemptId"
   FROM assessment.web_diagnostic_submissions w JOIN core.students s ON s.id=w.student_id
   JOIN assessment.web_diagnostic_answers a ON a.submission_id=w.id
   JOIN assessment.diagnostic_items i ON i.id=a.diagnostic_item_id JOIN content.skills sk ON sk.id=i.skill_id
-  WHERE w.status='PENDING_REVIEW' ORDER BY w.submitted_at NULLS LAST,w.id,i.item_order`);
+  WHERE w.status='PENDING_REVIEW' AND ($2::boolean OR EXISTS (
+      SELECT 1 FROM core.student_enrollments se
+      JOIN core.class_teachers ct ON ct.class_id = se.class_id AND ct.is_active
+      WHERE se.student_id = s.id AND se.is_active AND ct.teacher_id = $1::bigint))
+  ORDER BY w.submitted_at NULLS LAST,w.id,i.item_order`,
+  [teacherId ?? 0, isAdmin]);
 
 export const approvedLessons = (studentId: string) => readRows<{
   id:string; topic:string; subject:string; subjectCode:string; targetSkill:string;
