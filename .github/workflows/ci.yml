@@ -1,0 +1,82 @@
+# Runs the checks a person would run locally, on every pull request, so that
+# "does this break anything" is answered before the Merge button rather than
+# after it.
+#
+# The test suite creates its own throwaway database per run (see
+# artifacts/api-server/tests/harness.mjs), so all this job has to supply is a
+# PostgreSQL it is allowed to create databases on.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A new push to the same branch makes the previous run's answer irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        # Matches the PostgreSQL development runs on, and the one the 0000
+        # baseline was introspected from. CI exists to catch our changes, not
+        # to discover that a generated migration uses syntax an older server
+        # lacks; testing another version is a separate, deliberate job.
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # The suite never reads or writes this database. It takes the host, user
+      # and password from here and creates ej_learning_test_<random> for itself.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Locate the pnpm store
+        id: store
+        run: echo "path=$(corepack pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.store.outputs.path }}
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+
+      - name: Install
+        run: corepack pnpm install --frozen-lockfile
+
+      - name: Build and typecheck
+        run: corepack pnpm build
+
+      - name: Test
+        run: corepack pnpm test

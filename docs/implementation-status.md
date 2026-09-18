@@ -44,6 +44,7 @@
 
 ## Local орчин ба шалгалт
 
+- GitHub Actions нь pull request бүрт build ба test ажиллуулна (.github/workflows/ci.yml, ubuntu-latest, PostgreSQL 18 service container). Энэ тохиргоог Linux дээр хараахан ажиллуулж баталгаажуулаагүй — эхний PR нь өөрөө шалгалт болно.
 - test:db-г хассан. Оронд нь `corepack pnpm test` — artifacts/api-server/tests доторх integration suite. Ажиллах бүрдээ түр database үүсгэж, db:setup-аар босгож, API асааж, 15 шалгалт хийгээд бүгдийг устгадаг. Нэвтрэлт, дүрийн хязгаарлалт, сорилын сервер талын шалгалт, зөв хариулт задрахгүй байх зэргийг хамардаг.
 - 0000 migration нь commented introspection baseline хэвээр. Хоосон database-ийг clone-оос босгох урсгалыг db:setup нөхсөн — тусдаа туршилтын database дээр эхнээс нь шалгасан.
 - README болон .env.example дэх preview startup зааврыг шинэчилсэн.
