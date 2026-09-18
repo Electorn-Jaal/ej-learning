@@ -125,6 +125,14 @@ const FIRST_NAMES = [
   "Чинбат", "Шинэбаяр", "Эрдэнэбат", "Юмжав", "Яруу", "Амгалан",
 ];
 
+/**
+ * One password for every demo account. They are demo accounts on a database
+ * this script refuses to run against unless it is named ej_learning_local or
+ * ej_learning_test, so nothing here ever guards anything real - and twenty-four
+ * random strings only made the school tedious to walk through.
+ */
+const DEMO_PASSWORD = "demo1234";
+
 const PER_CLASS = 8;
 const FRONT_MATTER = 6;
 const PRINTED_PAGES = 38;
@@ -205,7 +213,7 @@ try {
   const accounts: { username: string; password: string; role: string; note: string }[] = [];
 
   const makeAccount = async (username: string, role: string, displayName: string, studentId: number | null) => {
-    const password = randomBytes(12).toString("base64url");
+    const password = DEMO_PASSWORD;
     const user = await one<{ id: number }>(sql`
       INSERT INTO core.users (username, password_hash, display_name, student_id)
       VALUES (${username}, ${await hashPassword(password)}, ${displayName}, ${studentId})
