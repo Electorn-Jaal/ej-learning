@@ -701,6 +701,8 @@ export const SubmitQuizAttemptResponse = zod.object({
 /**
  * @summary What a class answered, newest first
  */
+export const getTeacherQuizAttemptsQueryFromRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const getTeacherQuizAttemptsQueryToRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
 export const getTeacherQuizAttemptsQueryLimitMax = 200;
 
 
@@ -708,12 +710,17 @@ export const getTeacherQuizAttemptsQueryLimitMax = 200;
 export const GetTeacherQuizAttemptsQueryParams = zod.object({
   "classId": zod.coerce.number().int(),
   "subjectId": zod.coerce.number().int().optional().describe('Narrow to one subject the teacher holds in this class. Omitted means every subject they hold there, which for a class teacher or a primary-grade teacher is every subject the class runs.\n'),
+  "from": zod.coerce.string().regex(getTeacherQuizAttemptsQueryFromRegExp).optional().describe('Earliest calendar day to include, YYYY-MM-DD, read in Asia/Ulaanbaatar. Omitted means no lower bound.\n'),
+  "to": zod.coerce.string().regex(getTeacherQuizAttemptsQueryToRegExp).optional().describe('Latest calendar day to include, inclusive.'),
   "limit": zod.coerce.number().int().min(1).max(getTeacherQuizAttemptsQueryLimitMax).optional()
 })
 
 export const GetTeacherQuizAttemptsResponse = zod.object({
   "classId": zod.number().int(),
   "className": zod.string(),
+  "from": zod.string().nullable().describe('The range actually applied, null where there was no bound.'),
+  "to": zod.string().nullable(),
+  "truncated": zod.boolean().describe('True when the limit cut the list short, so the totals below it are of what came back rather than of the range asked for.\n'),
   "attempts": zod.array(zod.object({
   "id": zod.number().int(),
   "studentId": zod.number().int().describe('Needed to assign this student extra work straight from the row.'),

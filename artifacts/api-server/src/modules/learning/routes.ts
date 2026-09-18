@@ -279,12 +279,13 @@ router.get(
       const raw = Number(req.query.limit);
       const limit = Number.isInteger(raw) && raw > 0 ? Math.min(raw, 200) : 50;
 
-      const result = await quizAttemptsForTeacher(
-        req.user!,
+      const result = await quizAttemptsForTeacher(req.user!, {
         classId,
         limit,
-        readSubjectId(req.query.subjectId),
-      );
+        subjectId: readSubjectId(req.query.subjectId),
+        from: req.query.from,
+        to: req.query.to,
+      });
       res.json(GetTeacherQuizAttemptsResponse.parse(result));
     } catch (error) {
       next(error);

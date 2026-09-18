@@ -13,6 +13,16 @@ classId: number;
  */
 subjectId?: number;
 /**
+ * Earliest calendar day to include, YYYY-MM-DD, read in Asia/Ulaanbaatar. Omitted means no lower bound.
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+from?: string;
+/**
+ * Latest calendar day to include, inclusive.
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+to?: string;
+/**
  * @minimum 1
  * @maximum 200
  */

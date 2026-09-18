@@ -278,29 +278,48 @@ export async function recordQuizAttempt(
 
 export async function quizAttemptsForTeacher(
   user: AuthenticatedUser,
-  classId: number,
-  limit: number,
-  subjectId: number | null,
+  query: {
+    classId: number;
+    limit: number;
+    subjectId: number | null;
+    from?: unknown;
+    to?: unknown;
+  },
 ) {
   const isAdmin = user.roles.includes("ADMIN");
   const [klass] = isAdmin
-    ? await repository.anyClass(classId)
+    ? await repository.anyClass(query.classId)
     : user.teacherId === null
       ? []
-      : await repository.teacherClass(user.teacherId, classId);
+      : await repository.teacherClass(user.teacherId, query.classId);
 
   if (!klass) {
     throw forbidden("Энэ ангийн үр дүнг харах эрхгүй байна.", "NOT_YOUR_CLASS");
   }
 
+  const from = isDate(query.from) ? query.from : null;
+  const to = isDate(query.to) ? query.to : null;
+  if (from !== null && to !== null && from > to) {
+    throw badRequest("Огнооны муж буруу байна.", "INVALID_RANGE");
+  }
+
+  const attempts = await repository.attemptsForClass(
+    klass.classId,
+    query.limit,
+    await viewableSubjects(user, klass.classId, query.subjectId),
+    from,
+    to,
+  );
+
   return {
     classId: klass.classId,
     className: klass.className,
-    attempts: await repository.attemptsForClass(
-      klass.classId,
-      limit,
-      await viewableSubjects(user, klass.classId, subjectId),
-    ),
+    from,
+    to,
+    // Averages drawn from a truncated list are wrong without saying so. The
+    // screen can only warn about what it knows was cut off.
+    truncated: attempts.length === query.limit,
+    attempts,
   };
 }
 

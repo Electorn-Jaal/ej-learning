@@ -253,6 +253,61 @@ describe("EJ Learning API", { concurrency: false }, () => {
         `asking for another class's attempts answered ${refused.status}`,
       );
     });
+
+    it("keeps to the days asked for", async () => {
+      // The screen's date range has to be applied here, not after the rows
+      // arrive: filtering a list that the limit has already cut short would
+      // quietly answer about the wrong days.
+      const teacher = createClient(harness.baseUrl);
+      await teacher.signIn(byName["demo-teacher"]);
+      const [own] = await harness.sql(
+        "SELECT id FROM core.classes WHERE class_code = 'MOCK-LOCAL-9A'",
+      );
+
+      const all = await teacher.request(`/teacher/quiz-attempts?classId=${own.id}`);
+      assert.equal(all.status, 200);
+      assert.ok(all.payload.attempts.length > 0, "expected the seeded attempts");
+
+      const dayOf = (iso) =>
+        new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ulaanbaatar" }).format(
+          new Date(iso),
+        );
+      const days = [...new Set(all.payload.attempts.map((a) => dayOf(a.submittedAt)))];
+      const day = days[0];
+
+      const onDay = await teacher.request(
+        `/teacher/quiz-attempts?classId=${own.id}&from=${day}&to=${day}`,
+      );
+      assert.equal(onDay.status, 200);
+      assert.equal(onDay.payload.from, day);
+      assert.equal(onDay.payload.to, day);
+      assert.ok(onDay.payload.attempts.length > 0, "the day's own work should survive");
+      for (const attempt of onDay.payload.attempts) {
+        assert.equal(dayOf(attempt.submittedAt), day);
+      }
+
+      // A window that closed before the work was done holds nothing.
+      const before = await teacher.request(
+        `/teacher/quiz-attempts?classId=${own.id}&from=2000-01-01&to=2000-01-02`,
+      );
+      assert.equal(before.status, 200);
+      assert.equal(before.payload.attempts.length, 0);
+    });
+
+    it("refuses a range that runs backwards", async () => {
+      const teacher = createClient(harness.baseUrl);
+      await teacher.signIn(byName["demo-teacher"]);
+      const [own] = await harness.sql(
+        "SELECT id FROM core.classes WHERE class_code = 'MOCK-LOCAL-9A'",
+      );
+
+      const res = await teacher.request(
+        `/teacher/quiz-attempts?classId=${own.id}&from=2026-09-30&to=2026-09-01`,
+      );
+      // A backwards range is a malformed request, not a forbidden one.
+      assert.equal(res.status, 400, JSON.stringify(res.payload));
+      assert.equal(res.payload.code, 'INVALID_RANGE');
+    });
   });
 
   describe("a teacher sees their own students and no others", () => {

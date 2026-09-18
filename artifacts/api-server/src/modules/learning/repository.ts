@@ -253,11 +253,18 @@ export const lessonBelongsToClass = async (lessonId: number, studentId: number) 
  * `subjectIds` null means every subject, which is what an admin and a class
  * teacher get. A subject teacher gets the subjects they hold in the class, so
  * the physics teacher's marking does not appear in the maths teacher's screen.
+ *
+ * `from` and `to` are inclusive calendar days in Asia/Ulaanbaatar, either of
+ * them null for no bound. The comparison converts the stored instant to that
+ * timezone first: an answer given at nine in the evening is that day's work to
+ * the teacher who reads it, whatever UTC calls it.
  */
 export const attemptsForClass = (
   classId: number,
   limit: number,
   subjectIds: number[] | null,
+  from: string | null,
+  to: string | null,
 ) =>
   readRows<{
     id: number;
@@ -287,9 +294,13 @@ export const attemptsForClass = (
      JOIN content.skills sk ON sk.id = dl.core_skill_id
      WHERE e.class_id = $1::bigint
        AND ($3::bigint[] IS NULL OR sk.subject_id = ANY($3::bigint[]))
+       AND ($4::date IS NULL
+            OR (qa.submitted_at AT TIME ZONE 'Asia/Ulaanbaatar')::date >= $4::date)
+       AND ($5::date IS NULL
+            OR (qa.submitted_at AT TIME ZONE 'Asia/Ulaanbaatar')::date <= $5::date)
      ORDER BY qa.submitted_at DESC
      LIMIT $2`,
-    [classId, limit, subjectIds],
+    [classId, limit, subjectIds, from, to],
   );
 
 export type SchedulableLesson = {

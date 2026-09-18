@@ -300,6 +300,15 @@ export interface TeacherQuizAttemptRow {
 export interface TeacherQuizAttempts {
   classId: number;
   className: string;
+  /**
+     * The range actually applied, null where there was no bound.
+     * @nullable
+     */
+  from: string | null;
+  /** @nullable */
+  to: string | null;
+  /** True when the limit cut the list short, so the totals below it are of what came back rather than of the range asked for. */
+  truncated: boolean;
   attempts: TeacherQuizAttemptRow[];
 }
 
@@ -1154,6 +1163,16 @@ classId: number;
  * Narrow to one subject the teacher holds in this class. Omitted means every subject they hold there, which for a class teacher or a primary-grade teacher is every subject the class runs.
  */
 subjectId?: number;
+/**
+ * Earliest calendar day to include, YYYY-MM-DD, read in Asia/Ulaanbaatar. Omitted means no lower bound.
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+from?: string;
+/**
+ * Latest calendar day to include, inclusive.
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+to?: string;
 /**
  * @minimum 1
  * @maximum 200

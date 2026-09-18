@@ -540,6 +540,22 @@ paths:
             a primary-grade teacher is every subject the class runs.
           schema:
             type: integer
+        - name: from
+          in: query
+          required: false
+          description: >
+            Earliest calendar day to include, YYYY-MM-DD, read in
+            Asia/Ulaanbaatar. Omitted means no lower bound.
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+        - name: to
+          in: query
+          required: false
+          description: Latest calendar day to include, inclusive.
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
         - name: limit
           in: query
           required: false
@@ -1424,11 +1440,21 @@ components:
           type: integer
         className:
           type: string
+        from:
+          description: The range actually applied, null where there was no bound.
+          type: ["string", "null"]
+        to:
+          type: ["string", "null"]
+        truncated:
+          description: >
+            True when the limit cut the list short, so the totals below it are
+            of what came back rather than of the range asked for.
+          type: boolean
         attempts:
           type: array
           items:
             $ref: "#/components/schemas/TeacherQuizAttemptRow"
-      required: [classId, className, attempts]
+      required: [classId, className, from, to, truncated, attempts]
     PasswordChangeInput:
       type: object
       properties:
