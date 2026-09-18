@@ -13,7 +13,8 @@
     "test:db": "node --env-file-if-exists=.env scripts/test-db.mjs",
     "build": "corepack pnpm run typecheck && corepack pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build --force",
-    "typecheck": "corepack pnpm run typecheck:libs && corepack pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
+    "typecheck": "corepack pnpm run typecheck:libs && corepack pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
+    "db:setup": "node --env-file-if-exists=.env lib/db/scripts/setup-local.mjs"
   },
   "private": true,
   "dependencies": {
