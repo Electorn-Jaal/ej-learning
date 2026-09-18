@@ -332,18 +332,34 @@ describe("EJ Learning API", { concurrency: false }, () => {
       );
     });
 
-    it("still lists the class once per subject for the picker", async () => {
+    it("lists the class once, naming both subjects", async () => {
       const client = createClient(harness.baseUrl);
       await client.signIn(byName["demo-teacher"]);
       const res = await client.request("/teacher/classes");
       assert.equal(res.status, 200);
 
       const mine = res.payload.filter((row) => row.name === "Туршилтын 9А");
-      assert.equal(mine.length, 2, "one row per subject taught");
-      assert.deepEqual(
-        mine.map((row) => row.subject).sort(),
-        ["Математик — local demo", "Физик — local demo"],
-      );
+      assert.equal(mine.length, 1, "a class the teacher holds twice is still one class");
+      assert.equal(mine[0].subject, "Математик — local demo, Физик — local demo");
+    });
+
+    it("never returns the same class id twice", async () => {
+      // Both teacher screens use this id as the select's value and React key.
+      // Two rows sharing one id made the select render its label twice and
+      // made the two rows indistinguishable once chosen.
+      for (const username of ["demo-teacher", "demo-teacher-b", "demo-admin"]) {
+        const client = createClient(harness.baseUrl);
+        await client.signIn(byName[username]);
+        const res = await client.request("/teacher/classes");
+        assert.equal(res.status, 200);
+
+        const ids = res.payload.map((row) => row.id);
+        assert.deepEqual(
+          ids,
+          [...new Set(ids)],
+          `${username} got a duplicate class id: ${ids.join(", ")}`,
+        );
+      }
     });
 
     it("keeps the teacher's schedule reachable with two subjects", async () => {
