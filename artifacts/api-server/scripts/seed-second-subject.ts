@@ -47,21 +47,17 @@ try {
   if (!english) throw new Error("Subject ENG not found.");
 
   // The class needs a teacher of record for the subject, or the teacher-side
-  // screens have no way to reach it.
-  //
-  // It has to be a different teacher from the maths one: core.class_teachers
-  // is keyed on (class_id, teacher_id), so one person cannot hold two subjects
-  // in the same class. That is a real limitation - a small school does have
-  // one teacher taking two subjects for a year group - but here the English
-  // teacher is the right answer anyway.
+  // screens have no way to reach it. The English teacher is the right answer
+  // here; it no longer has to be a different person from the maths one, since
+  // class_teachers is keyed per subject.
   const teacherLink = await db.execute(sql`
     INSERT INTO core.class_teachers (class_id, teacher_id, subject_id, is_active)
     SELECT ${klass.id}, t.id, ${english.id}, true
     FROM core.teachers t
     JOIN core.users u ON u.id = t.user_id
     WHERE u.username = 'bagsh-eng'
-    ON CONFLICT (class_id, teacher_id) DO UPDATE SET
-      subject_id = EXCLUDED.subject_id, is_active = true`);
+    ON CONFLICT (class_id, teacher_id, subject_id) DO UPDATE SET
+      is_active = true`);
 
   const students = await readRows<{ id: number; name: string }>(
     `SELECT st.id::int, st.display_name AS name

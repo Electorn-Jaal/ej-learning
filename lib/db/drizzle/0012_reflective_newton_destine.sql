@@ -1,0 +1,3 @@
+ALTER TABLE "core"."class_teachers" DROP CONSTRAINT "class_teachers_pkey";--> statement-breakpoint
+ALTER TABLE "core"."class_teachers" ADD COLUMN "id" bigint PRIMARY KEY NOT NULL GENERATED ALWAYS AS IDENTITY (sequence name "core"."core.class_teachers_id_seq" INCREMENT BY 1 MINVALUE 1 MAXVALUE 9223372036854775807 START WITH 1 CACHE 1);--> statement-breakpoint
+ALTER TABLE "core"."class_teachers" ADD CONSTRAINT "class_teachers_class_teacher_subject_key" UNIQUE NULLS NOT DISTINCT("class_id","teacher_id","subject_id");
