@@ -241,6 +241,7 @@ export const GetStudentProgressResponse = zod.object({
   "skills": zod.array(zod.object({
   "skill": zod.string(),
   "code": zod.string(),
+  "subject": zod.string(),
   "gradeLevel": zod.number().int(),
   "status": zod.enum(['mastered', 'developing', 'needs_support', 'unassessed']),
   "percentage": zod.number().int().nullable(),

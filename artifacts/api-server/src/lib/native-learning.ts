@@ -58,19 +58,33 @@ export const classes = () => readRows(`SELECT c.id::text AS id,c.name_mn AS name
   FROM core.classes c JOIN core.grade_levels g ON g.id=c.grade_level_id
   WHERE c.is_active ORDER BY c.class_code`);
 
+/**
+ * Every skill this student is working on, with the subject it belongs to.
+ *
+ * The grade used to be the only filter, so a child saw skills for subjects
+ * nobody teaches them - their class runs three and the grade has more. It is
+ * the subjects the class is actually taught now, which is the same rule
+ * `subjects` uses, so the two screens can no longer disagree about what a
+ * child studies.
+ */
 export const progressSkills = (studentId: string) => readRows(`
-  SELECT s.name_mn AS skill,s.skill_code AS code,COALESCE(g.grade_number,0)::int AS "gradeLevel",
+  SELECT s.name_mn AS skill,s.skill_code AS code,sub.name_mn AS subject,
+    COALESCE(g.grade_number,0)::int AS "gradeLevel",
     CASE m.mastery_status WHEN 'MASTERED' THEN 'mastered' WHEN 'DEVELOPING' THEN 'developing'
       WHEN 'GAP' THEN 'needs_support' ELSE 'unassessed' END AS status,
     round(m.mastery_score)::int AS percentage,
     COALESCE(m.attempt_count,0)::int AS "evidenceCount",
     m.last_assessed_at AS "lastEvidenceDate"
-  FROM content.skills s LEFT JOIN core.grade_levels g ON g.id=s.grade_level_id
+  FROM content.skills s
+  JOIN core.subjects sub ON sub.id=s.subject_id
+  LEFT JOIN core.grade_levels g ON g.id=s.grade_level_id
   LEFT JOIN learning.student_skill_mastery m ON m.skill_id=s.id AND m.student_id=$1::bigint
   WHERE m.student_id IS NOT NULL OR (s.status='APPROVED' AND EXISTS (
-    SELECT 1 FROM core.student_enrollments e JOIN core.classes c ON c.id=e.class_id AND c.is_active
+    SELECT 1 FROM core.student_enrollments e
+    JOIN core.classes c ON c.id=e.class_id AND c.is_active
+    JOIN core.class_teachers ct ON ct.class_id=c.id AND ct.is_active AND ct.subject_id=s.subject_id
     WHERE e.student_id=$1::bigint AND e.is_active AND c.grade_level_id=s.grade_level_id))
-  ORDER BY s.skill_code`, [studentId]);
+  ORDER BY sub.name_mn, s.skill_code`, [studentId]);
 
 export const attemptHistory = (studentId: string) => readRows(`
   SELECT 'diagnostic:'||a.id AS id, sub.name_mn||' — оношилгоо '||a.attempt_code AS assignment,
@@ -108,9 +122,18 @@ export const subjects = (studentId: string) => readRows(`
       WHERE s.subject_id=sub.id AND s.status='APPROVED' AND l.status='APPROVED' AND l.web_ready
       AND EXISTS (SELECT 1 FROM core.student_enrollments e JOIN core.classes c ON c.id=e.class_id AND c.is_active
         WHERE e.student_id=$1::bigint AND e.is_active AND c.grade_level_id=s.grade_level_id)) AS "approvedLessons"
-  FROM core.subjects sub WHERE sub.is_active AND EXISTS (
-    SELECT 1 FROM content.skills s JOIN learning.student_skill_mastery m ON m.skill_id=s.id
-    WHERE s.subject_id=sub.id AND m.student_id=$1::bigint)
+  FROM core.subjects sub WHERE sub.is_active AND (
+    -- A subject this child's class is taught. This used to ask only whether
+    -- they had been measured in it, so a subject they sit through every week
+    -- was missing from their own page until the first quiz.
+    EXISTS (
+      SELECT 1 FROM core.student_enrollments e
+      JOIN core.class_teachers ct ON ct.class_id=e.class_id AND ct.is_active
+      WHERE e.student_id=$1::bigint AND e.is_active AND ct.subject_id=sub.id)
+    -- Or one they carry a result in, which may be from a class they have left.
+    OR EXISTS (
+      SELECT 1 FROM content.skills s JOIN learning.student_skill_mastery m ON m.skill_id=s.id
+      WHERE s.subject_id=sub.id AND m.student_id=$1::bigint))
   ORDER BY sub.code`, [studentId]);
 
 type CatalogRow = {

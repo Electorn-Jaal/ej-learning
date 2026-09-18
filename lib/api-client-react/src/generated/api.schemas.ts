@@ -668,6 +668,7 @@ export const SkillProgressStatus = {
 export interface SkillProgress {
   skill: string;
   code: string;
+  subject: string;
   gradeLevel: number;
   status: SkillProgressStatus;
   /** @nullable */

@@ -1963,6 +1963,8 @@ components:
           type: string
         code:
           type: string
+        subject:
+          type: string
         gradeLevel:
           type: integer
         status:
@@ -1974,7 +1976,7 @@ components:
           type: integer
         lastEvidenceDate:
           type: ["string", "null"]
-      required: [skill, code, gradeLevel, status, percentage, evidenceCount, lastEvidenceDate]
+      required: [skill, code, subject, gradeLevel, status, percentage, evidenceCount, lastEvidenceDate]
     AttemptHistoryItem:
       type: object
       properties:

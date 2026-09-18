@@ -102,6 +102,34 @@ describe("EJ Learning API", { concurrency: false }, () => {
   });
 
   describe("what each role may reach", () => {
+    it("lists every subject the student's class is taught", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(accountsByRole.STUDENT);
+
+      const res = await client.request("/student/subjects");
+      assert.equal(res.status, 200);
+
+      // MOCK-LOCAL-9A runs maths and physics. The student has only ever been
+      // measured in maths, and the physics they sit through every week used to
+      // be missing from their own page because of it.
+      assert.deepEqual(
+        res.payload.map((row) => row.code).sort(),
+        ["MATH", "PHYS"],
+      );
+    });
+
+    it("names the subject on every skill in the progress page", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(accountsByRole.STUDENT);
+
+      const res = await client.request("/student/progress");
+      assert.equal(res.status, 200);
+      assert.ok(res.payload.skills.length > 0, "expected skills");
+      for (const skill of res.payload.skills) {
+        assert.ok(skill.subject, `${skill.code} came back with no subject to group it under`);
+      }
+    });
+
     it("lets a student see today's work", async () => {
       const client = createClient(harness.baseUrl);
       await client.signIn(accountsByRole.STUDENT);
