@@ -152,6 +152,18 @@ export async function startHarness() {
       database,
       baseUrl,
       accounts,
+      /** Runs one of the maintenance scripts against this throwaway database. */
+      runScript: (relativePath, args = []) => {
+        const result = spawnSync(
+          process.execPath,
+          ["scripts/run-ts.mjs", relativePath, ...args],
+          { cwd: apiServerDir, env: childEnv, encoding: "utf8" },
+        );
+        return {
+          status: result.status,
+          output: (result.stdout ?? "") + (result.stderr ?? ""),
+        };
+      },
       /** Read-only helper for asserting what actually landed in the database. */
       sql: async (text, values = []) => (await client.query(text, values)).rows,
       stop,
