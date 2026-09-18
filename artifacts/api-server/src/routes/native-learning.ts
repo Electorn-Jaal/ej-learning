@@ -26,9 +26,7 @@ async function currentStudent(req: Request) {
       'NO_STUDENT_LINK',
     );
   }
-  const student = (await data.students()).find(
-    (candidate) => candidate.id === String(studentId),
-  );
+  const [student] = await data.studentById(studentId);
   if (!student) {
     throw Object.assign(new Error('Идэвхтэй сурагч олдсонгүй.'), { status: 404 });
   }
@@ -40,9 +38,15 @@ const handle = (fn: (req: Request, res: import('express').Response) => Promise<v
     fn(req, res).catch(next);
   };
 
-// A teacher legitimately lists the students they are responsible for.
-router.get('/preview/students', asTeacher, handle(async (_req, res) => {
-  res.json(GetPreviewStudentsResponse.parse(await data.students()));
+// A teacher legitimately lists the students they are responsible for - which
+// is narrower than every student in the school. The role check alone does not
+// establish whose students these are, so the query is scoped to the classes
+// this teacher is assigned to. An admin sees everybody.
+router.get('/preview/students', asTeacher, handle(async (req, res) => {
+  const user = req.user!;
+  res.json(GetPreviewStudentsResponse.parse(
+    await data.studentsForTeacher(user.teacherId, user.roles.includes('ADMIN')),
+  ));
 }));
 
 router.get('/session/me', handle(async (req, res) => {
@@ -136,8 +140,11 @@ router.get('/teacher/catalog', asTeacher, handle(async (_req, res) => {
   res.json(GetTeacherCatalogResponse.parse(await data.catalog()));
 }));
 
-router.get('/teacher/review-queue', asTeacher, handle(async (_req, res) => {
-  res.json(GetTeacherReviewQueueResponse.parse(serializable(await data.reviewQueue())));
+router.get('/teacher/review-queue', asTeacher, handle(async (req, res) => {
+  const user = req.user!;
+  res.json(GetTeacherReviewQueueResponse.parse(serializable(
+    await data.reviewQueue(user.teacherId, user.roles.includes('ADMIN')),
+  )));
 }));
 
 router.get('/teacher/integrations/workspace', asTeacher, handle(async (_req, res) => {
