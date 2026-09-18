@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useLogin, getGetSessionQueryKey } from '@workspace/api-client-react'
+import { useLogin } from '@workspace/api-client-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -21,8 +21,16 @@ export default function Login() {
       {
         // The session query is the single source of truth; refetching it is
         // what actually signs the app in.
-        onSuccess: () =>
-          queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey() }),
+        //
+        // Everything else in the cache has to go with it. Invalidating the
+        // session key alone left every page the previous account had opened
+        // sitting in the cache, so signing in as somebody else showed their
+        // predecessor's classes and results until each of those queries
+        // happened to refetch. Nothing cached belongs to the account that
+        // just arrived.
+        onSuccess: () => {
+          void queryClient.resetQueries()
+        },
         onError: (cause) =>
           setError(
             cause?.data?.error ??

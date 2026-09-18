@@ -33,9 +33,23 @@ export function SessionProvider({
 
   const signOut = () =>
     mutate(undefined, {
-      // Clear on settle, not on success: if the request failed because the
+      // Reset on settle, not on success: if the request failed because the
       // session was already gone, staying signed in is the wrong outcome.
-      onSettled: () => queryClient.clear(),
+      //
+      // resetQueries rather than clear. clear() removes every query from the
+      // cache without asking for any of them again, and the observer watching
+      // the session keeps hold of the query object it already had - so the app
+      // went on rendering the account that had just left until something
+      // unrelated re-rendered it and a fresh query was built. That is the
+      // "nothing happened, then it suddenly signed out" the button showed.
+      // reset() empties the cache too, but refetches whatever is still on
+      // screen, and the session answering 401 is what signs the app out.
+      //
+      // clear() also emptied the mutation cache, which held this very mutation
+      // while it was still settling, leaving the button stuck on "Гарч байна…".
+      onSettled: () => {
+        void queryClient.resetQueries()
+      },
     })
 
   return (
