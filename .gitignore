@@ -56,9 +56,25 @@ Thumbs.db
 # Reference checkout, not part of this product. It carries its own .git.
 NUM-TMS-26/
 
-# Database dumps. May hold real student data; restore from these, don't commit them.
+# ---------------------------------------------------------------------------
+# Data that never belongs in Git. Each folder has one job; keep them separate.
+# ---------------------------------------------------------------------------
+
+# Source material as received, plus everything extracted from it: the student
+# workbooks, the textbook PDFs, and the JSON the scripts/src/*.py extractors
+# write. Holds real student codes, classes and answers. Import scripts read
+# from here; see docs/data-requirements.md.
+local-data/
+
+# Database dumps and generated account lists. May hold real student data and
+# plaintext passwords; restore from these, don't commit them.
 backups/
 
-# Uploaded content files (PDFs and the like). Regenerate the mock book with
-# scripts/src/make-mock-pdf.py.
+# Uploaded content files the running API serves (PDFs and the like).
+# Regenerate the mock book with scripts/src/make-mock-pdf.py.
 storage/
+
+# Replit agent scratch: pasted prompts, caches, vendored skill copies.
+# Not project documentation.
+.conversation/
+.config/

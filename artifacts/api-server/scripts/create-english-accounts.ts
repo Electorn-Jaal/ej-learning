@@ -14,8 +14,10 @@
  * login from them would produce collisions and unusable names, and the mapping
  * from code to username is written out so a teacher can still find anyone.
  *
- * Passwords are generated per student and written to a file under backups/,
- * which is gitignored. They are not printed: a console scrollback is a worse
+ * Passwords are generated per student and written to a file under
+ * local-data/generated/, which is gitignored along with the rest of the
+ * student data it belongs with. backups/ is for database dumps to restore
+ * from; a live credential list is not that. They are not printed: a console scrollback is a worse
  * place for eighty credentials than a file somebody has to open on purpose.
  * Existing accounts are left alone, so a re-run adds only what is missing.
  */
@@ -89,7 +91,7 @@ try {
   }
 
   if (created.length > 0) {
-    const target = path.resolve(process.cwd(), "../../backups/english-accounts.csv");
+    const target = path.resolve(process.cwd(), "../../local-data/generated/english-accounts.csv");
     await mkdir(path.dirname(target), { recursive: true });
     const header = "username,password,student_code,display_name,class\n";
     const body = created
@@ -101,7 +103,7 @@ try {
       .join("\n");
     await writeFile(target, header + body + "\n", "utf8");
     console.log(`Created ${created.length} account(s).`);
-    console.log(`Credentials written to backups/english-accounts.csv (gitignored).`);
+    console.log(`Credentials written to local-data/generated/english-accounts.csv (gitignored).`);
     console.log(`First account for a smoke test: ${created[0].username}`);
   }
 

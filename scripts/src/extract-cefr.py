@@ -11,7 +11,7 @@ otherwise: Grade / Class is read from `Form Responses 1`, never from the
 derived sheets. Sheets read "8-1" as a date and wrote 2026-08-01, destroying
 the class in every sheet computed from it.
 
-    python scripts/src/extract-cefr.py <workbook.xlsx> data/cefr-extract.json
+    python scripts/src/extract-cefr.py <workbook.xlsx> local-data/extracted/cefr-extract.json
 """
 
 import json
