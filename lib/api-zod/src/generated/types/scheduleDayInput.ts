@@ -8,6 +8,11 @@
 
 export interface ScheduleDayInput {
   classId: number;
+  /**
+     * Which subject's day this is. Setting a lesson takes the subject from the lesson itself, so this only matters when clearing: without it, emptying Tuesday in the maths timetable would also empty Tuesday's physics. Null clears every subject the teacher holds in the class.
+     * @nullable
+     */
+  subjectId?: number | null;
   /** @pattern ^\d{4}-\d{2}-\d{2}$ */
   scheduledOn: string;
   /**

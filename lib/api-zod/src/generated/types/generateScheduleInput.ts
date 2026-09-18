@@ -8,5 +8,10 @@
 
 export interface GenerateScheduleInput {
   classId: number;
+  /**
+     * Lay out one subject's term. Null means every subject the teacher holds in this class.
+     * @nullable
+     */
+  subjectId?: number | null;
   termId: number;
 }

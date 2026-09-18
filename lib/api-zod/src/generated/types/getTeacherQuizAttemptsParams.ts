@@ -9,6 +9,10 @@
 export type GetTeacherQuizAttemptsParams = {
 classId: number;
 /**
+ * Narrow to one subject the teacher holds in this class. Omitted means every subject they hold there, which for a class teacher or a primary-grade teacher is every subject the class runs.
+ */
+subjectId?: number;
+/**
  * @minimum 1
  * @maximum 200
  */

@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { currentSelection, entryKey, subjectParam } from '@/lib/teacher-class'
 
 const WHEN = new Intl.DateTimeFormat('mn-MN', {
   month: 'short',
@@ -138,12 +139,15 @@ function AssignExtra({
   )
 }
 
-function Attempts({ classId }: { classId: number }) {
-  const { data, isLoading, isError, error } = useGetTeacherQuizAttempts({ classId })
-  const { data: lessons } = useGetTeacherLessons(
-    { classId },
-    { query: { queryKey: getGetTeacherLessonsQueryKey({ classId }) } },
-  )
+function Attempts({ classId, subjectId }: { classId: number; subjectId: number | null }) {
+  const { data, isLoading, isError, error } = useGetTeacherQuizAttempts({
+    classId,
+    ...subjectParam(subjectId),
+  })
+  const lessonParams = { classId, ...subjectParam(subjectId) }
+  const { data: lessons } = useGetTeacherLessons(lessonParams, {
+    query: { queryKey: getGetTeacherLessonsQueryKey(lessonParams) },
+  })
   const [openId, setOpenId] = useState<number | null>(null)
 
   if (isLoading) return <Skeleton className="h-64 w-full" />
@@ -265,7 +269,7 @@ export default function TeacherQuizResults() {
     return <p className="text-sm text-muted-foreground">Анги олдсонгүй.</p>
   }
 
-  const classId = selected ?? classes[0].id
+  const { key, classId, subjectId } = currentSelection(classes, selected)
 
   return (
     <div className="space-y-6">
@@ -277,23 +281,24 @@ export default function TeacherQuizResults() {
       </header>
 
       {classes.length > 1 ? (
-        <Select value={classId} onValueChange={setSelected}>
+        <Select value={key ?? ''} onValueChange={setSelected}>
           <SelectTrigger className="w-full sm:w-64">
             <SelectValue placeholder="Анги сонгох" />
           </SelectTrigger>
           <SelectContent>
             {classes.map((klass) => (
-              <SelectItem key={klass.id} value={klass.id}>
+              <SelectItem key={entryKey(klass)} value={entryKey(klass)}>
                 {klass.name}
+                {klass.subject ? ` · ${klass.subject}` : ''}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       ) : null}
 
-      <ItemAnalysis classId={Number(classId)} />
-      <ClassSkills classId={Number(classId)} />
-      <Attempts classId={Number(classId)} />
+      <ItemAnalysis classId={classId} />
+      <ClassSkills classId={classId} subjectId={subjectId} />
+      <Attempts classId={classId} subjectId={subjectId} />
     </div>
   )
 }

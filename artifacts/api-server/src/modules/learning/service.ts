@@ -142,8 +142,9 @@ export async function assignExtraWork(
     throw badRequest("Сурагч ангид бүртгэгдээгүй байна.", "STUDENT_NOT_ENROLLED");
   }
   const klass = await authorisedClass(user, enrolment.classId);
+  const assignable = await authorisedSubjects(user, klass.classId, null);
 
-  const lessons = await repository.schedulableLessons(klass.classId);
+  const lessons = await repository.schedulableLessons(klass.classId, assignable);
   if (!lessons.some((lesson) => lesson.id === input.lessonId)) {
     throw badRequest(
       "Энэ хичээлийг тухайн сурагчид оноох боломжгүй.",
@@ -280,6 +281,7 @@ export async function quizAttemptsForTeacher(
   user: AuthenticatedUser,
   classId: number,
   limit: number,
+  subjectId: number | null,
 ) {
   const isAdmin = user.roles.includes("ADMIN");
   const [klass] = isAdmin
@@ -295,7 +297,11 @@ export async function quizAttemptsForTeacher(
   return {
     classId: klass.classId,
     className: klass.className,
-    attempts: await repository.attemptsForClass(klass.classId, limit),
+    attempts: await repository.attemptsForClass(
+      klass.classId,
+      limit,
+      await authorisedSubjects(user, klass.classId, subjectId),
+    ),
   };
 }
 
@@ -306,9 +312,14 @@ export async function quizAttemptsForTeacher(
  * list of thirty names is a report rather than an instruction. The counts
  * above them are complete, so nothing is hidden by the cap.
  */
-export async function classSkillsForTeacher(user: AuthenticatedUser, classId: number) {
+export async function classSkillsForTeacher(
+  user: AuthenticatedUser,
+  classId: number,
+  subjectId: number | null,
+) {
   const klass = await authorisedClass(user, classId);
-  const skills = await repository.classSkillMastery(klass.classId);
+  const subjectIds = await authorisedSubjects(user, klass.classId, subjectId);
+  const skills = await repository.classSkillMastery(klass.classId, subjectIds);
 
   return {
     classId: klass.classId,
@@ -333,9 +344,11 @@ export async function assessmentSheet(
   user: AuthenticatedUser,
   classId: number,
   skillId: number | null,
+  subjectId: number | null,
 ) {
   const klass = await authorisedClass(user, classId);
-  const skills = await repository.assessableSkills(klass.classId);
+  const subjectIds = await authorisedSubjects(user, klass.classId, subjectId);
+  const skills = await repository.assessableSkills(klass.classId, subjectIds);
   const chosen = skillId ?? skills[0]?.skillId ?? null;
 
   return {
@@ -367,8 +380,9 @@ export async function submitAssessment(
   },
 ) {
   const klass = await authorisedClass(user, input.classId);
+  const subjectIds = await authorisedSubjects(user, klass.classId, null);
 
-  if (!(await repository.skillAssessableForClass(klass.classId, input.skillId))) {
+  if (!(await repository.skillAssessableForClass(klass.classId, input.skillId, subjectIds))) {
     throw badRequest("Энэ чадвар тухайн ангид тохирохгүй байна.", "SKILL_NOT_FOR_CLASS");
   }
 
@@ -412,6 +426,41 @@ export async function itemAnalysis(user: AuthenticatedUser, classId: number) {
 }
 
 /** Resolves the class a teacher may act on, or refuses. Admins bypass. */
+/**
+ * Which subjects of a class this account may look at, or null for all of them.
+ *
+ * A subject teacher sees what they hold in that class and nothing else: two
+ * teachers can share a class, one taking maths and the other physics, and the
+ * maths teacher has no business in the physics marking.
+ *
+ * A class_teachers row with no subject means the teacher carries the whole
+ * class rather than one subject of it: a primary-grade teacher, who does teach
+ * everything, and a class teacher, who is answerable for the class as a whole.
+ * Both get null here, which means do not filter.
+ *
+ * Asking for a subject the teacher does not hold is refused rather than
+ * quietly emptied, so a stale link says so instead of looking like a class
+ * with no work in it.
+ */
+async function authorisedSubjects(
+  user: AuthenticatedUser,
+  classId: number,
+  requested: number | null,
+): Promise<number[] | null> {
+  if (user.roles.includes("ADMIN")) return requested === null ? null : [requested];
+
+  const held = await repository.subjectsTaughtBy(user.teacherId, classId);
+  if (held === null) return requested === null ? null : [requested];
+  if (requested === null) return held;
+  if (!held.includes(requested)) {
+    throw forbidden(
+      "Та энэ ангид тухайн хичээлийг заадаггүй байна.",
+      "NOT_YOUR_SUBJECT",
+    );
+  }
+  return [requested];
+}
+
 async function authorisedClass(user: AuthenticatedUser, classId: number) {
   const isAdmin = user.roles.includes("ADMIN");
   const [klass] = isAdmin
@@ -425,9 +474,14 @@ async function authorisedClass(user: AuthenticatedUser, classId: number) {
   return klass;
 }
 
-export async function schedulableLessons(user: AuthenticatedUser, classId: number) {
+export async function schedulableLessons(
+  user: AuthenticatedUser,
+  classId: number,
+  subjectId: number | null,
+) {
   const klass = await authorisedClass(user, classId);
-  return repository.schedulableLessons(klass.classId);
+  const subjectIds = await authorisedSubjects(user, klass.classId, subjectId);
+  return repository.schedulableLessons(klass.classId, subjectIds);
 }
 
 /** Weekdays between two dates. Holidays are not modelled; a teacher clears those. */
@@ -442,13 +496,14 @@ function schoolDays(from: string, to: string): string[] {
 
 export async function generateSchedule(
   user: AuthenticatedUser,
-  input: { classId: number; termId: number },
+  input: { classId: number; termId: number; subjectId?: number | null },
 ) {
   const klass = await authorisedClass(user, input.classId);
+  const subjectIds = await authorisedSubjects(user, klass.classId, input.subjectId ?? null);
   const [term] = await repository.termById(input.termId);
   if (!term) throw badRequest("Улирал олдсонгүй.", "TERM_NOT_FOUND");
 
-  const lessons = await repository.schedulableLessons(klass.classId);
+  const lessons = await repository.schedulableLessons(klass.classId, subjectIds);
   if (lessons.length === 0) {
     return {
       created: 0,
@@ -497,18 +552,24 @@ export async function generateSchedule(
 
 export async function setScheduleDay(
   user: AuthenticatedUser,
-  input: { classId: number; scheduledOn: string; lessonId: number | null },
+  input: {
+    classId: number;
+    scheduledOn: string;
+    lessonId: number | null;
+    subjectId?: number | null;
+  },
 ) {
   const klass = await authorisedClass(user, input.classId);
+  const subjectIds = await authorisedSubjects(user, klass.classId, input.subjectId ?? null);
 
   if (input.lessonId === null) {
-    await repository.clearScheduleDay(klass.classId, input.scheduledOn);
+    await repository.clearScheduleDay(klass.classId, input.scheduledOn, subjectIds);
     return;
   }
 
   // Only a lesson this class could be taught: the endpoint takes an id, and
   // without this any approved lesson from any grade would be assignable.
-  const lessons = await repository.schedulableLessons(klass.classId);
+  const lessons = await repository.schedulableLessons(klass.classId, subjectIds);
   if (!lessons.some((lesson) => lesson.id === input.lessonId)) {
     throw badRequest(
       "Энэ хичээлийг тухайн ангид оноох боломжгүй.",

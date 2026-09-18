@@ -389,6 +389,15 @@ paths:
           required: true
           schema:
             type: integer
+        - name: subjectId
+          in: query
+          required: false
+          description: >
+            Narrow to one subject the teacher holds in this class. Omitted
+            means every subject they hold there, which for a class teacher or
+            a primary-grade teacher is every subject the class runs.
+          schema:
+            type: integer
         - name: from
           in: query
           required: false
@@ -522,6 +531,15 @@ paths:
           required: true
           schema:
             type: integer
+        - name: subjectId
+          in: query
+          required: false
+          description: >
+            Narrow to one subject the teacher holds in this class. Omitted
+            means every subject they hold there, which for a class teacher or
+            a primary-grade teacher is every subject the class runs.
+          schema:
+            type: integer
         - name: limit
           in: query
           required: false
@@ -557,6 +575,15 @@ paths:
         - name: classId
           in: query
           required: true
+          schema:
+            type: integer
+        - name: subjectId
+          in: query
+          required: false
+          description: >
+            Narrow to one subject the teacher holds in this class. Omitted
+            means every subject they hold there, which for a class teacher or
+            a primary-grade teacher is every subject the class runs.
           schema:
             type: integer
         - name: skillId
@@ -656,6 +683,15 @@ paths:
           required: true
           schema:
             type: integer
+        - name: subjectId
+          in: query
+          required: false
+          description: >
+            Narrow to one subject the teacher holds in this class. Omitted
+            means every subject they hold there, which for a class teacher or
+            a primary-grade teacher is every subject the class runs.
+          schema:
+            type: integer
       responses:
         "200":
           description: Skill standing for the class
@@ -678,6 +714,15 @@ paths:
         - name: classId
           in: query
           required: true
+          schema:
+            type: integer
+        - name: subjectId
+          in: query
+          required: false
+          description: >
+            Narrow to one subject the teacher holds in this class. Omitted
+            means every subject they hold there, which for a class teacher or
+            a primary-grade teacher is every subject the class runs.
           schema:
             type: integer
       responses:
@@ -1189,6 +1234,11 @@ components:
       properties:
         classId:
           type: integer
+        subjectId:
+          type: ["integer", "null"]
+          description: >
+            Lay out one subject's term. Null means every subject the teacher
+            holds in this class.
         termId:
           type: integer
       required: [classId, termId]
@@ -1214,6 +1264,14 @@ components:
       properties:
         classId:
           type: integer
+        subjectId:
+          type: ["integer", "null"]
+          description: >
+            Which subject's day this is. Setting a lesson takes the subject
+            from the lesson itself, so this only matters when clearing: without
+            it, emptying Tuesday in the maths timetable would also empty
+            Tuesday's physics. Null clears every subject the teacher holds in
+            the class.
         scheduledOn:
           type: string
           pattern: '^\d{4}-\d{2}-\d{2}$'
@@ -2212,6 +2270,11 @@ components:
       required: [teacherName, dateLabel, classes]
     TeacherClass:
       type: object
+      description: >
+        One entry in the teacher's class picker. A teacher who holds two
+        subjects in a class gets one entry per subject plus one for all of
+        them, so id alone no longer identifies an entry - the pair
+        (id, subjectId) does.
       properties:
         id:
           type: string
@@ -2219,6 +2282,12 @@ components:
           type: string
         gradeLevel:
           type: integer
+        subjectId:
+          type: integer
+          nullable: true
+          description: >
+            The subject this entry stands for, or null for every subject the
+            teacher holds in the class.
         subject:
           type: string
         studentCount:
@@ -2227,7 +2296,7 @@ components:
           type: string
         needsReview:
           type: integer
-      required: [id, name, gradeLevel, subject, studentCount, currentTopic, needsReview]
+      required: [id, name, gradeLevel, subjectId, subject, studentCount, currentTopic, needsReview]
     ReviewItem:
       type: object
       properties:

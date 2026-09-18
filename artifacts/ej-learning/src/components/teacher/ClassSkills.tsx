@@ -4,6 +4,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+import { subjectParam } from '@/lib/teacher-class'
 
 /**
  * A bar that reads left to right as gap, developing, mastered.
@@ -110,8 +111,14 @@ function SkillRow({ skill }: { skill: ClassSkill }) {
  * answered add up to. A skill nobody has answered on yet simply does not
  * appear, which is why an empty list means no evidence rather than no problem.
  */
-export function ClassSkills({ classId }: { classId: number }) {
-  const { data, isLoading } = useGetClassSkills({ classId })
+export function ClassSkills({
+  classId,
+  subjectId,
+}: {
+  classId: number
+  subjectId: number | null
+}) {
+  const { data, isLoading } = useGetClassSkills({ classId, ...subjectParam(subjectId) })
 
   if (isLoading) return <Skeleton className="h-48 w-full" />
   if (!data || data.skills.length === 0) {

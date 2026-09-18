@@ -232,8 +232,16 @@ try {
     note: "бүх анги",
   });
 
-  // One teacher takes both subjects in 9А - the case the old key could not hold.
-  const teacherPlan = [
+  // Three shapes a teacher can take, because the screens treat them
+  // differently: one who holds two subjects in the same room, one who holds a
+  // single subject in rooms somebody else also teaches in, and one who carries
+  // a whole class regardless of subject.
+  const teacherPlan: {
+    username: string;
+    name: string;
+    code: string;
+    holds: { klass: string; subject: string | null }[];
+  }[] = [
     {
       username: "demo-bagsh-a",
       name: "Багш А (математик, физик)",
@@ -254,24 +262,38 @@ try {
         { klass: "DEMO-9V", subject: "PHYS" },
       ],
     },
+    {
+      // A class teacher: recorded against the class with no subject of their
+      // own, which is also how a primary-grade teacher is stored. They see
+      // every subject 9А runs, not just one.
+      username: "demo-angiin-bagsh",
+      name: "Ангийн багш (9А)",
+      code: "DEMO-T-CLASS",
+      holds: [{ klass: "DEMO-9A", subject: null }],
+    },
   ];
 
   for (const plan of teacherPlan) {
     const account = await makeAccount(plan.username, "TEACHER", plan.name, null);
+    const ownSubject = plan.holds[0].subject;
     const teacher = await one<{ id: number }>(sql`
       INSERT INTO core.teachers (user_id, teacher_code, subject_id, data_origin)
-      VALUES (${account.userId}, ${plan.code}, ${subjectIds.get(plan.holds[0].subject)!}, 'MOCK')
+      VALUES (${account.userId}, ${plan.code},
+        ${ownSubject === null ? null : subjectIds.get(ownSubject)!}, 'MOCK')
       RETURNING id`);
     for (const hold of plan.holds) {
       await db.execute(sql`
         INSERT INTO core.class_teachers (class_id, teacher_id, subject_id)
-        VALUES (${classIds.get(hold.klass)!}, ${teacher.id}, ${subjectIds.get(hold.subject)!})`);
+        VALUES (${classIds.get(hold.klass)!}, ${teacher.id},
+          ${hold.subject === null ? null : subjectIds.get(hold.subject)!})`);
     }
     accounts.push({
       username: plan.username,
       password: account.password,
       role: "TEACHER",
-      note: plan.holds.map((h) => `${h.klass.replace("DEMO-", "")}/${h.subject}`).join(" "),
+      note: plan.holds
+        .map((h) => `${h.klass.replace("DEMO-", "")}/${h.subject ?? "бүх хичээл"}`)
+        .join(" "),
     });
   }
 
@@ -421,7 +443,13 @@ try {
   // ---- a term of timetable --------------------------------------------
   let scheduled = 0;
   const classSubjects: { klass: string; subject: string }[] = [];
-  for (const plan of teacherPlan) for (const hold of plan.holds) classSubjects.push(hold);
+  for (const plan of teacherPlan) {
+    for (const hold of plan.holds) {
+      // A class teacher holds the class, not a subject, so they add no
+      // timetable of their own - they look at what the others laid out.
+      if (hold.subject !== null) classSubjects.push({ klass: hold.klass, subject: hold.subject });
+    }
+  }
 
   for (const { klass, subject } of classSubjects) {
     const subjectSkills = SKILLS.filter((s) => s.subject === subject);
@@ -559,7 +587,12 @@ try {
     await check("teacher -> class x subject",
       `SELECT count(*)::int AS n FROM core.class_teachers ct
        JOIN core.classes c ON c.id = ct.class_id WHERE c.class_code LIKE 'DEMO-%'`,
-      (n) => n === classSubjects.length),
+      (n) => n === classSubjects.length + 1),
+    await check("a class teacher carries a class with no subject",
+      `SELECT count(*)::int AS n FROM core.class_teachers ct
+       JOIN core.classes c ON c.id = ct.class_id
+       WHERE c.class_code LIKE 'DEMO-%' AND ct.subject_id IS NULL`,
+      (n) => n === 1),
     await check("one teacher, two subjects, same class",
       `SELECT count(*)::int AS n FROM (
          SELECT ct.class_id, ct.teacher_id FROM core.class_teachers ct

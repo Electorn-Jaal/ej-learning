@@ -297,11 +297,12 @@ export const GetTeacherClassesResponseItem = zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "gradeLevel": zod.number().int(),
+  "subjectId": zod.number().int().nullable().describe('The subject this entry stands for, or null for every subject the teacher holds in the class.\n'),
   "subject": zod.string(),
   "studentCount": zod.number().int(),
   "currentTopic": zod.string(),
   "needsReview": zod.number().int()
-})
+}).describe('One entry in the teacher\'s class picker. A teacher who holds two subjects in a class gets one entry per subject plus one for all of them, so id alone no longer identifies an entry - the pair (id, subjectId) does.\n')
 export const GetTeacherClassesResponse = zod.array(GetTeacherClassesResponseItem)
 
 
@@ -608,6 +609,7 @@ export const getTeacherScheduleQueryToRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}
 
 export const GetTeacherScheduleQueryParams = zod.object({
   "classId": zod.coerce.number().int(),
+  "subjectId": zod.coerce.number().int().optional().describe('Narrow to one subject the teacher holds in this class. Omitted means every subject they hold there, which for a class teacher or a primary-grade teacher is every subject the class runs.\n'),
   "from": zod.coerce.string().regex(getTeacherScheduleQueryFromRegExp).optional().describe('Inclusive start date (YYYY-MM-DD). Defaults to seven days ago.'),
   "to": zod.coerce.string().regex(getTeacherScheduleQueryToRegExp).optional().describe('Inclusive end date (YYYY-MM-DD). Defaults to fourteen days ahead.')
 })
@@ -699,6 +701,7 @@ export const getTeacherQuizAttemptsQueryLimitMax = 200;
 
 export const GetTeacherQuizAttemptsQueryParams = zod.object({
   "classId": zod.coerce.number().int(),
+  "subjectId": zod.coerce.number().int().optional().describe('Narrow to one subject the teacher holds in this class. Omitted means every subject they hold there, which for a class teacher or a primary-grade teacher is every subject the class runs.\n'),
   "limit": zod.coerce.number().int().min(1).max(getTeacherQuizAttemptsQueryLimitMax).optional()
 })
 
@@ -732,6 +735,7 @@ export const GetTeacherQuizAttemptsResponse = zod.object({
  */
 export const GetAssessmentSheetQueryParams = zod.object({
   "classId": zod.coerce.number().int(),
+  "subjectId": zod.coerce.number().int().optional().describe('Narrow to one subject the teacher holds in this class. Omitted means every subject they hold there, which for a class teacher or a primary-grade teacher is every subject the class runs.\n'),
   "skillId": zod.coerce.number().int().optional()
 })
 
@@ -815,7 +819,8 @@ export const GetItemAnalysisResponse = zod.object({
  * @summary How a class stands on each skill it has been measured on
  */
 export const GetClassSkillsQueryParams = zod.object({
-  "classId": zod.coerce.number().int()
+  "classId": zod.coerce.number().int(),
+  "subjectId": zod.coerce.number().int().optional().describe('Narrow to one subject the teacher holds in this class. Omitted means every subject they hold there, which for a class teacher or a primary-grade teacher is every subject the class runs.\n')
 })
 
 export const GetClassSkillsResponse = zod.object({
@@ -845,7 +850,8 @@ export const GetClassSkillsResponse = zod.object({
  * @summary Approved lessons for a class, in the order the book teaches them
  */
 export const GetTeacherLessonsQueryParams = zod.object({
-  "classId": zod.coerce.number().int()
+  "classId": zod.coerce.number().int(),
+  "subjectId": zod.coerce.number().int().optional().describe('Narrow to one subject the teacher holds in this class. Omitted means every subject they hold there, which for a class teacher or a primary-grade teacher is every subject the class runs.\n')
 })
 
 export const GetTeacherLessonsResponseItem = zod.object({
@@ -865,6 +871,7 @@ export const GetTeacherLessonsResponse = zod.array(GetTeacherLessonsResponseItem
  */
 export const GenerateScheduleBody = zod.object({
   "classId": zod.number().int(),
+  "subjectId": zod.number().int().nullish().describe('Lay out one subject\'s term. Null means every subject the teacher holds in this class.\n'),
   "termId": zod.number().int()
 })
 
@@ -887,6 +894,7 @@ export const setScheduleDayBodyScheduledOnRegExp = new RegExp('^\\d{4}-\\d{2}-\\
 
 export const SetScheduleDayBody = zod.object({
   "classId": zod.number().int(),
+  "subjectId": zod.number().int().nullish().describe('Which subject\'s day this is. Setting a lesson takes the subject from the lesson itself, so this only matters when clearing: without it, emptying Tuesday in the maths timetable would also empty Tuesday\'s physics. Null clears every subject the teacher holds in the class.\n'),
   "scheduledOn": zod.string().regex(setScheduleDayBodyScheduledOnRegExp),
   "lessonId": zod.number().int().nullable().describe('null clears the day.')
 })

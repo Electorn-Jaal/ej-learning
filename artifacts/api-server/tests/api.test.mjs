@@ -332,33 +332,46 @@ describe("EJ Learning API", { concurrency: false }, () => {
       );
     });
 
-    it("lists the class once, naming both subjects", async () => {
+    it("offers one entry per subject, plus one for both", async () => {
       const client = createClient(harness.baseUrl);
       await client.signIn(byName["demo-teacher"]);
       const res = await client.request("/teacher/classes");
       assert.equal(res.status, 200);
 
       const mine = res.payload.filter((row) => row.name === "Туршилтын 9А");
-      assert.equal(mine.length, 1, "a class the teacher holds twice is still one class");
-      assert.equal(mine[0].subject, "Математик — local demo, Физик — local demo");
+      assert.equal(mine.length, 3, "two subjects and an all-subjects entry");
+      assert.equal(mine[0].subjectId, null, "the all-subjects entry comes first");
+      assert.deepEqual(
+        mine.slice(1).map((row) => row.subject).sort(),
+        ["Математик — local demo", "Физик — local demo"],
+      );
     });
 
-    it("never returns the same class id twice", async () => {
-      // Both teacher screens use this id as the select's value and React key.
-      // Two rows sharing one id made the select render its label twice and
-      // made the two rows indistinguishable once chosen.
+    it("offers no all-subjects entry where there is one subject", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(byName["demo-teacher-b"]);
+      const res = await client.request("/teacher/classes");
+      assert.equal(res.status, 200);
+
+      // demo-teacher-b holds only maths in 9Б; an "all subjects" entry there
+      // would stand for exactly one subject and say nothing.
+      const theirs = res.payload.filter((row) => row.name === "Туршилтын 9Б");
+      assert.equal(theirs.length, 1);
+      assert.notEqual(theirs[0].subjectId, null);
+    });
+
+    it("never offers the same entry twice", async () => {
+      // The screens use (id, subjectId) as the select's value and React key.
+      // Entries sharing a key made the select render both labels at once and
+      // made the choice ambiguous once made.
       for (const username of ["demo-teacher", "demo-teacher-b", "demo-admin"]) {
         const client = createClient(harness.baseUrl);
         await client.signIn(byName[username]);
         const res = await client.request("/teacher/classes");
         assert.equal(res.status, 200);
 
-        const ids = res.payload.map((row) => row.id);
-        assert.deepEqual(
-          ids,
-          [...new Set(ids)],
-          `${username} got a duplicate class id: ${ids.join(", ")}`,
-        );
+        const keys = res.payload.map((row) => `${row.id}:${row.subjectId ?? "all"}`);
+        assert.deepEqual(keys, [...new Set(keys)], `${username}: ${keys.join(", ")}`);
       }
     });
 
@@ -444,6 +457,113 @@ ${run.output}`);
         /sitting\(s\) skipped: a teacher marked that skill afterwards/,
         "the quiz attempts predate the mark, so they should be reported as superseded",
       );
+    });
+  });
+
+  describe("a teacher's screens follow the subject they hold", () => {
+    let mathsId;
+    let physicsId;
+    let classA;
+    let classB;
+
+    before(async () => {
+      [{ id: mathsId }] = await harness.sql(
+        "SELECT id FROM core.subjects WHERE code = 'MATH'",
+      );
+      [{ id: physicsId }] = await harness.sql(
+        "SELECT id FROM core.subjects WHERE code = 'PHYS'",
+      );
+      [{ id: classA }] = await harness.sql(
+        "SELECT id FROM core.classes WHERE class_code = 'MOCK-LOCAL-9A'",
+      );
+      [{ id: classB }] = await harness.sql(
+        "SELECT id FROM core.classes WHERE class_code = 'MOCK-LOCAL-9B'",
+      );
+    });
+
+    it("refuses a subject the teacher does not hold in that class", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(byName["demo-teacher-b"]);
+
+      // demo-teacher-b holds maths in 9Б and nothing else there.
+      const ok = await client.request(
+        `/teacher/quiz-attempts?classId=${classB}&subjectId=${mathsId}`,
+      );
+      assert.equal(ok.status, 200);
+
+      const refused = await client.request(
+        `/teacher/quiz-attempts?classId=${classB}&subjectId=${physicsId}`,
+      );
+      assert.equal(refused.status, 403, "a subject they do not hold should be refused");
+    });
+
+    it("refuses a malformed subject rather than showing everything", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(byName["demo-teacher"]);
+      const res = await client.request(
+        `/teacher/quiz-attempts?classId=${classA}&subjectId=nonsense`,
+      );
+      assert.equal(res.status, 400);
+    });
+
+    it("narrows the lesson list to the chosen subject", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(byName["demo-teacher"]);
+
+      const both = await client.request(`/teacher/lessons?classId=${classA}`);
+      assert.equal(both.status, 200);
+
+      const maths = await client.request(
+        `/teacher/lessons?classId=${classA}&subjectId=${mathsId}`,
+      );
+      assert.equal(maths.status, 200);
+      assert.ok(
+        maths.payload.length <= both.payload.length,
+        "one subject cannot offer more lessons than every subject",
+      );
+    });
+
+    it("clears one subject's day and leaves the other standing", async () => {
+      // setScheduleDay's own comment says putting maths on Tuesday must not
+      // remove Tuesday's Mongolian. Clearing used to do exactly that.
+      const client = createClient(harness.baseUrl);
+      await client.signIn(byName["demo-teacher"]);
+
+      const [{ scheduled_on: day }] = await harness.sql(
+        `SELECT scheduled_on::text AS scheduled_on FROM learning.class_schedule
+         WHERE class_id = $1 LIMIT 1`,
+        [classA],
+      );
+
+      // Put a second subject on the same day, straight into the table: the
+      // point is what clearing does, not how the row got there.
+      await harness.sql(
+        `INSERT INTO learning.class_schedule
+           (class_id, term_id, daily_lesson_id, scheduled_on, subject_id, created_by)
+         SELECT $1, cs.term_id, cs.daily_lesson_id, $2::date, $3, cs.created_by
+           FROM learning.class_schedule cs WHERE cs.class_id = $1 LIMIT 1
+         ON CONFLICT DO NOTHING`,
+        [classA, day, physicsId],
+      );
+
+      const before = await harness.sql(
+        "SELECT subject_id FROM learning.class_schedule WHERE class_id = $1 AND scheduled_on = $2::date",
+        [classA, day],
+      );
+      assert.equal(before.length, 2, "expected two subjects on the day");
+
+      const cleared = await client.request("/teacher/schedule/day", {
+        method: "PUT",
+        body: { classId: Number(classA), subjectId: Number(mathsId), scheduledOn: day, lessonId: null },
+      });
+      assert.ok(cleared.status < 400, `clearing answered ${cleared.status}`);
+
+      const after = await harness.sql(
+        "SELECT subject_id::int AS subject FROM learning.class_schedule WHERE class_id = $1 AND scheduled_on = $2::date",
+        [classA, day],
+      );
+      assert.equal(after.length, 1, "only the chosen subject should have gone");
+      assert.equal(after[0].subject, Number(physicsId));
     });
   });
 });
