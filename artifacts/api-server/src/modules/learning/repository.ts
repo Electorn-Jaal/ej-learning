@@ -967,6 +967,7 @@ export type TeacherClassRow = {
   name: string;
   gradeLevel: number;
   subjectId: number | null;
+  canEdit: boolean;
   subject: string;
   studentCount: number;
   currentTopic: string;
@@ -1045,6 +1046,14 @@ export const teacherClassOptions = (teacherId: number | null, isAdmin: boolean) 
      SELECT c.id::text AS id, c.name_mn AS name,
        g.grade_number::int AS "gradeLevel",
        e.subject_id::int AS "subjectId",
+       -- Seeing a subject and being able to change it are different things:
+       -- a class teacher sees the English their colleague takes.
+       ($2::boolean OR EXISTS (
+          SELECT 1 FROM core.class_teachers mine
+           WHERE mine.class_id = c.id AND mine.teacher_id = $1::bigint
+             AND mine.is_active AND mine.subject_id IS NOT NULL
+             AND (e.subject_id IS NULL OR mine.subject_id = e.subject_id)
+        )) AS "canEdit",
        COALESCE(sub.name_mn, 'Бүх хичээл') AS subject,
        (SELECT count(DISTINCT en.student_id)::int
         FROM core.student_enrollments en

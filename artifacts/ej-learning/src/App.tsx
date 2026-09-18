@@ -52,17 +52,27 @@ function StudentRoutes() {
   );
 }
 
-function StaffRoutes({ admin }: { admin: boolean }) {
+/**
+ * Routes are chosen, not merely hidden from the navigation, so typing an
+ * address cannot reach a screen this account has no business on. The entry
+ * screens need the account to take a lesson somewhere; the integrations
+ * screen describes a connection nobody has made, so it is the administrator's.
+ */
+function StaffRoutes({ admin, takesLessons }: { admin: boolean; takesLessons: boolean }) {
   return (
     <Switch>
       {admin ? <Route path="/teacher/books" component={AdminBooks} /> : null}
+      {admin ? <Route path="/teacher/integrations" component={TeacherIntegrations} /> : null}
       <Route path="/teacher" component={TeacherDashboard} />
       <Route path="/teacher/schedule" component={TeacherSchedule} />
       <Route path="/teacher/results" component={TeacherQuizResults} />
-      <Route path="/teacher/assessment" component={TeacherAssessment} />
-      <Route path="/teacher/reviews" component={TeacherReviews} />
+      {takesLessons || admin ? (
+        <Route path="/teacher/assessment" component={TeacherAssessment} />
+      ) : null}
+      {takesLessons || admin ? (
+        <Route path="/teacher/reviews" component={TeacherReviews} />
+      ) : null}
       <Route path="/teacher/catalog" component={TeacherCatalog} />
-      <Route path="/teacher/integrations" component={TeacherIntegrations} />
       <Route path="/teacher/password" component={Password} />
       <Route component={NotFound} />
     </Switch>
@@ -82,7 +92,11 @@ function RoleRoutes({ user }: { user: AuthenticatedUser }) {
     if (staff && !location.startsWith('/teacher')) navigate('/teacher', { replace: true });
   }, [staff, location, navigate]);
 
-  return staff ? <StaffRoutes admin={hasRole(user, 'ADMIN')} /> : <StudentRoutes />;
+  return staff ? (
+    <StaffRoutes admin={hasRole(user, 'ADMIN')} takesLessons={user.takesLessons} />
+  ) : (
+    <StudentRoutes />
+  );
 }
 
 function RoutedErrorBoundary({ children }: { children: ReactNode }) {

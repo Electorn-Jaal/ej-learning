@@ -297,7 +297,8 @@ export const GetTeacherClassesResponseItem = zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "gradeLevel": zod.number().int(),
-  "subjectId": zod.number().int().nullable().describe('The subject this entry stands for, or null for every subject the teacher holds in the class.\n'),
+  "subjectId": zod.number().int().nullable().describe('The subject this entry stands for, or null for every subject the teacher may look at in the class.\n'),
+  "canEdit": zod.boolean().describe('Whether this account may change what this entry shows - timetable it, mark it, assign it. A class teacher sees subjects somebody else takes; those entries come back read-only.\n'),
   "subject": zod.string(),
   "studentCount": zod.number().int(),
   "currentTopic": zod.string(),
@@ -508,6 +509,7 @@ export const LoginResponse = zod.object({
   "displayName": zod.string(),
   "studentId": zod.number().int().nullable(),
   "teacherId": zod.number().int().nullable(),
+  "takesLessons": zod.boolean().describe('Whether this account actually takes any lesson anywhere. A class teacher who takes none of their class\'s subjects still sees the class, but the screens for entering things - the register, the review queue - have nothing in them for such an account, so the navigation leaves them out rather than offering a page that refuses.\n'),
   "roles": zod.array(zod.enum(['STUDENT', 'TEACHER', 'ADMIN']))
 }).describe('Roles are a list: one account can hold TEACHER and ADMIN at once. studentId and teacherId are the linked core.students / core.teachers rows, null when the account has none.\n')
 })
@@ -529,6 +531,7 @@ export const GetSessionResponse = zod.object({
   "displayName": zod.string(),
   "studentId": zod.number().int().nullable(),
   "teacherId": zod.number().int().nullable(),
+  "takesLessons": zod.boolean().describe('Whether this account actually takes any lesson anywhere. A class teacher who takes none of their class\'s subjects still sees the class, but the screens for entering things - the register, the review queue - have nothing in them for such an account, so the navigation leaves them out rather than offering a page that refuses.\n'),
   "roles": zod.array(zod.enum(['STUDENT', 'TEACHER', 'ADMIN']))
 }).describe('Roles are a list: one account can hold TEACHER and ADMIN at once. studentId and teacherId are the linked core.students / core.teachers rows, null when the account has none.\n')
 })

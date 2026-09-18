@@ -1608,6 +1608,15 @@ components:
           type: ["integer", "null"]
         teacherId:
           type: ["integer", "null"]
+        takesLessons:
+          type: boolean
+          description: >
+            Whether this account actually takes any lesson anywhere. A class
+            teacher who takes none of their class's subjects still sees the
+            class, but the screens for entering things - the register, the
+            review queue - have nothing in them for such an account, so the
+            navigation leaves them out rather than offering a page that
+            refuses.
         roles:
           type: array
           items:
@@ -1618,6 +1627,7 @@ components:
         - displayName
         - studentId
         - teacherId
+        - takesLessons
         - roles
     SessionEnvelope:
       type: object
@@ -2287,7 +2297,13 @@ components:
           nullable: true
           description: >
             The subject this entry stands for, or null for every subject the
-            teacher holds in the class.
+            teacher may look at in the class.
+        canEdit:
+          type: boolean
+          description: >
+            Whether this account may change what this entry shows - timetable
+            it, mark it, assign it. A class teacher sees subjects somebody else
+            takes; those entries come back read-only.
         subject:
           type: string
         studentCount:
@@ -2296,7 +2312,7 @@ components:
           type: string
         needsReview:
           type: integer
-      required: [id, name, gradeLevel, subjectId, subject, studentCount, currentTopic, needsReview]
+      required: [id, name, gradeLevel, subjectId, canEdit, subject, studentCount, currentTopic, needsReview]
     ReviewItem:
       type: object
       properties:

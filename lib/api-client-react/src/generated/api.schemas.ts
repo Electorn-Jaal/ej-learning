@@ -393,6 +393,8 @@ export interface AuthenticatedUser {
   studentId: number | null;
   /** @nullable */
   teacherId: number | null;
+  /** Whether this account actually takes any lesson anywhere. A class teacher who takes none of their class's subjects still sees the class, but the screens for entering things - the register, the review queue - have nothing in them for such an account, so the navigation leaves them out rather than offering a page that refuses. */
+  takesLessons: boolean;
   roles: UserRole[];
 }
 
@@ -888,8 +890,10 @@ export interface TeacherClass {
   id: string;
   name: string;
   gradeLevel: number;
-  /** The subject this entry stands for, or null for every subject the teacher holds in the class. */
+  /** The subject this entry stands for, or null for every subject the teacher may look at in the class. */
   subjectId: number | null;
+  /** Whether this account may change what this entry shows - timetable it, mark it, assign it. A class teacher sees subjects somebody else takes; those entries come back read-only. */
+  canEdit: boolean;
   subject: string;
   studentCount: number;
   currentTopic: string;

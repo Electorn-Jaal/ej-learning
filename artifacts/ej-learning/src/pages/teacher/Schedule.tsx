@@ -40,10 +40,12 @@ const DAY = new Intl.DateTimeFormat('mn-MN', {
 function ScheduleTable({
   classId,
   subjectId,
+  canEdit,
   lessons,
 }: {
   classId: number
   subjectId: number | null
+  canEdit: boolean
   lessons: SchedulableLesson[]
 }) {
   const queryClient = useQueryClient()
@@ -56,8 +58,13 @@ function ScheduleTable({
   const refresh = () =>
     queryClient.invalidateQueries({ queryKey: getGetTeacherScheduleQueryKey(params) })
 
+  // The subject goes with the write: clearing a day without it would empty
+  // every subject scheduled that day, not the one on screen.
   const change = (scheduledOn: string, lessonId: number | null) =>
-    setDay({ data: { classId, scheduledOn, lessonId } }, { onSuccess: refresh })
+    setDay(
+      { data: { classId, scheduledOn, lessonId, ...(subjectId === null ? {} : { subjectId }) } },
+      { onSuccess: refresh },
+    )
 
   if (isLoading) return <Skeleton className="h-64 w-full" />
   if (isError || !data) {
@@ -83,14 +90,21 @@ function ScheduleTable({
       </CardHeader>
 
       <CardContent className="space-y-4">
+        {/* Disabled controls with no explanation read as broken. */}
+        {canEdit ? null : (
+          <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+            Та энэ хичээлийг заадаггүй тул хуваарийг харах боломжтой, өөрчлөх
+            боломжгүй.
+          </p>
+        )}
         <div className="flex flex-wrap items-center gap-3 border-b pb-4">
           <Button
             variant="outline"
             size="sm"
-            disabled={generating}
+            disabled={generating || !canEdit}
             onClick={() =>
               generate(
-                { data: { classId, termId: 1 } },
+                { data: { classId, termId: 1, ...(subjectId === null ? {} : { subjectId }) } },
                 {
                   onSuccess: (result) => {
                     setNotice(result.notice)
@@ -139,7 +153,7 @@ function ScheduleTable({
                   <div className="min-w-0 flex-1">
                     <Select
                       value={day.lessonId === null ? '' : String(day.lessonId)}
-                      disabled={saving}
+                      disabled={saving || !canEdit}
                       onValueChange={(value) => change(day.scheduledOn, Number(value))}
                     >
                       <SelectTrigger
@@ -168,7 +182,7 @@ function ScheduleTable({
                     <Button
                       variant="ghost"
                       size="sm"
-                      disabled={saving}
+                      disabled={saving || !canEdit}
                       title="Энэ өдрийг хоослох"
                       onClick={() => change(day.scheduledOn, null)}
                     >
@@ -190,6 +204,8 @@ export default function TeacherSchedule() {
   const { data: classes, isLoading } = useGetTeacherClasses()
   const [selected, setSelected] = useState<string | null>(null)
   const { key, classId, subjectId } = currentSelection(classes, selected)
+  // A class teacher reads the timetable of a subject somebody else takes.
+  const canEdit = classes?.find((row) => entryKey(row) === key)?.canEdit ?? false
   const lessonParams = { classId, ...subjectParam(subjectId) }
   const { data: lessons } = useGetTeacherLessons(lessonParams, {
     query: {
@@ -230,7 +246,12 @@ export default function TeacherSchedule() {
       ) : null}
 
       {lessons ? (
-        <ScheduleTable classId={classId} subjectId={subjectId} lessons={lessons} />
+        <ScheduleTable
+          classId={classId}
+          subjectId={subjectId}
+          canEdit={canEdit}
+          lessons={lessons}
+        />
       ) : (
         <Skeleton className="h-64 w-full" />
       )}

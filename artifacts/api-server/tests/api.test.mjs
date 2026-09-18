@@ -670,5 +670,30 @@ ${run.output}`);
       const sheet = await client.request(`/teacher/assessment-sheet?classId=${classA}`);
       assert.equal(sheet.status, 200);
     });
+
+    it("marks the entries they may not change as read-only", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(byName["demo-teacher-b"]);
+
+      const res = await client.request("/teacher/classes");
+      const entries = res.payload.filter((row) => row.name === "Туршилтын 9А");
+      const maths = entries.find((row) => row.subject.startsWith("Математик"));
+      const physics = entries.find((row) => row.subject.startsWith("Физик"));
+
+      assert.equal(maths.canEdit, false, "the maths is somebody else's to change");
+      assert.equal(physics.canEdit, true, "the physics is theirs");
+    });
+
+    it("says on the session whether the account takes any lesson", async () => {
+      const carrier = createClient(harness.baseUrl);
+      await carrier.signIn(byName["demo-teacher"]);
+      const teaching = await carrier.request("/auth/me");
+      assert.equal(teaching.payload.user.takesLessons, true);
+
+      const student = createClient(harness.baseUrl);
+      await student.signIn(accountsByRole.STUDENT);
+      const none = await student.request("/auth/me");
+      assert.equal(none.payload.user.takesLessons, false);
+    });
   });
 });
