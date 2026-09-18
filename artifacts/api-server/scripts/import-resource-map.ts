@@ -37,7 +37,7 @@ const assign = process.argv.includes("--assign");
 
 const repoRoot = path.resolve(process.cwd(), "../..");
 const extract = JSON.parse(
-  await readFile(path.join(repoRoot, "data/cefr-extract.json"), "utf8"),
+  await readFile(path.join(repoRoot, "local-data/extracted/cefr-extract.json"), "utf8"),
 ) as { resourceMap: Record<string, string | null>[] };
 
 const SKILL_MN: Record<string, string> = {

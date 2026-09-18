@@ -1,6 +1,6 @@
 """Extracts the Daily Learning Schedule sheet to JSON, without interpreting it.
 
-    python scripts/src/extract-daily-schedule.py <workbook.xlsx> data/daily-schedule.json
+    python scripts/src/extract-daily-schedule.py <workbook.xlsx> local-data/extracted/daily-schedule.json
 
 Same split as extract-cefr.py: spreadsheet parsing lives where the tooling is,
 and the TypeScript importer decides what any of it means.

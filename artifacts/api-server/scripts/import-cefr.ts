@@ -1,7 +1,8 @@
 /**
  * Loads the extracted CEFR placement data through staging into core.
  *
- *   python scripts/src/extract-cefr.py "<workbook>.xlsx" data/cefr-extract.json
+ *   python scripts/src/extract-cefr.py <workbook.xlsx> \
+ *       local-data/extracted/cefr-extract.json
  *   node scripts/run-ts.mjs scripts/import-cefr.ts --yes
  *
  * Every submission is written to staging.import_rows as the raw object first,
@@ -52,7 +53,7 @@ const replaceMock = process.argv.includes("--replace-mock");
 
 const repoRoot = path.resolve(process.cwd(), "../..");
 const extract = JSON.parse(
-  await readFile(path.join(repoRoot, "data/cefr-extract.json"), "utf8"),
+  await readFile(path.join(repoRoot, "local-data/extracted/cefr-extract.json"), "utf8"),
 ) as {
   source: string;
   items: { itemCode: string; level: string; domain: string; prompt: string; itemOrder: number; observedOptions: string[] }[];
@@ -60,7 +61,7 @@ const extract = JSON.parse(
   cefrResults: Record<string, string | null>[];
 };
 const keyFile = JSON.parse(
-  await readFile(path.join(repoRoot, "data/cefr-answer-key.reconstructed.json"), "utf8"),
+  await readFile(path.join(repoRoot, "local-data/extracted/cefr-answer-key.reconstructed.json"), "utf8"),
 ) as { trust: string; items: { itemCode: string; correctAnswer: string }[] };
 const correctByItem = new Map(keyFile.items.map((i) => [i.itemCode, i.correctAnswer]));
 

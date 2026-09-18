@@ -1,75 +1,64 @@
-# Existing database integration
+# Өгөгдлийн бүтэц ба кодын холбоо
 
-Inspected `ej_learning_dev` on localhost:5432 on 2026-09-17 using read-only queries.
-No tables, rows, statuses, or source materials were changed. Database passwords and
-connection strings are not included in this document.
+Шинэчилсэн: 2026-09-18. Эх кодын үзлэг; live database-ийн тоо, migration хэрэглэгдсэн эсэхийг энэ удаа шалгаагүй.
 
-## Schema and API mapping
-
-| Feature | Existing relations | Implementation |
+| Schema / өгөгдөл | Үүрэг | Кодын эх сурвалж |
 |---|---|---|
-| Student selection/profile | `core.students`, `core.student_enrollments`, `core.classes`, `core.grade_levels` | Active records, IDs preserved as strings; explicit selection |
-| Class overview | `core.classes`, `core.student_enrollments`, `core.students` | Distinct active membership counts; no inferred class subject |
-| Subjects | `core.subjects`, `content.skills`, `learning.student_skill_mastery` | Subjects with recorded student evidence; not a course-enrollment claim |
-| Skill progress | `learning.student_skill_mastery`, `content.skills` | Existing mastery status, percentage, attempt count and assessment timestamp |
-| Diagnostic history | `assessment.diagnostic_attempts` | Imported totals and status; not regraded |
-| Web submission history | `assessment.web_diagnostic_submissions`, `assessment.web_diagnostic_answers`, `assessment.diagnostic_items` | Separate history entries; no inferred link/deduplication to imported attempts |
-| Pending review | Same web diagnostic tables | Each answer is a review row; dashboard counts submissions, not answers |
-| Teacher catalog | `learning.daily_lessons`, `learning.tasks`, `learning.mastery_checks`, `content.skills`, `content.source_materials` | Draft-aware read-only catalog; answer guides omitted |
-| Student lesson reader | Approved, web-ready `learning.daily_lessons` for an active class grade | Lesson + skill + referenced source must be approved; recovery lesson also requires an approved recovery skill |
-| Future imports | `staging.import_jobs`, `staging.import_rows` | Existing storage candidates; Google integration is not connected |
+| core | Хэрэглэгч, дүр, session, сурагч, багш, анги, элсэлт, хичээл | lib/db/src/schema/database.ts, identity.ts |
+| content | Ном, хувилбар, бүтэц, сэдэв, чадвар, урьдач нөхцөл, холбоос | lib/db/src/schema/database.ts |
+| learning | Хичээл, даалгавар, чадварын үнэлгээ | database.ts |
+| learning.terms, class_schedule, student_assignments | Улирал, ангийн хуваарь, сурагчийн оноолт | scheduling.ts |
+| learning.quiz_attempts | Сорилын хариулт ба үр дүн | quiz.ts |
+| assessment | Асуултын сан, сонголт, оношилгооны түүх | database.ts, quiz.ts |
+| staging | Импортын job/мөрийн загвар | database.ts; бүрэн импортын бүтээгдэхүүн гэсэн үг биш |
+| audit | Өөрчлөлтийн бүртгэл | database.ts; бүх үйлдэл хамрагдсан эсэхийг тусад нь шалгана |
 
-Counts at inspection: 26 students, 2 classes, 34 skills, 41 lessons, 82 tasks,
-65 mastery checks, 265 mastery records, 26 imported diagnostic attempts, and
-6 web submissions (4 pending, 2 reviewed). All skills, lessons, tasks and mastery
-checks were DRAFT. These are observations, not hardcoded application counts.
+## API холбоос
 
-Mastery mapping: `MASTERED → mastered`, `DEVELOPING → developing`,
-`GAP → needs_support`, `NOT_ASSESSED → unassessed`. Existing evidence for draft
-skills remains visible as history; a draft does not become approved by having
-an assessment record. New unassessed skills are included only if approved and
-appropriate for an active class grade. A missing score is not invented. Source
-fractional total scores are retained. Web scores remain null until every answer
-has a score and the submission is REVIEWED.
+- modules/identity: нэвтрэлт, гаралт, session, нууц үг.
+- modules/content: админы номын жагсаалт, PDF upload, бүтэц, page offset.
+- modules/learning: өнөөдрийн хичээл, хуваарь, quiz, багшийн үнэлгээ, нөхөх ажил.
+- routes/native-learning.ts: ахиц, каталог, хуучин унших endpoint-ууд, Google not_connected төлөв. Role шалгалттай ч зарим багшийн жагсаалтын ангиар хязгаарлах хэрэгжилтийг шалгах шаардлагатай.
+- routes/index.ts нь эдгээрийг mount хийдэг. routes/ej-learning.ts mock router mount хийгдээгүй.
 
-## Deliberate gaps
+Өдрийн хичээлийн каталог ба хэнд/хэзээ оноосон ажил нь өөр ойлголт. class_schedule-ийн unique key нь анги × хичээл × өдөр; student_assignments нь сурагч × хичээл × өдөр.
 
-`learning.daily_lessons` is a content catalog, not a student/date assignment table.
-There is no assignment start/step state or idempotent per-lesson submission table
-in the inspected schema. There is also no class-to-subject relation, current-topic
-record or authenticated teacher identity mapping. The UI does not invent these.
-The student page is a lesson catalog, not a daily completion report. All writes
-return `409 READ_ONLY_PREVIEW` until the authenticated workflow is implemented.
+class_teachers-ийн primary key одоогоор анги × багш тул нэг багш нэг ангид хэд хэдэн subject мөртэй байхыг хязгаарладаг. Үүнийг өгөгдөл импортлохдоо мэдээлэл хаяж тойрохгүй.
 
-`content.source_versions.storage_key` is a storage reference, not a public URL.
-No PDF URL is fabricated. The next phase must connect source storage, explicit
-approvals, assignment persistence and authenticated learner/teacher access.
+Чадварын үнэлгээ AUTO эсвэл TEACHER эх сурвалжтай. Quiz-ээс дахин бодох нь багшийн үнэлгээг бүрэн сэргээхтэй адил биш.
 
-## Local operation and boundaries
+## Migration ба baseline
 
-Set `EJ_LOCAL_PREVIEW=true` in the ignored root `.env`, then run `corepack pnpm dev`.
-Choose a student in the app dropdown, or optionally set `LOCAL_STUDENT_ID`.
-The dropdown sends `X-Preview-Student-Id`; this is a development selection, not
-authentication. No student is silently selected. Teacher views are also local
-preview views, not authorized teacher sessions.
+Идэвхтэй экспорт lib/db/src/schema/index.ts-д; migration journal lib/db/drizzle/meta/_journal.json-д байна. Legacy schema-г шинэ шаардлагын үндэс гэж үзэхгүй.
 
-API and frontend bind to loopback by default. Preview routes require the explicit
-flag, a loopback peer, a localhost host/origin, and non-production NODE_ENV.
-Responses are no-store. Each repository query runs in a PostgreSQL READ ONLY
-transaction. Deployment must implement real authentication; preview fails closed
-in production. Do not expose this local preview through a tunnel or shared proxy.
+lib/db/drizzle/0000_flowery_morlun.sql нь өмнө байсан database-аас гаргасан introspection бөгөөд comment дотор байна. Ердийн шинэ database initializer биш. mark-baseline нь бүтэц үүсгэдэггүй, зөвхөн migration history-д тэмдэглэдэг; хоосон database дээр үүнийг ажиллуулахгүй.
 
-The active router is `artifacts/api-server/src/routes/native-learning.ts`; SQL reads
-are in `artifacts/api-server/src/lib/native-learning.ts`. The previous demo router
-and `lib/db/src/schema/ej-learning.ts` remain as legacy reference, but are not the
-active storage model. **Do not run Drizzle push from those legacy models against
-this database.** Future migrations must be additive and reviewed against the real
-schema. No migration is required for this read-only phase.
+Шинэ орчинд зориулсан schema-only baseline, зохиомол seed, migration дарааллыг тусдаа database дээр шалгаж баримтжуулах ажил үлдсэн. Үүнийг бодит сурагчийн backup-аас заавал хамааралтай болгохгүй.
 
-## Verification
+Одоо байгаа database-д migration хэрэглэхээс өмнө холболт, schema, migration history болон нөөц/сэргээх боломжийг шалгана. Хянасан өөрчлөлтөд ашиглах команд:
 
-`corepack pnpm build` checks types and builds the apps. After building, run
-`corepack pnpm test:db` for read-only integration checks against the configured
-database: identities, class counts, per-student evidence, catalog sizes, draft
-exclusion, invalid selections and blocked mutations. Tests do not print names,
-answers or credentials and do not insert fixtures into the database.
+~~~powershell
+corepack pnpm --filter @workspace/db run generate
+# Үүссэн SQL-ийг хянаж, тусдаа хөгжүүлэлтийн database-д туршина.
+corepack pnpm --filter @workspace/db run migrate
+~~~
+
+Эдгээр нь startup бүрд ажиллуулах команд биш. push script package.json-д байгаа ч энэ төслийн migration журмыг орлохгүй.
+
+## Maintenance нь startup биш
+
+- reset-dev бүх мөрийг устгах үйлдэлтэй.
+- rebuild-mastery нь чадварын үнэлгээг устгаад quiz evidence-ээс дахин боддог. Багшийн гараар оруулсан үнэлгээг бүрэн сэргээнэ гэж үзэж болохгүй.
+- run-remediation болон seed/import script-үүд мөн database-д бичнэ.
+- import-cefr, import-daily-schedule, import-resource-map нь local-data/extracted доторх JSON-оос уншина. Эдгээр файлыг эхлээд extract script-ээр гаргана; [өгөгдөл бэлтгэх](data-requirements.md)-ийг үзнэ.
+- create-english-accounts нь бодит сурагчид бүртгэл үүсгээд нууц үгийг local-data/generated/english-accounts.csv-д бичнэ. Энэ файлыг хуваалцахгүй; хэрэглэгдэж байгаа бол нууц үгийг солино.
+
+Эдгээрийг ердийн ажиллуулах зааварт автоматаар нэмэхгүй. Script бүрийн эхний тайлбарыг ажиллуулахаас өмнө уншина.
+
+## Файл ба нөөц
+
+source_versions.storage_key нь хадгалалтын reference; өөрөө public URL биш. API нь EJ_STORAGE_DIR доторх файлыг олж хүргэнэ. Database-ийн backup болон storage-ийн backup-ийг тохирох хувилбараар хамтад нь сэргээх шаардлагатай.
+
+backups/ доторх dump болон local-data/, storage/-ийн файлуудыг устгахгүй. Сэргээхийг эхлээд шинэ тусдаа database дээр туршиж, одоо байгаа өгөгдөл дээр шууд restore хийхгүй.
+
+Хуучин баримтын сурагч/хичээл/хүснэгтийн тоо нь өмнөх snapshot байсан. Одоогийн үнэн гэж ашиглахгүй; хэрэгтэй үед зөвшөөрсөн орчинд дахин хэмжинэ. Энэ баримтын шинэчлэлтээр schema, өгөгдөл, migration өөрчлөөгүй.

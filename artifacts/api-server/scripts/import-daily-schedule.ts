@@ -1,7 +1,8 @@
 /**
  * Turns the placement workbook's daily timetable into real lessons and days.
  *
- *   python scripts/src/extract-daily-schedule.py <workbook.xlsx> data/daily-schedule.json
+ *   python scripts/src/extract-daily-schedule.py <workbook.xlsx> \
+ *       local-data/extracted/daily-schedule.json
  *   node scripts/run-ts.mjs scripts/import-daily-schedule.ts --yes [--from 2026-09-14]
  *
  * Until now every English student had one lesson per skill and a placement row
@@ -112,7 +113,7 @@ const isoDate = (start: Date, days: number) => {
 };
 
 try {
-  const file = path.resolve(process.cwd(), "../../data/daily-schedule.json");
+  const file = path.resolve(process.cwd(), "../../local-data/extracted/daily-schedule.json");
   const payload = JSON.parse(await readFile(file, "utf8")) as {
     plans: Plan[];
     entries: Entry[];
