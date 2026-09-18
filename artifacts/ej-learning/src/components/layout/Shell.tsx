@@ -7,9 +7,12 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { hasRole, useSession } from "@/lib/session"
 
+// "Хичээлийн сан" is not here. It listed every approved lesson in the school
+// for a child to browse, which is not what a school day asks of them: the work
+// they have been set is on Өнөөдрийн хичээл, and what they have covered is on
+// Миний хичээлүүд. The page and its endpoint stay in the tree.
 const STUDENT_NAV = [
   { href: "/", label: "Өнөөдрийн хичээл", icon: Sun },
-  { href: "/lessons", label: "Хичээлийн сан", icon: LayoutDashboard },
   { href: "/subjects", label: "Миний хичээлүүд", icon: BookOpen },
   { href: "/progress", label: "Миний ахиц", icon: TrendingUp },
   { href: "/profile", label: "Миний бүртгэл", icon: User },

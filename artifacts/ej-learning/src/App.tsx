@@ -12,7 +12,6 @@ import { SessionProvider, hasRole, useSessionQuery } from '@/lib/session';
 import Login from '@/pages/Login';
 import Password from '@/pages/Password';
 import StudentToday from '@/pages/student/Today';
-import StudentDashboard from '@/pages/student/Dashboard';
 import StudentSubjects from '@/pages/student/Subjects';
 import StudentProgress from '@/pages/student/Progress';
 import StudentProfile from '@/pages/student/Profile';
@@ -40,7 +39,6 @@ function StudentRoutes() {
   return (
     <Switch>
       <Route path="/" component={StudentToday} />
-      <Route path="/lessons" component={StudentDashboard} />
       <Route path="/subjects" component={StudentSubjects} />
       <Route path="/progress" component={StudentProgress} />
       <Route path="/profile" component={StudentProfile} />
