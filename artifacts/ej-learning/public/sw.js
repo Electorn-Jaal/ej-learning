@@ -45,7 +45,9 @@ self.addEventListener('activate', (event) => {
 
 /** Built files carry a content hash, so a URL that matches never changes. */
 const isHashedAsset = (url) =>
-  url.pathname.startsWith(BASE + 'assets/') || url.pathname.startsWith(BASE + 'icons/');
+  url.pathname.startsWith(BASE + 'assets/') ||
+  url.pathname.startsWith(BASE + 'icons/') ||
+  url.pathname === BASE + 'logo.png';
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;
