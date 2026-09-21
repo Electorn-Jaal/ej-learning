@@ -1,0 +1,48 @@
+name: Provision EJ public HTTPS
+on:
+  push:
+    branches: [chore/ej-public-ingress]
+    paths: [deploy/ingress/**, .github/workflows/provision-ingress.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ej-public-ingress
+  cancel-in-progress: false
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Copy reviewed ingress scripts
+        uses: appleboy/scp-action@917f8b81dfc1ccd331fef9e2d61bdc6c8be94634
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_SSH_PASSWORD }}
+          port: ${{ vars.SERVER_PORT || '22' }}
+          fingerprint: ${{ secrets.SERVER_FINGERPRINT }}
+          source: deploy/ingress/*
+          target: ej-learning/ingress-sources/${{ github.sha }}
+      - name: Provision HTTPS beside existing TMS
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2
+        env:
+          EJ_INGRESS_SHA: ${{ github.sha }}
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_SSH_PASSWORD }}
+          port: ${{ vars.SERVER_PORT || '22' }}
+          fingerprint: ${{ secrets.SERVER_FINGERPRINT }}
+          envs: EJ_INGRESS_SHA
+          command_timeout: 15m
+          script: |
+            set -eu
+            exec 9>"$HOME/ej-learning/.ingress.lock"
+            flock -n 9
+            python3 "$HOME/ej-learning/ingress-sources/$EJ_INGRESS_SHA/deploy/ingress/provision.py"
+      - name: Check the public address
+        run: |
+          curl --fail --silent --show-error --retry 5 https://116.206.83.75/ej/api/healthz
+          curl --fail --silent --show-error https://116.206.83.75/ej/ | grep -q /ej/assets/
