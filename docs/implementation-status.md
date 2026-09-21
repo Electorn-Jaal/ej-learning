@@ -10,7 +10,7 @@
 | Өдрийн ажил, хуваарь, нэмэлт оноолт | modules/learning/routes.ts; Today.tsx, Schedule.tsx | Бодит өгөгдөлтэй хүлээн авалт шаардлагатай |
 | Серверээр MCQ шалгах, хариулт хадгалах | quizPaper, recordQuizAttemptScored; schema/quiz.ts | Хадгалалтгүй UI mock гэсэн хуучин тайлбар буруу |
 | Багшийн үр дүн, гараар үнэлэх | teacher/quiz-attempts, assessment-sheet, assessments | Зөвхөн бага ангид зориулсан бүрэн оношилгоо гэж дүгнэхгүй |
-| Чадварын тооцоолол | modules/learning/mastery.ts | 80/50 босго, шинэ evidence 0.6 жин, mastery-д 2 оролдлого; сургалтын бодлогоор баталгаажаагүй |
+| Чадварын тооцоолол | modules/learning/mastery.ts | 80/50 босго, шинэ evidence 0.6 жин, mastery-д 1 оролдлого (FR-C5-ийн «нэг удаа» дүрмээр); босго нь сургалтын бодлогоор баталгаажаагүй |
 | Нөхөх оноолт | modules/learning/remediation.ts; quiz submit-ээс дуудагдана | APPROVED REQUIRED холбоос, MAX_DEPTH=5; багшийн оноолтыг дарж бичихгүй байх SQL нөхцөлтэй |
 | PDF ба номын бүтэц | modules/content/routes.ts; pages/admin/Books.tsx | Бүрэн агуулга батлах урсгал, хэрэглэгч удирдах UI гэсэн үг биш |
 
