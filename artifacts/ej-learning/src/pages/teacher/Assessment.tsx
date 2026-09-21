@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { currentSelection, entryKey, subjectParam } from '@/lib/teacher-class'
 
 const LEVELS: { value: MasteryStatus; label: string; dot: string }[] = [
   { value: 'GAP', label: 'Дутуу', dot: 'bg-destructive' },
@@ -124,8 +125,12 @@ export default function TeacherAssessment() {
   const [done, setDone] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const classId = Number(selectedClass ?? classes?.[0]?.id ?? 0)
-  const params = { classId, ...(selectedSkill ? { skillId: selectedSkill } : {}) }
+  const { key, classId, subjectId } = currentSelection(classes, selectedClass)
+  const params = {
+    classId,
+    ...subjectParam(subjectId),
+    ...(selectedSkill ? { skillId: selectedSkill } : {}),
+  }
   const { data: sheet, isLoading } = useGetAssessmentSheet(params, {
     query: { queryKey: getGetAssessmentSheetQueryKey(params), enabled: classId > 0 },
   })
@@ -207,8 +212,9 @@ export default function TeacherAssessment() {
           </SelectTrigger>
           <SelectContent>
             {classes.map((klass) => (
-              <SelectItem key={klass.id} value={klass.id}>
+              <SelectItem key={entryKey(klass)} value={entryKey(klass)}>
                 {klass.name}
+                {klass.subject ? ` · ${klass.subject}` : ''}
               </SelectItem>
             ))}
           </SelectContent>

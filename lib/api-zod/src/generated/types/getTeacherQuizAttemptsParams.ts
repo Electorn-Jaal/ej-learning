@@ -9,6 +9,20 @@
 export type GetTeacherQuizAttemptsParams = {
 classId: number;
 /**
+ * Narrow to one subject the teacher holds in this class. Omitted means every subject they hold there, which for a class teacher or a primary-grade teacher is every subject the class runs.
+ */
+subjectId?: number;
+/**
+ * Earliest calendar day to include, YYYY-MM-DD, read in Asia/Ulaanbaatar. Omitted means no lower bound.
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+from?: string;
+/**
+ * Latest calendar day to include, inclusive.
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+to?: string;
+/**
  * @minimum 1
  * @maximum 200
  */

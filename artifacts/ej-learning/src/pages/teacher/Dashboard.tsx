@@ -179,9 +179,13 @@ function ClassRow({
 
 export default function TeacherDashboard() {
   const { data, isLoading, isError } = useGetTeacherDashboard()
-  // One class opens at a time: this is a list to scan, not a set of panels to
+  // One card opens at a time: this is a list to scan, not a set of panels to
   // leave hanging open.
-  const [openId, setOpenId] = useState<number | null>(null)
+  //
+  // Keyed on class *and* subject. A card is one subject of one class, so a
+  // teacher who takes two subjects in 9А has two cards carrying the same class
+  // id - keying on the class alone opened both at once.
+  const [openKey, setOpenKey] = useState<string | null>(null)
 
   if (isLoading) {
     return (
@@ -213,14 +217,20 @@ export default function TeacherDashboard() {
         </Card>
       ) : (
         <ul className="divide-y rounded-md border border-border bg-card">
-          {data.classes.map((klass) => (
-            <ClassRow
-              key={klass.classId}
-              klass={klass}
-              open={openId === klass.classId}
-              onToggle={() => setOpenId(openId === klass.classId ? null : klass.classId)}
-            />
-          ))}
+          {data.classes.map((klass) => {
+            // The subject names of one class's cards are distinct - the
+            // database will not let a teacher hold the same subject twice in
+            // a class - so this identifies a card where the class id cannot.
+            const cardKey = `${klass.classId}:${klass.subjectName}`
+            return (
+              <ClassRow
+                key={cardKey}
+                klass={klass}
+                open={openKey === cardKey}
+                onToggle={() => setOpenKey(openKey === cardKey ? null : cardKey)}
+              />
+            )
+          })}
         </ul>
       )}
     </div>

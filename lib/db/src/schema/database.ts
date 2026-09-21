@@ -460,6 +460,18 @@ export const classesInCore = core.table("classes", {
 	// children end up in a report. Everything imported or entered is REAL
 	// unless something says otherwise.
 	dataOrigin: varchar("data_origin", { length: 10 }).default('REAL').notNull(),
+	// The teacher answerable for the class as a whole, which is a different
+	// fact from who teaches what in it. A class teacher sees every subject the
+	// class runs - in a primary class that is the point, since the English
+	// lessons belong to somebody else - but still marks and timetables only
+	// the subjects they actually take. class_teachers carries the teaching;
+	// this carries the responsibility.
+	//
+	// No foreign key: core.teachers is declared in identity.ts, which already
+	// imports this file, and pointing back at it would make the two modules
+	// circular. The column is set from the application, which has the teacher
+	// row in hand when it writes it.
+	classTeacherId: bigint("class_teacher_id", { mode: "number" }),
 }, (table) => [
 	foreignKey({
 			columns: [table.gradeLevelId],

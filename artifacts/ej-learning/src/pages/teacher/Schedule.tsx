@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { currentSelection, entryKey, subjectParam } from '@/lib/teacher-class'
 
 const STAGE_LABEL: Record<string, string> = {
   PRIMARY: 'Бага анги',
@@ -38,22 +39,38 @@ const DAY = new Intl.DateTimeFormat('mn-MN', {
 
 function ScheduleTable({
   classId,
+  subjectId,
+  canEdit,
   lessons,
 }: {
   classId: number
+  subjectId: number | null
+  canEdit: boolean
   lessons: SchedulableLesson[]
 }) {
   const queryClient = useQueryClient()
-  const { data, isLoading, isError, error } = useGetTeacherSchedule({ classId })
+  const params = { classId, ...subjectParam(subjectId) }
+  const { data, isLoading, isError, error } = useGetTeacherSchedule(params)
   const { mutate: setDay, isPending: saving } = useSetScheduleDay()
   const { mutate: generate, isPending: generating } = useGenerateSchedule()
   const [notice, setNotice] = useState<string | null>(null)
 
   const refresh = () =>
-    queryClient.invalidateQueries({ queryKey: getGetTeacherScheduleQueryKey({ classId }) })
+    queryClient.invalidateQueries({ queryKey: getGetTeacherScheduleQueryKey(params) })
 
+  // The combined "Бүх хичээл" entry stands for every subject at once, so its
+  // rows are (day, subject) pairs rather than days and there is no one
+  // timetable to write into. It reads; each subject entry beside it edits.
+  const combined = subjectId === null
+  const editable = canEdit && !combined
+
+  // The subject goes with the write: clearing a day without it would empty
+  // every subject scheduled that day, not the one on screen.
   const change = (scheduledOn: string, lessonId: number | null) =>
-    setDay({ data: { classId, scheduledOn, lessonId } }, { onSuccess: refresh })
+    setDay(
+      { data: { classId, scheduledOn, lessonId, ...(subjectId === null ? {} : { subjectId }) } },
+      { onSuccess: refresh },
+    )
 
   if (isLoading) return <Skeleton className="h-64 w-full" />
   if (isError || !data) {
@@ -79,14 +96,26 @@ function ScheduleTable({
       </CardHeader>
 
       <CardContent className="space-y-4">
+        {/* Disabled controls with no explanation read as broken. */}
+        {!canEdit ? (
+          <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+            Та энэ хичээлийг заадаггүй тул хуваарийг харах боломжтой, өөрчлөх
+            боломжгүй.
+          </p>
+        ) : combined ? (
+          <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+            Бүх хичээлийн хуваарийг хамтад нь харж байна. Засахын тулд дээрээс
+            тухайн хичээлээ сонгоно уу.
+          </p>
+        ) : null}
         <div className="flex flex-wrap items-center gap-3 border-b pb-4">
           <Button
             variant="outline"
             size="sm"
-            disabled={generating}
+            disabled={generating || !editable}
             onClick={() =>
               generate(
-                { data: { classId, termId: 1 } },
+                { data: { classId, ...(subjectId === null ? {} : { subjectId }) } },
                 {
                   onSuccess: (result) => {
                     setNotice(result.notice)
@@ -116,26 +145,49 @@ function ScheduleTable({
           </p>
         ) : (
           <ul className="divide-y">
-            {data.days.map((day) => {
+            {data.days.map((day, index) => {
               const date = new Date(`${day.scheduledOn}T00:00:00Z`)
+              // A date is not unique once several subjects are in scope, and a
+              // repeated React key is what made the selects misbehave: the
+              // rows shared their state, so choosing on one moved another.
+              const rowKey = `${day.scheduledOn}:${day.subjectId ?? 'free'}`
+              // Only the first row of a date repeats the date itself.
+              const firstOfDay =
+                index === 0 || data.days[index - 1]!.scheduledOn !== day.scheduledOn
               return (
                 <li
-                  key={day.scheduledOn}
+                  key={rowKey}
                   className={`flex flex-wrap items-center gap-3 border-l-2 py-3 pl-3 ${
                     day.isToday ? 'border-primary' : 'border-transparent'
                   }`}
                 >
                   <div className="w-24 shrink-0">
-                    <div className="text-sm font-medium">{DAY.format(date)}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {WEEKDAY.format(date)}
-                    </div>
+                    {firstOfDay ? (
+                      <>
+                        <div className="text-sm font-medium">{DAY.format(date)}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {WEEKDAY.format(date)}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-xs text-muted-foreground" aria-hidden>
+                        ↳
+                      </div>
+                    )}
                   </div>
+
+                  {/* Which timetable this row is. Without it two rows of the
+                      same Tuesday look like the same thing listed twice. */}
+                  {combined ? (
+                    <div className="w-32 shrink-0 truncate text-sm text-muted-foreground">
+                      {day.subject ?? '—'}
+                    </div>
+                  ) : null}
 
                   <div className="min-w-0 flex-1">
                     <Select
                       value={day.lessonId === null ? '' : String(day.lessonId)}
-                      disabled={saving}
+                      disabled={saving || !editable}
                       onValueChange={(value) => change(day.scheduledOn, Number(value))}
                     >
                       <SelectTrigger
@@ -158,7 +210,7 @@ function ScheduleTable({
 
                   {/* Nothing to clear on a day that holds nothing; an enabled
                       button that does nothing is worse than none. */}
-                  {day.lessonId === null ? (
+                  {day.lessonId === null || !editable ? (
                     <span className="w-9 shrink-0" aria-hidden />
                   ) : (
                     <Button
@@ -185,16 +237,16 @@ function ScheduleTable({
 export default function TeacherSchedule() {
   const { data: classes, isLoading } = useGetTeacherClasses()
   const [selected, setSelected] = useState<string | null>(null)
-  const classId = Number(selected ?? classes?.[0]?.id ?? 0)
-  const { data: lessons } = useGetTeacherLessons(
-    { classId },
-    {
-      query: {
-        queryKey: getGetTeacherLessonsQueryKey({ classId }),
-        enabled: classId > 0,
-      },
+  const { key, classId, subjectId } = currentSelection(classes, selected)
+  // A class teacher reads the timetable of a subject somebody else takes.
+  const canEdit = classes?.find((row) => entryKey(row) === key)?.canEdit ?? false
+  const lessonParams = { classId, ...subjectParam(subjectId) }
+  const { data: lessons } = useGetTeacherLessons(lessonParams, {
+    query: {
+      queryKey: getGetTeacherLessonsQueryKey(lessonParams),
+      enabled: classId > 0,
     },
-  )
+  })
 
   if (isLoading) return <Skeleton className="h-64 w-full" />
   if (!classes?.length) {
@@ -212,13 +264,13 @@ export default function TeacherSchedule() {
       </header>
 
       {classes.length > 1 ? (
-        <Select value={String(classId)} onValueChange={setSelected}>
+        <Select value={key ?? ''} onValueChange={setSelected}>
           <SelectTrigger className="w-full sm:w-64">
             <SelectValue placeholder="Анги сонгох" />
           </SelectTrigger>
           <SelectContent>
             {classes.map((klass) => (
-              <SelectItem key={klass.id} value={klass.id}>
+              <SelectItem key={entryKey(klass)} value={entryKey(klass)}>
                 {klass.name}
                 {klass.subject ? ` · ${klass.subject}` : ''}
               </SelectItem>
@@ -228,7 +280,12 @@ export default function TeacherSchedule() {
       ) : null}
 
       {lessons ? (
-        <ScheduleTable classId={classId} lessons={lessons} />
+        <ScheduleTable
+          classId={classId}
+          subjectId={subjectId}
+          canEdit={canEdit}
+          lessons={lessons}
+        />
       ) : (
         <Skeleton className="h-64 w-full" />
       )}

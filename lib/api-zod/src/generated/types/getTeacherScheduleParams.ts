@@ -9,6 +9,10 @@
 export type GetTeacherScheduleParams = {
 classId: number;
 /**
+ * Narrow to one subject the teacher holds in this class. Omitted means every subject they hold there, which for a class teacher or a primary-grade teacher is every subject the class runs.
+ */
+subjectId?: number;
+/**
  * Inclusive start date (YYYY-MM-DD). Defaults to seven days ago.
  * @pattern ^\d{4}-\d{2}-\d{2}$
  */

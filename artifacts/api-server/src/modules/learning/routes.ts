@@ -41,6 +41,21 @@ import {
 
 const router: IRouter = Router();
 
+/**
+ * The subject a teacher screen is pointed at, or null for every subject they
+ * hold in the class. A malformed value is refused rather than treated as
+ * "everything": widening what is shown because a query string was wrong is the
+ * wrong way round.
+ */
+function readSubjectId(raw: unknown): number | null {
+  if (raw === undefined || raw === null || raw === "") return null;
+  const subjectId = Number(raw);
+  if (!Number.isInteger(subjectId) || subjectId <= 0) {
+    throw badRequest("Хичээлийн дугаар буруу байна.", "INVALID_SUBJECT_ID");
+  }
+  return subjectId;
+}
+
 router.get(
   "/student/today",
   requireRole("STUDENT"),
@@ -66,6 +81,7 @@ router.get(
         classId,
         from: req.query.from,
         to: req.query.to,
+        subjectId: readSubjectId(req.query.subjectId),
       });
       res.json(GetTeacherScheduleResponse.parse(schedule));
     } catch (error) {
@@ -91,7 +107,9 @@ router.get("/teacher/lessons", asStaff, async (req, res, next) => {
       throw badRequest("Ангийн дугаар буруу байна.", "INVALID_CLASS_ID");
     }
     res.json(
-      GetTeacherLessonsResponse.parse(await schedulableLessons(req.user!, classId)),
+      GetTeacherLessonsResponse.parse(
+        await schedulableLessons(req.user!, classId, readSubjectId(req.query.subjectId)),
+      ),
     );
   } catch (error) {
     next(error);
@@ -186,7 +204,12 @@ router.get(
         }
       }
 
-      const sheet = await assessmentSheet(req.user!, classId, skillId);
+      const sheet = await assessmentSheet(
+        req.user!,
+        classId,
+        skillId,
+        readSubjectId(req.query.subjectId),
+      );
       res.json(GetAssessmentSheetResponse.parse(sheet));
     } catch (error) {
       next(error);
@@ -232,7 +255,11 @@ router.get(
       if (!Number.isInteger(classId) || classId <= 0) {
         throw badRequest("Ангийн дугаар буруу байна.", "INVALID_CLASS_ID");
       }
-      const result = await classSkillsForTeacher(req.user!, classId);
+      const result = await classSkillsForTeacher(
+        req.user!,
+        classId,
+        readSubjectId(req.query.subjectId),
+      );
       res.json(GetClassSkillsResponse.parse(result));
     } catch (error) {
       next(error);
@@ -252,7 +279,13 @@ router.get(
       const raw = Number(req.query.limit);
       const limit = Number.isInteger(raw) && raw > 0 ? Math.min(raw, 200) : 50;
 
-      const result = await quizAttemptsForTeacher(req.user!, classId, limit);
+      const result = await quizAttemptsForTeacher(req.user!, {
+        classId,
+        limit,
+        subjectId: readSubjectId(req.query.subjectId),
+        from: req.query.from,
+        to: req.query.to,
+      });
       res.json(GetTeacherQuizAttemptsResponse.parse(result));
     } catch (error) {
       next(error);

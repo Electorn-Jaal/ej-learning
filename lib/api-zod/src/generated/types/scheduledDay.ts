@@ -14,6 +14,13 @@ export interface ScheduledDay {
   scheduledOn: string;
   isToday: boolean;
   /**
+     * The subject this row's lesson belongs to, null on a day nothing is scheduled for. A day appears once per subject taught that day, so this is what tells two rows of the same date apart.
+     * @nullable
+     */
+  subjectId: number | null;
+  /** @nullable */
+  subject: string | null;
+  /**
      * Null on a teaching day nothing is scheduled for yet.
      * @nullable
      */

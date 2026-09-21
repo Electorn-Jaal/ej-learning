@@ -389,6 +389,15 @@ paths:
           required: true
           schema:
             type: integer
+        - name: subjectId
+          in: query
+          required: false
+          description: >
+            Narrow to one subject the teacher holds in this class. Omitted
+            means every subject they hold there, which for a class teacher or
+            a primary-grade teacher is every subject the class runs.
+          schema:
+            type: integer
         - name: from
           in: query
           required: false
@@ -522,6 +531,31 @@ paths:
           required: true
           schema:
             type: integer
+        - name: subjectId
+          in: query
+          required: false
+          description: >
+            Narrow to one subject the teacher holds in this class. Omitted
+            means every subject they hold there, which for a class teacher or
+            a primary-grade teacher is every subject the class runs.
+          schema:
+            type: integer
+        - name: from
+          in: query
+          required: false
+          description: >
+            Earliest calendar day to include, YYYY-MM-DD, read in
+            Asia/Ulaanbaatar. Omitted means no lower bound.
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+        - name: to
+          in: query
+          required: false
+          description: Latest calendar day to include, inclusive.
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
         - name: limit
           in: query
           required: false
@@ -557,6 +591,15 @@ paths:
         - name: classId
           in: query
           required: true
+          schema:
+            type: integer
+        - name: subjectId
+          in: query
+          required: false
+          description: >
+            Narrow to one subject the teacher holds in this class. Omitted
+            means every subject they hold there, which for a class teacher or
+            a primary-grade teacher is every subject the class runs.
           schema:
             type: integer
         - name: skillId
@@ -656,6 +699,15 @@ paths:
           required: true
           schema:
             type: integer
+        - name: subjectId
+          in: query
+          required: false
+          description: >
+            Narrow to one subject the teacher holds in this class. Omitted
+            means every subject they hold there, which for a class teacher or
+            a primary-grade teacher is every subject the class runs.
+          schema:
+            type: integer
       responses:
         "200":
           description: Skill standing for the class
@@ -678,6 +730,15 @@ paths:
         - name: classId
           in: query
           required: true
+          schema:
+            type: integer
+        - name: subjectId
+          in: query
+          required: false
+          description: >
+            Narrow to one subject the teacher holds in this class. Omitted
+            means every subject they hold there, which for a class teacher or
+            a primary-grade teacher is every subject the class runs.
           schema:
             type: integer
       responses:
@@ -1189,9 +1250,17 @@ components:
       properties:
         classId:
           type: integer
+        subjectId:
+          type: ["integer", "null"]
+          description: >
+            Lay out one subject's term. Null means every subject the teacher
+            holds in this class.
         termId:
-          type: integer
-      required: [classId, termId]
+          description: >
+            Which term to lay out. Omit it for the term today falls in, which
+            is what a teacher pressing the button means.
+          type: ["integer", "null"]
+      required: [classId]
     GenerateScheduleResult:
       type: object
       properties:
@@ -1214,6 +1283,14 @@ components:
       properties:
         classId:
           type: integer
+        subjectId:
+          type: ["integer", "null"]
+          description: >
+            Which subject's day this is. Setting a lesson takes the subject
+            from the lesson itself, so this only matters when clearing: without
+            it, emptying Tuesday in the maths timetable would also empty
+            Tuesday's physics. Null clears every subject the teacher holds in
+            the class.
         scheduledOn:
           type: string
           pattern: '^\d{4}-\d{2}-\d{2}$'
@@ -1363,11 +1440,21 @@ components:
           type: integer
         className:
           type: string
+        from:
+          description: The range actually applied, null where there was no bound.
+          type: ["string", "null"]
+        to:
+          type: ["string", "null"]
+        truncated:
+          description: >
+            True when the limit cut the list short, so the totals below it are
+            of what came back rather than of the range asked for.
+          type: boolean
         attempts:
           type: array
           items:
             $ref: "#/components/schemas/TeacherQuizAttemptRow"
-      required: [classId, className, attempts]
+      required: [classId, className, from, to, truncated, attempts]
     PasswordChangeInput:
       type: object
       properties:
@@ -1498,6 +1585,14 @@ components:
           pattern: '^\d{4}-\d{2}-\d{2}$'
         isToday:
           type: boolean
+        subjectId:
+          description: >
+            The subject this row's lesson belongs to, null on a day nothing is
+            scheduled for. A day appears once per subject taught that day, so
+            this is what tells two rows of the same date apart.
+          type: ["integer", "null"]
+        subject:
+          type: ["string", "null"]
         lessonId:
           description: Null on a teaching day nothing is scheduled for yet.
           type: ["integer", "null"]
@@ -1509,7 +1604,9 @@ components:
           type: ["string", "null"]
         note:
           type: ["string", "null"]
-      required: [scheduledOn, isToday, lessonId, lessonCode, lessonType, skillName, note]
+      required:
+        [scheduledOn, isToday, subjectId, subject, lessonId, lessonCode,
+         lessonType, skillName, note]
     TeacherSchedule:
       type: object
       properties:
@@ -1550,6 +1647,15 @@ components:
           type: ["integer", "null"]
         teacherId:
           type: ["integer", "null"]
+        takesLessons:
+          type: boolean
+          description: >
+            Whether this account actually takes any lesson anywhere. A class
+            teacher who takes none of their class's subjects still sees the
+            class, but the screens for entering things - the register, the
+            review queue - have nothing in them for such an account, so the
+            navigation leaves them out rather than offering a page that
+            refuses.
         roles:
           type: array
           items:
@@ -1560,6 +1666,7 @@ components:
         - displayName
         - studentId
         - teacherId
+        - takesLessons
         - roles
     SessionEnvelope:
       type: object
@@ -1895,6 +2002,8 @@ components:
           type: string
         code:
           type: string
+        subject:
+          type: string
         gradeLevel:
           type: integer
         status:
@@ -1906,7 +2015,7 @@ components:
           type: integer
         lastEvidenceDate:
           type: ["string", "null"]
-      required: [skill, code, gradeLevel, status, percentage, evidenceCount, lastEvidenceDate]
+      required: [skill, code, subject, gradeLevel, status, percentage, evidenceCount, lastEvidenceDate]
     AttemptHistoryItem:
       type: object
       properties:
@@ -2212,6 +2321,11 @@ components:
       required: [teacherName, dateLabel, classes]
     TeacherClass:
       type: object
+      description: >
+        One entry in the teacher's class picker. A teacher who holds two
+        subjects in a class gets one entry per subject plus one for all of
+        them, so id alone no longer identifies an entry - the pair
+        (id, subjectId) does.
       properties:
         id:
           type: string
@@ -2219,6 +2333,18 @@ components:
           type: string
         gradeLevel:
           type: integer
+        subjectId:
+          type: integer
+          nullable: true
+          description: >
+            The subject this entry stands for, or null for every subject the
+            teacher may look at in the class.
+        canEdit:
+          type: boolean
+          description: >
+            Whether this account may change what this entry shows - timetable
+            it, mark it, assign it. A class teacher sees subjects somebody else
+            takes; those entries come back read-only.
         subject:
           type: string
         studentCount:
@@ -2227,7 +2353,7 @@ components:
           type: string
         needsReview:
           type: integer
-      required: [id, name, gradeLevel, subject, studentCount, currentTopic, needsReview]
+      required: [id, name, gradeLevel, subjectId, canEdit, subject, studentCount, currentTopic, needsReview]
     ReviewItem:
       type: object
       properties:

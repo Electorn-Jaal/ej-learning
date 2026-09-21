@@ -6,10 +6,17 @@
  * OpenAPI spec version: 0.1.0
  */
 
+/**
+ * One entry in the teacher's class picker. A teacher who holds two subjects in a class gets one entry per subject plus one for all of them, so id alone no longer identifies an entry - the pair (id, subjectId) does.
+ */
 export interface TeacherClass {
   id: string;
   name: string;
   gradeLevel: number;
+  /** The subject this entry stands for, or null for every subject the teacher may look at in the class. */
+  subjectId: number | null;
+  /** Whether this account may change what this entry shows - timetable it, mark it, assign it. A class teacher sees subjects somebody else takes; those entries come back read-only. */
+  canEdit: boolean;
   subject: string;
   studentCount: number;
   currentTopic: string;

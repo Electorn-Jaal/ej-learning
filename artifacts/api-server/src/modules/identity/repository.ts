@@ -1,5 +1,6 @@
 import { and, eq, gt, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
 import {
+  classTeachersInCore,
   db,
   sessionsInCore,
   teachersInCore,
@@ -16,6 +17,8 @@ export type AuthenticatedUser = {
   studentId: number | null;
   roles: UserRole[];
   teacherId: number | null;
+  /** Whether this account takes any lesson at all. See the API description. */
+  takesLessons: boolean;
 };
 
 async function decorate(row: {
@@ -38,10 +41,29 @@ async function decorate(row: {
       .limit(1),
   ]);
 
+  const teacherId = teacher[0]?.id ?? null;
+  const takesLessons =
+    teacherId === null
+      ? false
+      : (
+          await db
+            .select({ classId: classTeachersInCore.classId })
+            .from(classTeachersInCore)
+            .where(
+              and(
+                eq(classTeachersInCore.teacherId, teacherId),
+                eq(classTeachersInCore.isActive, true),
+                isNotNull(classTeachersInCore.subjectId),
+              ),
+            )
+            .limit(1)
+        ).length > 0;
+
   return {
     ...row,
     roles: roles.map((entry) => entry.role),
-    teacherId: teacher[0]?.id ?? null,
+    teacherId,
+    takesLessons,
   };
 }
 

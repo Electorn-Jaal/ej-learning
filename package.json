@@ -14,7 +14,9 @@
     "build": "corepack pnpm run typecheck && corepack pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build --force",
     "typecheck": "corepack pnpm run typecheck:libs && corepack pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
-    "db:setup": "node --env-file-if-exists=.env lib/db/scripts/setup-local.mjs"
+    "db:setup": "node --env-file-if-exists=.env lib/db/scripts/setup-local.mjs",
+    "db:demo": "corepack pnpm --filter @workspace/api-server run seed-demo-school --yes",
+    "db:demo:walk": "corepack pnpm --filter @workspace/api-server run walk-demo"
   },
   "private": true,
   "dependencies": {

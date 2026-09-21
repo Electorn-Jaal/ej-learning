@@ -1,118 +1,199 @@
 import { useGetStudentProgress } from "@workspace/api-client-react"
-import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { format } from "date-fns"
-import { mn } from "date-fns/locale"
+import { cn } from "@/lib/utils"
+
+/**
+ * What a child has got hold of, subject by subject.
+ *
+ * It used to be one run of identical cards - every skill of every subject in
+ * grade order, each carrying its code and its grade number - followed by one
+ * run of every attempt ever made. Nine rows that all look the same do not say
+ * how anybody is doing. The subject is the structure now, each one opening
+ * with a count of where its skills stand, and the history is grouped by the
+ * day the work was done.
+ */
+
+const STATUS_LABEL: Record<string, string> = {
+  mastered: "Эзэмшсэн",
+  developing: "Сайжирч байна",
+  needs_support: "Дэмжлэг хэрэгтэй",
+  unassessed: "Хараахан үнэлэгдээгүй",
+}
+
+const STATUS_DOT: Record<string, string> = {
+  mastered: "bg-success",
+  developing: "bg-primary",
+  needs_support: "bg-pending",
+  unassessed: "bg-muted-foreground/40",
+}
+
+/** The order a child reads them in: what needs work first, done last. */
+const STATUS_ORDER = ["needs_support", "developing", "mastered", "unassessed"]
+
+const DAY = new Intl.DateTimeFormat("mn-MN", {
+  month: "long",
+  day: "numeric",
+  weekday: "long",
+  timeZone: "Asia/Ulaanbaatar",
+})
+const TIME = new Intl.DateTimeFormat("mn-MN", {
+  hour: "2-digit",
+  minute: "2-digit",
+  timeZone: "Asia/Ulaanbaatar",
+})
+const dayOf = (iso: string) =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ulaanbaatar" }).format(new Date(iso))
 
 export default function StudentProgress() {
   const { data: progress, isLoading } = useGetStudentProgress()
 
   if (isLoading) {
-    return <div className="space-y-4"><Skeleton className="h-32 w-full" /><Skeleton className="h-64 w-full" /></div>
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    )
   }
-
   if (!progress) return <p role="alert">Ахицын мэдээллийг уншиж чадсангүй.</p>
 
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'mastered': return 'Сайн эзэмшсэн'
-      case 'developing': return 'Хөгжиж буй'
-      case 'needs_support': return 'Дэмжлэг хэрэгтэй'
-      case 'unassessed': return 'Үнэлэгдээгүй'
-      default: return 'Тодорхойгүй'
-    }
+  const bySubject = new Map<string, typeof progress.skills>()
+  for (const skill of progress.skills) {
+    const name = skill.subject || "Бусад"
+    bySubject.set(name, [...(bySubject.get(name) ?? []), skill])
   }
+  const subjects = [...bySubject.entries()].sort(([a], [b]) => a.localeCompare(b, "mn"))
 
-  /** Returns a dot colour. The label itself stays in the normal text colour. */
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'mastered': return 'bg-success'
-      case 'developing': return 'bg-primary'
-      case 'needs_support': return 'bg-pending'
-      default: return 'bg-muted-foreground/40'
-    }
+  const byDay = new Map<string, typeof progress.attempts>()
+  for (const attempt of progress.attempts) {
+    const day = dayOf(attempt.submittedAt)
+    byDay.set(day, [...(byDay.get(day) ?? []), attempt])
   }
+  const days = [...byDay.entries()].sort(([a], [b]) => b.localeCompare(a))
+
+  const measured = progress.skills.filter((s) => s.status !== "unassessed")
+  const mastered = progress.skills.filter((s) => s.status === "mastered")
 
   return (
-    <div className="space-y-8 pb-10 animate-in fade-in duration-500">
-      <header>
-        <h1 className="text-2xl font-bold text-foreground mb-1">Миний ахиц</h1>
-        <p className="text-muted-foreground font-medium">Ур чадварын түвшин болон оролдлогуудын түүх</p>
-        {progress.dataNotice && (
-          <p className="text-sm mt-2 text-muted-foreground bg-muted p-2 rounded inline-block">{progress.dataNotice}</p>
-        )}
+    <div className="space-y-8 pb-10">
+      <header className="space-y-1">
+        <h1 className="text-2xl font-bold">Миний ахиц</h1>
+        <p className="text-muted-foreground">
+          {measured.length === 0
+            ? "Хараахан үнэлэгдсэн чадвар алга. Сорил бөглөсний дараа энд харагдана."
+            : `${measured.length} чадвар үнэлэгдсэн, ${mastered.length} нь эзэмшсэн.`}
+        </p>
       </header>
 
-      <section>
-        <h2 className="text-lg font-bold text-foreground border-b pb-2 mb-4">Ур чадвар</h2>
-        <div className="grid gap-3">
-          {progress.skills.map(skill => (
-            <Card key={skill.code} className="border-border shadow-sm bg-card">
-              <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                <div>
-                  <div className="text-xs font-bold text-muted-foreground mb-1 tracking-wider">{skill.code} (Анги {skill.gradeLevel})</div>
-                  <h3 className="text-base font-bold text-foreground leading-tight">{skill.skill}</h3>
-                  {skill.lastEvidenceDate && (
-                     <div className="text-xs text-muted-foreground font-medium mt-1.5">
-                       Сүүлд үнэлэгдсэн: {format(new Date(skill.lastEvidenceDate), "yyyy-MM-dd", { locale: mn })}
-                     </div>
+      {subjects.map(([subject, skills]) => {
+        const counts = STATUS_ORDER.map((status) => ({
+          status,
+          n: skills.filter((s) => s.status === status).length,
+        })).filter((entry) => entry.n > 0)
+        const ordered = [...skills].sort(
+          (a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status),
+        )
+
+        return (
+          <section key={subject} className="space-y-3">
+            <h2 className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-border pb-2">
+              <span className="text-lg font-bold">{subject}</span>
+              <span className="flex flex-wrap gap-x-3 text-sm font-normal text-muted-foreground">
+                {counts.map((entry) => (
+                  <span key={entry.status} className="inline-flex items-center gap-1.5">
+                    <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT[entry.status])} />
+                    {entry.n} {STATUS_LABEL[entry.status].toLocaleLowerCase("mn")}
+                  </span>
+                ))}
+              </span>
+            </h2>
+
+            <ul className="divide-y divide-border rounded-md border border-border bg-card">
+              {ordered.map((skill) => (
+                <li
+                  key={skill.code}
+                  className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-medium">{skill.skill}</span>
+                    <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+                      <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOT[skill.status])} />
+                      {STATUS_LABEL[skill.status]}
+                      {skill.lastEvidenceDate
+                        ? ` · ${dayOf(skill.lastEvidenceDate)}`
+                        : ""}
+                    </span>
+                  </span>
+
+                  {skill.status === "unassessed" ? null : (
+                    <span className="shrink-0 text-right">
+                      <span className="block text-lg font-semibold tabular-nums">
+                        {skill.percentage ?? "—"}%
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        {skill.evidenceCount} удаа хариулсан
+                      </span>
+                    </span>
                   )}
-                </div>
-                <div className="flex flex-col items-start sm:items-end gap-2 flex-shrink-0">
-                   <span className="inline-flex items-center gap-2 text-xs font-semibold text-foreground">
-                     <span className={`h-1.5 w-1.5 rounded-full ${getStatusColor(skill.status)}`} />
-                     {getStatusLabel(skill.status)}
-                   </span>
-                   <span className="text-sm font-bold text-foreground">
-                     {skill.status === 'unassessed'
-                       ? 'Хараахан хэмжигдээгүй'
-                       : `${skill.percentage ?? '—'}% · ${skill.evidenceCount} удаа хариулсан`}
-                   </span>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-          {progress.skills.length === 0 && (
-            <p className="text-sm text-muted-foreground font-medium">Ур чадварын мэдээлэл алга байна.</p>
-          )}
-        </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )
+      })}
+
+      {progress.skills.length === 0 ? (
+        <p className="rounded-md border border-border bg-card p-6 text-sm text-muted-foreground">
+          Чадварын мэдээлэл алга байна.
+        </p>
+      ) : null}
+
+      <section className="space-y-4">
+        <h2 className="border-b border-border pb-2 text-lg font-bold">Хариулсан түүх</h2>
+
+        {days.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Хараахан хариулт алга байна.</p>
+        ) : (
+          days.map(([day, attempts]) => (
+            <div key={day} className="space-y-2">
+              <h3 className="text-sm font-semibold text-muted-foreground">
+                {DAY.format(new Date(day + "T00:00:00Z"))}
+              </h3>
+              <ul className="divide-y divide-border rounded-md border border-border bg-card">
+                {attempts.map((attempt) => (
+                  <li
+                    key={attempt.id}
+                    className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium">{attempt.assignment}</span>
+                      <span className="block text-xs text-muted-foreground">
+                        {TIME.format(new Date(attempt.submittedAt))} · {attempt.status}
+                        {attempt.reviewer ? ` · шалгасан: ${attempt.reviewer}` : ""}
+                      </span>
+                    </span>
+                    {attempt.score !== null ? (
+                      <span className="shrink-0 text-sm font-semibold tabular-nums">
+                        {attempt.score} / {attempt.maxScore ?? "?"}
+                      </span>
+                    ) : (
+                      <span className="shrink-0 text-sm text-pending">Хүлээгдэж байна</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))
+        )}
       </section>
 
-      <section>
-        <h2 className="text-lg font-bold text-foreground border-b pb-2 mb-4">Оролдлогуудын түүх</h2>
-        <div className="space-y-3">
-          {progress.attempts.map(attempt => (
-            <div key={attempt.id} className="p-4 sm:p-5 bg-card border border-border rounded-md flex flex-col sm:flex-row justify-between gap-3 sm:items-center shadow-sm">
-              <div>
-                <h4 className="font-bold text-sm text-foreground mb-1">{attempt.assignment}</h4>
-                <p className="text-xs font-medium text-muted-foreground">
-                  {format(new Date(attempt.submittedAt), "yyyy-MM-dd HH:mm", { locale: mn })}
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-bold text-muted-foreground">
-                  {attempt.status === 'reviewed' ? 'Шалгагдсан' : attempt.status === 'pending_review' ? 'Шалгагдаж байна' : attempt.status}
-                </span>
-                {attempt.score !== null ? (
-                  <span className="font-bold text-foreground bg-muted border border-border/50 px-3 py-1 rounded-sm text-sm">
-                    {attempt.score} / {attempt.maxScore ?? "?"}
-                  </span>
-                ) : (
-                  <span className="text-sm text-pending font-bold bg-pending/10 px-3 py-1 rounded-sm border border-pending/20">Хүлээгдэж байна</span>
-                )}
-                 {attempt.reviewer && (
-                   <span className="text-xs font-bold text-muted-foreground">
-                     Шалгасан: {attempt.reviewer}
-                   </span>
-                 )}
-              </div>
-            </div>
-          ))}
-          {progress.attempts.length === 0 && (
-            <p className="text-sm text-muted-foreground font-medium">Түүх алга байна.</p>
-          )}
-        </div>
-      </section>
+      {/* How the number is arrived at, where somebody who wants it will look
+          for it - not competing with the title. */}
+      {progress.dataNotice ? (
+        <p className="rounded-md border border-border bg-muted/40 p-4 text-sm text-muted-foreground">
+          {progress.dataNotice}
+        </p>
+      ) : null}
     </div>
   )
 }

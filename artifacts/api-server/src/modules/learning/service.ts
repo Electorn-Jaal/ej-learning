@@ -142,8 +142,9 @@ export async function assignExtraWork(
     throw badRequest("Сурагч ангид бүртгэгдээгүй байна.", "STUDENT_NOT_ENROLLED");
   }
   const klass = await authorisedClass(user, enrolment.classId);
+  const assignable = await editableSubjects(user, klass.classId, null);
 
-  const lessons = await repository.schedulableLessons(klass.classId);
+  const lessons = await repository.schedulableLessons(klass.classId, assignable);
   if (!lessons.some((lesson) => lesson.id === input.lessonId)) {
     throw badRequest(
       "Энэ хичээлийг тухайн сурагчид оноох боломжгүй.",
@@ -170,7 +171,7 @@ export async function assignExtraWork(
 
 export async function teacherSchedule(
   user: AuthenticatedUser,
-  query: { classId: number; from?: unknown; to?: unknown },
+  query: { classId: number; from?: unknown; to?: unknown; subjectId?: number | null },
 ) {
   const today = todayInUlaanbaatar();
   const from = isDate(query.from) ? query.from : shiftDays(today, -7);
@@ -191,10 +192,9 @@ export async function teacherSchedule(
     throw forbidden("Энэ ангийн хуваарийг харах эрхгүй байна.", "NOT_YOUR_CLASS");
   }
 
-  // The teacher's own subjects decide which timetable this is - plural, since
-  // one person can hold more than one subject in a class. An admin is tied to
-  // none and sees whatever the class has.
-  const subjectIds = await repository.subjectsTaughtBy(user.teacherId, klass.classId);
+  // Which timetable this is: the subject asked for, or every subject this
+  // account may look at in the class.
+  const subjectIds = await viewableSubjects(user, klass.classId, query.subjectId ?? null);
   const days = await repository.scheduleForClass(klass.classId, from, to, subjectIds);
   return {
     classId: klass.classId,
@@ -278,24 +278,48 @@ export async function recordQuizAttempt(
 
 export async function quizAttemptsForTeacher(
   user: AuthenticatedUser,
-  classId: number,
-  limit: number,
+  query: {
+    classId: number;
+    limit: number;
+    subjectId: number | null;
+    from?: unknown;
+    to?: unknown;
+  },
 ) {
   const isAdmin = user.roles.includes("ADMIN");
   const [klass] = isAdmin
-    ? await repository.anyClass(classId)
+    ? await repository.anyClass(query.classId)
     : user.teacherId === null
       ? []
-      : await repository.teacherClass(user.teacherId, classId);
+      : await repository.teacherClass(user.teacherId, query.classId);
 
   if (!klass) {
     throw forbidden("Энэ ангийн үр дүнг харах эрхгүй байна.", "NOT_YOUR_CLASS");
   }
 
+  const from = isDate(query.from) ? query.from : null;
+  const to = isDate(query.to) ? query.to : null;
+  if (from !== null && to !== null && from > to) {
+    throw badRequest("Огнооны муж буруу байна.", "INVALID_RANGE");
+  }
+
+  const attempts = await repository.attemptsForClass(
+    klass.classId,
+    query.limit,
+    await viewableSubjects(user, klass.classId, query.subjectId),
+    from,
+    to,
+  );
+
   return {
     classId: klass.classId,
     className: klass.className,
-    attempts: await repository.attemptsForClass(klass.classId, limit),
+    from,
+    to,
+    // Averages drawn from a truncated list are wrong without saying so. The
+    // screen can only warn about what it knows was cut off.
+    truncated: attempts.length === query.limit,
+    attempts,
   };
 }
 
@@ -306,9 +330,14 @@ export async function quizAttemptsForTeacher(
  * list of thirty names is a report rather than an instruction. The counts
  * above them are complete, so nothing is hidden by the cap.
  */
-export async function classSkillsForTeacher(user: AuthenticatedUser, classId: number) {
+export async function classSkillsForTeacher(
+  user: AuthenticatedUser,
+  classId: number,
+  subjectId: number | null,
+) {
   const klass = await authorisedClass(user, classId);
-  const skills = await repository.classSkillMastery(klass.classId);
+  const subjectIds = await viewableSubjects(user, klass.classId, subjectId);
+  const skills = await repository.classSkillMastery(klass.classId, subjectIds);
 
   return {
     classId: klass.classId,
@@ -333,9 +362,13 @@ export async function assessmentSheet(
   user: AuthenticatedUser,
   classId: number,
   skillId: number | null,
+  subjectId: number | null,
 ) {
   const klass = await authorisedClass(user, classId);
-  const skills = await repository.assessableSkills(klass.classId);
+  // The register is where marks are entered, so it lists only what this
+  // teacher may mark - a class teacher opening it does not get the English.
+  const subjectIds = await editableSubjects(user, klass.classId, subjectId);
+  const skills = await repository.assessableSkills(klass.classId, subjectIds);
   const chosen = skillId ?? skills[0]?.skillId ?? null;
 
   return {
@@ -367,9 +400,18 @@ export async function submitAssessment(
   },
 ) {
   const klass = await authorisedClass(user, input.classId);
-
-  if (!(await repository.skillAssessableForClass(klass.classId, input.skillId))) {
+  // Two different refusals, because they mean different things to the person
+  // reading them: a skill this class is not taught at all, and a skill that is
+  // simply somebody else's subject.
+  if (!(await repository.skillAssessableForClass(klass.classId, input.skillId, null))) {
     throw badRequest("Энэ чадвар тухайн ангид тохирохгүй байна.", "SKILL_NOT_FOR_CLASS");
+  }
+  const subjectIds = await editableSubjects(user, klass.classId, null);
+  if (!(await repository.skillAssessableForClass(klass.classId, input.skillId, subjectIds))) {
+    throw forbidden(
+      "Та энэ хичээлийг заадаггүй тул үнэлгээ оруулах эрхгүй.",
+      "NOT_YOUR_SUBJECT",
+    );
   }
 
   const enrolled = await repository.enrolledStudentIds(klass.classId);
@@ -412,6 +454,75 @@ export async function itemAnalysis(user: AuthenticatedUser, classId: number) {
 }
 
 /** Resolves the class a teacher may act on, or refuses. Admins bypass. */
+/**
+ * Which subjects of a class this account may look at, or null for all of them.
+ *
+ * A subject teacher sees what they hold in that class and nothing else: two
+ * teachers can share a class, one taking maths and the other physics, and the
+ * maths teacher has no business in the physics marking.
+ *
+ * A class_teachers row with no subject means the teacher carries the whole
+ * class rather than one subject of it: a primary-grade teacher, who does teach
+ * everything, and a class teacher, who is answerable for the class as a whole.
+ * Both get null here, which means do not filter.
+ *
+ * Asking for a subject the teacher does not hold is refused rather than
+ * quietly emptied, so a stale link says so instead of looking like a class
+ * with no work in it.
+ */
+/**
+ * The subjects of a class this account may look at, or null for all of them.
+ *
+ * A subject teacher sees what they take there and nothing else: two teachers
+ * can share a class, one on maths and the other on physics, and the maths
+ * teacher has no business in the physics marking. A class teacher sees every
+ * subject the class runs - in a primary class that is the whole point, since
+ * the English is somebody else's lesson and the class teacher still answers
+ * for the child.
+ */
+async function viewableSubjects(
+  user: AuthenticatedUser,
+  classId: number,
+  requested: number | null,
+): Promise<number[] | null> {
+  if (user.roles.includes("ADMIN")) return requested === null ? null : [requested];
+  if (await repository.isClassTeacher(user.teacherId, classId)) {
+    return requested === null ? null : [requested];
+  }
+
+  const held = await repository.subjectsTaughtBy(user.teacherId, classId);
+  if (requested === null) return held;
+  if (!held.includes(requested)) {
+    throw forbidden("Та энэ ангид тухайн хичээлийг заадаггүй байна.", "NOT_YOUR_SUBJECT");
+  }
+  return [requested];
+}
+
+/**
+ * The subjects this account may change: timetable, mark, assign.
+ *
+ * Being the class teacher does not come into it. Seeing the English lesson is
+ * what the role is for; entering an English mark for a lesson somebody else
+ * taught is not.
+ */
+async function editableSubjects(
+  user: AuthenticatedUser,
+  classId: number,
+  requested: number | null,
+): Promise<number[] | null> {
+  if (user.roles.includes("ADMIN")) return requested === null ? null : [requested];
+
+  const held = await repository.subjectsTaughtBy(user.teacherId, classId);
+  if (held.length === 0) {
+    throw forbidden("Та энэ ангид хичээл заадаггүй тул өөрчлөх эрхгүй.", "NOT_YOUR_SUBJECT");
+  }
+  if (requested === null) return held;
+  if (!held.includes(requested)) {
+    throw forbidden("Та энэ ангид тухайн хичээлийг заадаггүй байна.", "NOT_YOUR_SUBJECT");
+  }
+  return [requested];
+}
+
 async function authorisedClass(user: AuthenticatedUser, classId: number) {
   const isAdmin = user.roles.includes("ADMIN");
   const [klass] = isAdmin
@@ -425,9 +536,15 @@ async function authorisedClass(user: AuthenticatedUser, classId: number) {
   return klass;
 }
 
-export async function schedulableLessons(user: AuthenticatedUser, classId: number) {
+export async function schedulableLessons(
+  user: AuthenticatedUser,
+  classId: number,
+  subjectId: number | null,
+) {
   const klass = await authorisedClass(user, classId);
-  return repository.schedulableLessons(klass.classId);
+  // Picking a lesson to place is an edit, so the list is what may be placed.
+  const subjectIds = await editableSubjects(user, klass.classId, subjectId);
+  return repository.schedulableLessons(klass.classId, subjectIds);
 }
 
 /** Weekdays between two dates. Holidays are not modelled; a teacher clears those. */
@@ -442,13 +559,27 @@ function schoolDays(from: string, to: string): string[] {
 
 export async function generateSchedule(
   user: AuthenticatedUser,
-  input: { classId: number; termId: number },
+  input: { classId: number; termId?: number | null; subjectId?: number | null },
 ) {
   const klass = await authorisedClass(user, input.classId);
-  const [term] = await repository.termById(input.termId);
+  const subjectIds = await editableSubjects(user, klass.classId, input.subjectId ?? null);
+
+  // No term named means the one we are in. The screen used to send 1, which
+  // is a term id only on a database whose terms happen to start at 1.
+  const termId =
+    input.termId ??
+    (await repository.termCovering(todayInUlaanbaatar()))[0]?.id ??
+    null;
+  if (termId === null) {
+    throw badRequest(
+      "Өнөөдөр ямар ч улиралд хамаарахгүй байна. Улирлаа бүртгэнэ үү.",
+      "NO_CURRENT_TERM",
+    );
+  }
+  const [term] = await repository.termById(termId);
   if (!term) throw badRequest("Улирал олдсонгүй.", "TERM_NOT_FOUND");
 
-  const lessons = await repository.schedulableLessons(klass.classId);
+  const lessons = await repository.schedulableLessons(klass.classId, subjectIds);
   if (lessons.length === 0) {
     return {
       created: 0,
@@ -497,18 +628,24 @@ export async function generateSchedule(
 
 export async function setScheduleDay(
   user: AuthenticatedUser,
-  input: { classId: number; scheduledOn: string; lessonId: number | null },
+  input: {
+    classId: number;
+    scheduledOn: string;
+    lessonId: number | null;
+    subjectId?: number | null;
+  },
 ) {
   const klass = await authorisedClass(user, input.classId);
+  const subjectIds = await editableSubjects(user, klass.classId, input.subjectId ?? null);
 
   if (input.lessonId === null) {
-    await repository.clearScheduleDay(klass.classId, input.scheduledOn);
+    await repository.clearScheduleDay(klass.classId, input.scheduledOn, subjectIds);
     return;
   }
 
   // Only a lesson this class could be taught: the endpoint takes an id, and
   // without this any approved lesson from any grade would be assignable.
-  const lessons = await repository.schedulableLessons(klass.classId);
+  const lessons = await repository.schedulableLessons(klass.classId, subjectIds);
   if (!lessons.some((lesson) => lesson.id === input.lessonId)) {
     throw badRequest(
       "Энэ хичээлийг тухайн ангид оноох боломжгүй.",

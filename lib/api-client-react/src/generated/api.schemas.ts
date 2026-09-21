@@ -180,7 +180,16 @@ export interface SchedulableLesson {
 
 export interface GenerateScheduleInput {
   classId: number;
-  termId: number;
+  /**
+     * Lay out one subject's term. Null means every subject the teacher holds in this class.
+     * @nullable
+     */
+  subjectId?: number | null;
+  /**
+     * Which term to lay out. Omit it for the term today falls in, which is what a teacher pressing the button means.
+     * @nullable
+     */
+  termId?: number | null;
 }
 
 export interface GenerateScheduleResult {
@@ -197,6 +206,11 @@ export interface GenerateScheduleResult {
 
 export interface ScheduleDayInput {
   classId: number;
+  /**
+     * Which subject's day this is. Setting a lesson takes the subject from the lesson itself, so this only matters when clearing: without it, emptying Tuesday in the maths timetable would also empty Tuesday's physics. Null clears every subject the teacher holds in the class.
+     * @nullable
+     */
+  subjectId?: number | null;
   /** @pattern ^\d{4}-\d{2}-\d{2}$ */
   scheduledOn: string;
   /**
@@ -286,6 +300,15 @@ export interface TeacherQuizAttemptRow {
 export interface TeacherQuizAttempts {
   classId: number;
   className: string;
+  /**
+     * The range actually applied, null where there was no bound.
+     * @nullable
+     */
+  from: string | null;
+  /** @nullable */
+  to: string | null;
+  /** True when the limit cut the list short, so the totals below it are of what came back rather than of the range asked for. */
+  truncated: boolean;
   attempts: TeacherQuizAttemptRow[];
 }
 
@@ -328,6 +351,13 @@ export interface ScheduledDay {
      */
   scheduledOn: string;
   isToday: boolean;
+  /**
+     * The subject this row's lesson belongs to, null on a day nothing is scheduled for. A day appears once per subject taught that day, so this is what tells two rows of the same date apart.
+     * @nullable
+     */
+  subjectId: number | null;
+  /** @nullable */
+  subject: string | null;
   /**
      * Null on a teaching day nothing is scheduled for yet.
      * @nullable
@@ -383,6 +413,8 @@ export interface AuthenticatedUser {
   studentId: number | null;
   /** @nullable */
   teacherId: number | null;
+  /** Whether this account actually takes any lesson anywhere. A class teacher who takes none of their class's subjects still sees the class, but the screens for entering things - the register, the review queue - have nothing in them for such an account, so the navigation leaves them out rather than offering a page that refuses. */
+  takesLessons: boolean;
   roles: UserRole[];
 }
 
@@ -656,6 +688,7 @@ export const SkillProgressStatus = {
 export interface SkillProgress {
   skill: string;
   code: string;
+  subject: string;
   gradeLevel: number;
   status: SkillProgressStatus;
   /** @nullable */
@@ -871,10 +904,17 @@ export interface TeacherDashboard {
   classes: TeacherClassToday[];
 }
 
+/**
+ * One entry in the teacher's class picker. A teacher who holds two subjects in a class gets one entry per subject plus one for all of them, so id alone no longer identifies an entry - the pair (id, subjectId) does.
+ */
 export interface TeacherClass {
   id: string;
   name: string;
   gradeLevel: number;
+  /** The subject this entry stands for, or null for every subject the teacher may look at in the class. */
+  subjectId: number | null;
+  /** Whether this account may change what this entry shows - timetable it, mark it, assign it. A class teacher sees subjects somebody else takes; those entries come back read-only. */
+  canEdit: boolean;
   subject: string;
   studentCount: number;
   currentTopic: string;
@@ -1102,6 +1142,10 @@ export interface CatalogItem {
 export type GetTeacherScheduleParams = {
 classId: number;
 /**
+ * Narrow to one subject the teacher holds in this class. Omitted means every subject they hold there, which for a class teacher or a primary-grade teacher is every subject the class runs.
+ */
+subjectId?: number;
+/**
  * Inclusive start date (YYYY-MM-DD). Defaults to seven days ago.
  * @pattern ^\d{4}-\d{2}-\d{2}$
  */
@@ -1116,6 +1160,20 @@ to?: string;
 export type GetTeacherQuizAttemptsParams = {
 classId: number;
 /**
+ * Narrow to one subject the teacher holds in this class. Omitted means every subject they hold there, which for a class teacher or a primary-grade teacher is every subject the class runs.
+ */
+subjectId?: number;
+/**
+ * Earliest calendar day to include, YYYY-MM-DD, read in Asia/Ulaanbaatar. Omitted means no lower bound.
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+from?: string;
+/**
+ * Latest calendar day to include, inclusive.
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+to?: string;
+/**
  * @minimum 1
  * @maximum 200
  */
@@ -1124,6 +1182,10 @@ limit?: number;
 
 export type GetAssessmentSheetParams = {
 classId: number;
+/**
+ * Narrow to one subject the teacher holds in this class. Omitted means every subject they hold there, which for a class teacher or a primary-grade teacher is every subject the class runs.
+ */
+subjectId?: number;
 skillId?: number;
 };
 
@@ -1133,9 +1195,17 @@ classId: number;
 
 export type GetClassSkillsParams = {
 classId: number;
+/**
+ * Narrow to one subject the teacher holds in this class. Omitted means every subject they hold there, which for a class teacher or a primary-grade teacher is every subject the class runs.
+ */
+subjectId?: number;
 };
 
 export type GetTeacherLessonsParams = {
 classId: number;
+/**
+ * Narrow to one subject the teacher holds in this class. Omitted means every subject they hold there, which for a class teacher or a primary-grade teacher is every subject the class runs.
+ */
+subjectId?: number;
 };
 

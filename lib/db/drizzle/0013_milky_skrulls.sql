@@ -1,0 +1,1 @@
+ALTER TABLE "core"."classes" ADD COLUMN "class_teacher_id" bigint;

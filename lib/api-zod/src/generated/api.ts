@@ -241,6 +241,7 @@ export const GetStudentProgressResponse = zod.object({
   "skills": zod.array(zod.object({
   "skill": zod.string(),
   "code": zod.string(),
+  "subject": zod.string(),
   "gradeLevel": zod.number().int(),
   "status": zod.enum(['mastered', 'developing', 'needs_support', 'unassessed']),
   "percentage": zod.number().int().nullable(),
@@ -297,11 +298,13 @@ export const GetTeacherClassesResponseItem = zod.object({
   "id": zod.string(),
   "name": zod.string(),
   "gradeLevel": zod.number().int(),
+  "subjectId": zod.number().int().nullable().describe('The subject this entry stands for, or null for every subject the teacher may look at in the class.\n'),
+  "canEdit": zod.boolean().describe('Whether this account may change what this entry shows - timetable it, mark it, assign it. A class teacher sees subjects somebody else takes; those entries come back read-only.\n'),
   "subject": zod.string(),
   "studentCount": zod.number().int(),
   "currentTopic": zod.string(),
   "needsReview": zod.number().int()
-})
+}).describe('One entry in the teacher\'s class picker. A teacher who holds two subjects in a class gets one entry per subject plus one for all of them, so id alone no longer identifies an entry - the pair (id, subjectId) does.\n')
 export const GetTeacherClassesResponse = zod.array(GetTeacherClassesResponseItem)
 
 
@@ -507,6 +510,7 @@ export const LoginResponse = zod.object({
   "displayName": zod.string(),
   "studentId": zod.number().int().nullable(),
   "teacherId": zod.number().int().nullable(),
+  "takesLessons": zod.boolean().describe('Whether this account actually takes any lesson anywhere. A class teacher who takes none of their class\'s subjects still sees the class, but the screens for entering things - the register, the review queue - have nothing in them for such an account, so the navigation leaves them out rather than offering a page that refuses.\n'),
   "roles": zod.array(zod.enum(['STUDENT', 'TEACHER', 'ADMIN']))
 }).describe('Roles are a list: one account can hold TEACHER and ADMIN at once. studentId and teacherId are the linked core.students / core.teachers rows, null when the account has none.\n')
 })
@@ -528,6 +532,7 @@ export const GetSessionResponse = zod.object({
   "displayName": zod.string(),
   "studentId": zod.number().int().nullable(),
   "teacherId": zod.number().int().nullable(),
+  "takesLessons": zod.boolean().describe('Whether this account actually takes any lesson anywhere. A class teacher who takes none of their class\'s subjects still sees the class, but the screens for entering things - the register, the review queue - have nothing in them for such an account, so the navigation leaves them out rather than offering a page that refuses.\n'),
   "roles": zod.array(zod.enum(['STUDENT', 'TEACHER', 'ADMIN']))
 }).describe('Roles are a list: one account can hold TEACHER and ADMIN at once. studentId and teacherId are the linked core.students / core.teachers rows, null when the account has none.\n')
 })
@@ -608,6 +613,7 @@ export const getTeacherScheduleQueryToRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}
 
 export const GetTeacherScheduleQueryParams = zod.object({
   "classId": zod.coerce.number().int(),
+  "subjectId": zod.coerce.number().int().optional().describe('Narrow to one subject the teacher holds in this class. Omitted means every subject they hold there, which for a class teacher or a primary-grade teacher is every subject the class runs.\n'),
   "from": zod.coerce.string().regex(getTeacherScheduleQueryFromRegExp).optional().describe('Inclusive start date (YYYY-MM-DD). Defaults to seven days ago.'),
   "to": zod.coerce.string().regex(getTeacherScheduleQueryToRegExp).optional().describe('Inclusive end date (YYYY-MM-DD). Defaults to fourteen days ahead.')
 })
@@ -623,6 +629,8 @@ export const GetTeacherScheduleResponse = zod.object({
   "days": zod.array(zod.object({
   "scheduledOn": zod.string().regex(getTeacherScheduleResponseDaysItemScheduledOnRegExp).describe('Calendar date, YYYY-MM-DD.'),
   "isToday": zod.boolean(),
+  "subjectId": zod.number().int().nullable().describe('The subject this row\'s lesson belongs to, null on a day nothing is scheduled for. A day appears once per subject taught that day, so this is what tells two rows of the same date apart.\n'),
+  "subject": zod.string().nullable(),
   "lessonId": zod.number().int().nullable().describe('Null on a teaching day nothing is scheduled for yet.'),
   "lessonCode": zod.string().nullable(),
   "lessonType": zod.string().nullable(),
@@ -693,18 +701,26 @@ export const SubmitQuizAttemptResponse = zod.object({
 /**
  * @summary What a class answered, newest first
  */
+export const getTeacherQuizAttemptsQueryFromRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const getTeacherQuizAttemptsQueryToRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
 export const getTeacherQuizAttemptsQueryLimitMax = 200;
 
 
 
 export const GetTeacherQuizAttemptsQueryParams = zod.object({
   "classId": zod.coerce.number().int(),
+  "subjectId": zod.coerce.number().int().optional().describe('Narrow to one subject the teacher holds in this class. Omitted means every subject they hold there, which for a class teacher or a primary-grade teacher is every subject the class runs.\n'),
+  "from": zod.coerce.string().regex(getTeacherQuizAttemptsQueryFromRegExp).optional().describe('Earliest calendar day to include, YYYY-MM-DD, read in Asia/Ulaanbaatar. Omitted means no lower bound.\n'),
+  "to": zod.coerce.string().regex(getTeacherQuizAttemptsQueryToRegExp).optional().describe('Latest calendar day to include, inclusive.'),
   "limit": zod.coerce.number().int().min(1).max(getTeacherQuizAttemptsQueryLimitMax).optional()
 })
 
 export const GetTeacherQuizAttemptsResponse = zod.object({
   "classId": zod.number().int(),
   "className": zod.string(),
+  "from": zod.string().nullable().describe('The range actually applied, null where there was no bound.'),
+  "to": zod.string().nullable(),
+  "truncated": zod.boolean().describe('True when the limit cut the list short, so the totals below it are of what came back rather than of the range asked for.\n'),
   "attempts": zod.array(zod.object({
   "id": zod.number().int(),
   "studentId": zod.number().int().describe('Needed to assign this student extra work straight from the row.'),
@@ -732,6 +748,7 @@ export const GetTeacherQuizAttemptsResponse = zod.object({
  */
 export const GetAssessmentSheetQueryParams = zod.object({
   "classId": zod.coerce.number().int(),
+  "subjectId": zod.coerce.number().int().optional().describe('Narrow to one subject the teacher holds in this class. Omitted means every subject they hold there, which for a class teacher or a primary-grade teacher is every subject the class runs.\n'),
   "skillId": zod.coerce.number().int().optional()
 })
 
@@ -815,7 +832,8 @@ export const GetItemAnalysisResponse = zod.object({
  * @summary How a class stands on each skill it has been measured on
  */
 export const GetClassSkillsQueryParams = zod.object({
-  "classId": zod.coerce.number().int()
+  "classId": zod.coerce.number().int(),
+  "subjectId": zod.coerce.number().int().optional().describe('Narrow to one subject the teacher holds in this class. Omitted means every subject they hold there, which for a class teacher or a primary-grade teacher is every subject the class runs.\n')
 })
 
 export const GetClassSkillsResponse = zod.object({
@@ -845,7 +863,8 @@ export const GetClassSkillsResponse = zod.object({
  * @summary Approved lessons for a class, in the order the book teaches them
  */
 export const GetTeacherLessonsQueryParams = zod.object({
-  "classId": zod.coerce.number().int()
+  "classId": zod.coerce.number().int(),
+  "subjectId": zod.coerce.number().int().optional().describe('Narrow to one subject the teacher holds in this class. Omitted means every subject they hold there, which for a class teacher or a primary-grade teacher is every subject the class runs.\n')
 })
 
 export const GetTeacherLessonsResponseItem = zod.object({
@@ -865,7 +884,8 @@ export const GetTeacherLessonsResponse = zod.array(GetTeacherLessonsResponseItem
  */
 export const GenerateScheduleBody = zod.object({
   "classId": zod.number().int(),
-  "termId": zod.number().int()
+  "subjectId": zod.number().int().nullish().describe('Lay out one subject\'s term. Null means every subject the teacher holds in this class.\n'),
+  "termId": zod.number().int().nullish().describe('Which term to lay out. Omit it for the term today falls in, which is what a teacher pressing the button means.\n')
 })
 
 export const GenerateScheduleResponse = zod.object({
@@ -887,6 +907,7 @@ export const setScheduleDayBodyScheduledOnRegExp = new RegExp('^\\d{4}-\\d{2}-\\
 
 export const SetScheduleDayBody = zod.object({
   "classId": zod.number().int(),
+  "subjectId": zod.number().int().nullish().describe('Which subject\'s day this is. Setting a lesson takes the subject from the lesson itself, so this only matters when clearing: without it, emptying Tuesday in the maths timetable would also empty Tuesday\'s physics. Null clears every subject the teacher holds in the class.\n'),
   "scheduledOn": zod.string().regex(setScheduleDayBodyScheduledOnRegExp),
   "lessonId": zod.number().int().nullable().describe('null clears the day.')
 })

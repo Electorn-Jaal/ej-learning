@@ -10,5 +10,14 @@ import type { TeacherQuizAttemptRow } from './teacherQuizAttemptRow';
 export interface TeacherQuizAttempts {
   classId: number;
   className: string;
+  /**
+     * The range actually applied, null where there was no bound.
+     * @nullable
+     */
+  from: string | null;
+  /** @nullable */
+  to: string | null;
+  /** True when the limit cut the list short, so the totals below it are of what came back rather than of the range asked for. */
+  truncated: boolean;
   attempts: TeacherQuizAttemptRow[];
 }

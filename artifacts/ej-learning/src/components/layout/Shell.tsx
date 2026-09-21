@@ -1,36 +1,53 @@
 import { Link, useLocation } from "wouter"
 import {
-  LayoutDashboard, BookOpen, TrendingUp, User, CheckSquare, Database, LogOut,
+  LayoutDashboard, BookOpen, TrendingUp, User, Database, LogOut,
   CalendarDays, Sun, KeyRound, ClipboardCheck, Library, PenLine,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { hasRole, useSession } from "@/lib/session"
 
+// "Хичээлийн сан" is not here. It listed every approved lesson in the school
+// for a child to browse, which is not what a school day asks of them: the work
+// they have been set is on Өнөөдрийн хичээл, and what they have covered is on
+// Миний хичээлүүд. The page and its endpoint stay in the tree.
 const STUDENT_NAV = [
   { href: "/", label: "Өнөөдрийн хичээл", icon: Sun },
-  { href: "/lessons", label: "Хичээлийн сан", icon: LayoutDashboard },
   { href: "/subjects", label: "Миний хичээлүүд", icon: BookOpen },
   { href: "/progress", label: "Миний ахиц", icon: TrendingUp },
   { href: "/profile", label: "Миний бүртгэл", icon: User },
   { href: "/password", label: "Нууц үг солих", icon: KeyRound },
 ]
 
+// What every teacher gets. Looking at a class is not the same as taking one
+// of its lessons, so a class teacher who takes none of theirs still belongs
+// here: they read the timetable and the results, they just cannot change them.
 const TEACHER_NAV = [
   { href: "/teacher", label: "Хяналтын самбар", icon: LayoutDashboard },
   { href: "/teacher/schedule", label: "Хуваарь", icon: CalendarDays },
   { href: "/teacher/results", label: "Шалгалтын үр дүн", icon: ClipboardCheck },
-  { href: "/teacher/assessment", label: "Дэвтрийн үнэлгээ", icon: PenLine },
-  { href: "/teacher/reviews", label: "Шалгах ажлууд", icon: CheckSquare },
-  { href: "/teacher/catalog", label: "Сургалтын сан", icon: BookOpen },
-  { href: "/teacher/integrations", label: "Холболтууд", icon: Database },
-  { href: "/teacher/password", label: "Нууц үг солих", icon: KeyRound },
+  { href: "/teacher/catalog", label: "Хичээлийн материал", icon: BookOpen },
 ]
 
-// Only an administrator configures the books themselves.
+// Screens for entering things. An account that takes no lesson has nothing to
+// enter, and offering a page that answers 403 is worse than not offering it.
+//
+// "Шалгах ажлууд" is not here on purpose. It lists written answers waiting to
+// be marked and says on its own face that a mark entered there is not saved -
+// a screen that takes a teacher's judgement and drops it. It comes back when
+// marking is finished; the page and its endpoint are still in the tree.
+const TEACHING_ONLY = [
+  { href: "/teacher/assessment", label: "Дэвтрийн үнэлгээ", icon: PenLine },
+]
+
+// Only an administrator configures the books, or looks at an integration that
+// is not connected to anything.
 const ADMIN_ONLY = [
   { href: "/teacher/books", label: "Ном ба бүтэц", icon: Library },
+  { href: "/teacher/integrations", label: "Холболтууд", icon: Database },
 ]
+
+const PASSWORD_NAV = { href: "/teacher/password", label: "Нууц үг солих", icon: KeyRound }
 
 const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Админ",
@@ -45,7 +62,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const staff = hasRole(user, "TEACHER", "ADMIN")
   const admin = hasRole(user, "ADMIN")
   const navItems = staff
-    ? [...TEACHER_NAV.slice(0, -1), ...(admin ? ADMIN_ONLY : []), ...TEACHER_NAV.slice(-1)]
+    ? [
+        ...TEACHER_NAV,
+        ...(user.takesLessons || admin ? TEACHING_ONLY : []),
+        ...(admin ? ADMIN_ONLY : []),
+        PASSWORD_NAV,
+      ]
     : STUDENT_NAV
   // An account can hold several roles; name the most privileged one.
   const roleLabel =

@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   classScheduleInLearning,
   db,
@@ -94,16 +94,34 @@ export const studentClass = (studentId: number) =>
   );
 
 /** Empty unless this teacher is assigned to this class; admins bypass it. */
+/**
+ * The class, if this teacher may open it at all: either they teach something
+ * in it, or they are the class teacher, who is answerable for it whether or
+ * not any of its subjects is theirs.
+ */
 export const teacherClass = (teacherId: number, classId: number) =>
   readRows<{ classId: number; className: string; gradeLevel: number }>(
     `SELECT c.id::int AS "classId", c.name_mn AS "className",
        g.grade_number::int AS "gradeLevel"
-     FROM core.class_teachers ct
-     JOIN core.classes c ON c.id = ct.class_id AND c.is_active
+     FROM core.classes c
      JOIN core.grade_levels g ON g.id = c.grade_level_id
-     WHERE ct.teacher_id = $1::bigint AND ct.class_id = $2::bigint AND ct.is_active`,
+     WHERE c.id = $2::bigint AND c.is_active
+       AND (c.class_teacher_id = $1::bigint OR EXISTS (
+             SELECT 1 FROM core.class_teachers ct
+              WHERE ct.teacher_id = $1::bigint AND ct.class_id = c.id AND ct.is_active))`,
     [teacherId, classId],
   );
+
+/** Whether this teacher carries the class as a whole. */
+export const isClassTeacher = async (teacherId: number | null, classId: number) => {
+  if (teacherId === null) return false;
+  const rows = await readRows<{ n: number }>(
+    `SELECT count(*)::int AS n FROM core.classes
+      WHERE id = $2::bigint AND is_active AND class_teacher_id = $1::bigint`,
+    [teacherId, classId],
+  );
+  return rows[0].n > 0;
+};
 
 export const anyClass = (classId: number) =>
   readRows<{ classId: number; className: string; gradeLevel: number }>(
@@ -129,6 +147,12 @@ export const anyClass = (classId: number) =>
  *
  * Scoped by subject because a class now studies several: editing the maths
  * timetable must not show, or offer to overwrite, Tuesday's Mongolian.
+ *
+ * Each row carries its own subject. A timetable row is a (day, subject) pair,
+ * not a day: when several subjects are in scope one Tuesday comes back once
+ * per subject taught that Tuesday. Without the subject on the row those read
+ * as the same day repeated, and the screen could neither tell them apart nor
+ * write to the right one.
  */
 export const scheduleForClass = (
   classId: number,
@@ -138,6 +162,8 @@ export const scheduleForClass = (
 ) =>
   readRows<{
     scheduledOn: string;
+    subjectId: number | null;
+    subject: string | null;
     lessonId: number | null;
     lessonCode: string | null;
     lessonType: string | null;
@@ -146,17 +172,20 @@ export const scheduleForClass = (
   }>(
     // generate_series over an interval yields timestamps, so the cast to date
     // is what keeps this a calendar day rather than "2026-09-10 00:00:00".
-    `SELECT d.day::date::text AS "scheduledOn", dl.id::int AS "lessonId",
+    `SELECT d.day::date::text AS "scheduledOn",
+       cs.subject_id::int AS "subjectId", sub.name_mn AS subject,
+       dl.id::int AS "lessonId",
        dl.lesson_code AS "lessonCode", dl.lesson_type AS "lessonType",
        sk.name_mn AS "skillName", cs.note
      FROM generate_series($2::date, $3::date, interval '1 day') AS d(day)
      LEFT JOIN learning.class_schedule cs
        ON cs.class_id = $1::bigint AND cs.scheduled_on = d.day::date
       AND ($4::bigint[] IS NULL OR cs.subject_id = ANY($4::bigint[]))
+     LEFT JOIN core.subjects sub ON sub.id = cs.subject_id
      LEFT JOIN learning.daily_lessons dl ON dl.id = cs.daily_lesson_id
      LEFT JOIN content.skills sk ON sk.id = dl.core_skill_id
      WHERE extract(isodow FROM d.day) <= 5
-     ORDER BY d.day`,
+     ORDER BY d.day, sub.name_mn NULLS FIRST`,
     [classId, from, to, subjectIds],
   );
 
@@ -220,7 +249,23 @@ export const lessonBelongsToClass = async (lessonId: number, studentId: number) 
     )
   ).length > 0;
 
-export const attemptsForClass = (classId: number, limit: number) =>
+/**
+ * `subjectIds` null means every subject, which is what an admin and a class
+ * teacher get. A subject teacher gets the subjects they hold in the class, so
+ * the physics teacher's marking does not appear in the maths teacher's screen.
+ *
+ * `from` and `to` are inclusive calendar days in Asia/Ulaanbaatar, either of
+ * them null for no bound. The comparison converts the stored instant to that
+ * timezone first: an answer given at nine in the evening is that day's work to
+ * the teacher who reads it, whatever UTC calls it.
+ */
+export const attemptsForClass = (
+  classId: number,
+  limit: number,
+  subjectIds: number[] | null,
+  from: string | null,
+  to: string | null,
+) =>
   readRows<{
     id: number;
     studentId: number;
@@ -248,9 +293,14 @@ export const attemptsForClass = (classId: number, limit: number) =>
      JOIN learning.daily_lessons dl ON dl.id = qa.daily_lesson_id
      JOIN content.skills sk ON sk.id = dl.core_skill_id
      WHERE e.class_id = $1::bigint
+       AND ($3::bigint[] IS NULL OR sk.subject_id = ANY($3::bigint[]))
+       AND ($4::date IS NULL
+            OR (qa.submitted_at AT TIME ZONE 'Asia/Ulaanbaatar')::date >= $4::date)
+       AND ($5::date IS NULL
+            OR (qa.submitted_at AT TIME ZONE 'Asia/Ulaanbaatar')::date <= $5::date)
      ORDER BY qa.submitted_at DESC
      LIMIT $2`,
-    [classId, limit],
+    [classId, limit, subjectIds, from, to],
   );
 
 export type SchedulableLesson = {
@@ -270,7 +320,7 @@ export type SchedulableLesson = {
  * content node; the ORDER BY inside decides which alignment wins, so the
  * earliest one in the book is the one that positions it.
  */
-export const schedulableLessons = (classId: number) =>
+export const schedulableLessons = (classId: number, subjectIds: number[] | null) =>
   readRows<SchedulableLesson>(
     `SELECT DISTINCT ON (dl.id)
        dl.id::int AS id, dl.lesson_code AS "lessonCode",
@@ -285,8 +335,9 @@ export const schedulableLessons = (classId: number) =>
      LEFT JOIN content.content_source_alignments a ON a.content_node_id = cn.id AND a.status = 'APPROVED'
      LEFT JOIN content.source_outline_nodes son ON son.id = a.source_outline_node_id
      WHERE c.id = $1::bigint AND sk.status = 'APPROVED'
+       AND ($2::bigint[] IS NULL OR sk.subject_id = ANY($2::bigint[]))
      ORDER BY dl.id, son.sequence_no NULLS LAST, a.page_from NULLS LAST`,
-    [classId],
+    [classId, subjectIds],
   ).then((rows) =>
     // Re-sort in book order: DISTINCT ON forces its own ORDER BY to lead with
     // the distinct key, so the shape the caller wants is applied here.
@@ -346,15 +397,30 @@ export async function insertScheduleDays(
   }
 }
 
-export async function clearScheduleDay(classId: number, scheduledOn: string) {
-  await db
-    .delete(classScheduleInLearning)
-    .where(
-      and(
-        eq(classScheduleInLearning.classId, classId),
-        eq(classScheduleInLearning.scheduledOn, scheduledOn),
-      ),
-    );
+/**
+ * Empties one day for the given subjects.
+ *
+ * It used to delete the day outright. setScheduleDay's own comment says
+ * putting maths on Tuesday must not remove Tuesday's Mongolian - clearing it
+ * did exactly that, which nothing noticed while a class ran one subject per
+ * teacher. Null still clears every subject, which is what an admin or a class
+ * teacher asking for the whole day means.
+ */
+export async function clearScheduleDay(
+  classId: number,
+  scheduledOn: string,
+  subjectIds: number[] | null,
+) {
+  // Built rather than templated: an array interpolated into a sql`` fragment
+  // is read as SQL chunks, not as one parameter, and the delete failed.
+  const conditions = [
+    eq(classScheduleInLearning.classId, classId),
+    eq(classScheduleInLearning.scheduledOn, scheduledOn),
+  ];
+  if (subjectIds !== null) {
+    conditions.push(inArray(classScheduleInLearning.subjectId, subjectIds));
+  }
+  await db.delete(classScheduleInLearning).where(and(...conditions));
 }
 
 /**
@@ -420,17 +486,25 @@ export const teacherClasses = (teacherId: number | null, isAdmin: boolean) =>
         subjectId: number | null;
         subjectName: string;
       }>(
+        // One card per subject this teacher may look at in the class: the
+        // subjects they take, or every subject the class runs where they are
+        // the class teacher. A class teacher used to get a single blank card
+        // showing whichever lesson came first.
         `SELECT c.id::int AS "classId", c.name_mn AS "className",
            g.grade_number::int AS "gradeLevel",
-           COALESCE(ct.subject_id, t.subject_id)::int AS "subjectId",
+           v.subject_id::int AS "subjectId",
            COALESCE(sub.name_mn, '') AS "subjectName"
-         FROM core.class_teachers ct
-         JOIN core.classes c ON c.id = ct.class_id AND c.is_active
+         FROM core.classes c
          JOIN core.grade_levels g ON g.id = c.grade_level_id
-         JOIN core.teachers t ON t.id = ct.teacher_id
-         LEFT JOIN core.subjects sub ON sub.id = COALESCE(ct.subject_id, t.subject_id)
-         WHERE ct.teacher_id = $1::bigint AND ct.is_active
-         ORDER BY g.grade_number, c.class_code`,
+         JOIN LATERAL (
+           SELECT DISTINCT ct.subject_id
+             FROM core.class_teachers ct
+            WHERE ct.class_id = c.id AND ct.is_active AND ct.subject_id IS NOT NULL
+              AND (c.class_teacher_id = $1::bigint OR ct.teacher_id = $1::bigint)
+         ) v ON true
+         LEFT JOIN core.subjects sub ON sub.id = v.subject_id
+         WHERE c.is_active
+         ORDER BY g.grade_number, c.class_code, sub.name_mn`,
         [teacherId ?? 0],
       );
 
@@ -732,7 +806,7 @@ export type ClassSkillRow = {
  * unmeasured skill is not a weak one, and printing it as a row invites the
  * reading that it is.
  */
-export const classSkillMastery = (classId: number) =>
+export const classSkillMastery = (classId: number, subjectIds: number[] | null) =>
   readRows<ClassSkillRow>(
     `SELECT sk.id::int AS "skillId", sk.skill_code AS "skillCode",
        sk.name_mn AS "skillName", g.grade_number::int AS "gradeLevel",
@@ -756,9 +830,10 @@ export const classSkillMastery = (classId: number) =>
      JOIN content.skills sk ON sk.id = m.skill_id
      LEFT JOIN core.grade_levels g ON g.id = sk.grade_level_id
      WHERE e.class_id = $1::bigint AND m.mastery_status <> 'NOT_ASSESSED'
+       AND ($2::bigint[] IS NULL OR sk.subject_id = ANY($2::bigint[]))
      GROUP BY sk.id, sk.skill_code, sk.name_mn, g.grade_number
      ORDER BY gap DESC, "averageScore", sk.skill_code`,
-    [classId],
+    [classId, subjectIds],
   );
 
 export type AssessableSkill = {
@@ -776,7 +851,7 @@ export type AssessableSkill = {
  * levelled subjects - is offered too, since those are placed rather than
  * bound to a year.
  */
-export const assessableSkills = (classId: number) =>
+export const assessableSkills = (classId: number, subjectIds: number[] | null) =>
   readRows<AssessableSkill>(
     `SELECT DISTINCT sk.id::int AS "skillId", sk.skill_code AS "skillCode",
        sk.name_mn AS "skillName"
@@ -786,8 +861,9 @@ export const assessableSkills = (classId: number) =>
        AND sk.status = 'APPROVED'
        AND (sk.grade_level_id IS NULL OR sk.grade_level_id = c.grade_level_id)
      WHERE c.id = $1::bigint
+       AND ($2::bigint[] IS NULL OR sk.subject_id = ANY($2::bigint[]))
      ORDER BY sk.skill_code`,
-    [classId],
+    [classId, subjectIds],
   );
 
 export type RosterRow = {
@@ -825,8 +901,11 @@ export const classRosterForSkill = (classId: number, skillId: number) =>
   );
 
 /** Confirms a skill is one this class may be marked against. */
-export const skillAssessableForClass = async (classId: number, skillId: number) =>
-  (await assessableSkills(classId)).some((skill) => skill.skillId === skillId);
+export const skillAssessableForClass = async (
+  classId: number,
+  skillId: number,
+  subjectIds: number[] | null,
+) => (await assessableSkills(classId, subjectIds)).some((skill) => skill.skillId === skillId);
 
 /** Restricts an entry to students actually enrolled in the class. */
 export const enrolledStudentIds = async (classId: number) =>
@@ -909,6 +988,8 @@ export type TeacherClassRow = {
   id: string;
   name: string;
   gradeLevel: number;
+  subjectId: number | null;
+  canEdit: boolean;
   subject: string;
   studentCount: number;
   currentTopic: string;
@@ -916,61 +997,142 @@ export type TeacherClassRow = {
 };
 
 /**
- * The classes a teacher may actually open, with the subject they teach each.
+ * The classes a teacher may actually open, naming the subjects they teach in
+ * each. One row per class.
  *
- * The old listing returned every active class in the school, so the picker
+ * The listing once returned every active class in the school, so the picker
  * offered rows that answered 403 the moment they were chosen. It is scoped by
- * class_teachers now, and the subject comes with it: one class runs several
- * subjects, and "10А" alone no longer says which timetable is being edited.
+ * class_teachers now - and one row per class_teachers row was fine only while
+ * a teacher could hold a single subject in a class. Once they could hold two,
+ * 9А came back twice carrying the same id, and everything downstream keys on
+ * that id: the select rendered its label twice ("9А9А"), and picking either
+ * row asked for the same class anyway.
+ *
+ * So the subjects are aggregated into the row instead. A teacher who takes
+ * maths and physics in 9А sees one 9А, labelled with both, and opening it
+ * shows the work they are responsible for there - which is both subjects.
+ * Splitting the screens per subject is a product decision, not this fix; it
+ * needs the subject threaded through the schedule, the register and the
+ * results, and somebody to say whether that is what a teacher wants.
+ */
+/**
+ * The entries in a teacher's class picker: one per subject they hold in a
+ * class, plus one standing for all of them where that means anything.
+ *
+ * The listing once returned every active class in the school, so the picker
+ * offered rows that answered 403 the moment they were chosen. Then it returned
+ * one row per class_teachers row, which was fine only while a teacher could
+ * hold a single subject in a class - once they could hold two, 9А came back
+ * twice carrying the same id, and everything downstream keys on that id.
+ *
+ * So an entry is now the pair (id, subjectId), and subjectId travels with the
+ * choice to the schedule, the register and the results. A subject-less
+ * class_teachers row - a primary-grade teacher, or a class teacher answerable
+ * for the whole class - produces the "all subjects" entry on its own.
+ */
+/**
+ * The entries in a teacher's class picker: one per subject they may look at in
+ * a class, plus one standing for all of them where there is more than one.
+ *
+ * What a teacher may look at is not the same as what they take. A subject
+ * teacher gets their own subjects. A class teacher gets every subject the
+ * class runs, because that is what being answerable for a class means - the
+ * English lessons of a primary class belong to somebody else and the class
+ * teacher still has to see them. What may be *changed* is narrower, and lives
+ * in editableSubjects.
+ *
+ * An entry is the pair (id, subjectId): the id alone repeats, which is what
+ * once made the register render "9А9А" and the two entries indistinguishable.
  */
 export const teacherClassOptions = (teacherId: number | null, isAdmin: boolean) =>
   readRows<TeacherClassRow>(
-    `SELECT c.id::text AS id, c.name_mn AS name,
+    `WITH visible AS (
+       SELECT c.id AS class_id, ct.subject_id
+         FROM core.classes c
+         JOIN core.class_teachers ct
+           ON ct.class_id = c.id AND ct.is_active AND ct.subject_id IS NOT NULL
+        WHERE c.is_active
+          AND ($2::boolean OR c.class_teacher_id = $1::bigint OR ct.teacher_id = $1::bigint)
+        GROUP BY c.id, ct.subject_id
+     ),
+     entries AS (
+       SELECT class_id, subject_id FROM visible
+       UNION ALL
+       -- One entry standing for all of them, worth offering only when there
+       -- is more than one to stand for.
+       SELECT class_id, NULL::bigint
+         FROM visible
+        GROUP BY class_id
+       HAVING count(DISTINCT subject_id) > 1
+     )
+     SELECT c.id::text AS id, c.name_mn AS name,
        g.grade_number::int AS "gradeLevel",
-       COALESCE(sub.name_mn, '') AS subject,
-       (SELECT count(DISTINCT e.student_id)::int
-        FROM core.student_enrollments e
-        JOIN core.students s ON s.id = e.student_id AND s.is_active
-        WHERE e.class_id = c.id AND e.is_active) AS "studentCount",
+       e.subject_id::int AS "subjectId",
+       -- Seeing a subject and being able to change it are different things:
+       -- a class teacher sees the English their colleague takes.
+       ($2::boolean OR EXISTS (
+          SELECT 1 FROM core.class_teachers mine
+           WHERE mine.class_id = c.id AND mine.teacher_id = $1::bigint
+             AND mine.is_active AND mine.subject_id IS NOT NULL
+             AND (e.subject_id IS NULL OR mine.subject_id = e.subject_id)
+        )) AS "canEdit",
+       COALESCE(sub.name_mn, 'Бүх хичээл') AS subject,
+       (SELECT count(DISTINCT en.student_id)::int
+        FROM core.student_enrollments en
+        JOIN core.students s ON s.id = en.student_id AND s.is_active
+        WHERE en.class_id = c.id AND en.is_active) AS "studentCount",
        COALESCE(
          (SELECT sk.name_mn FROM learning.class_schedule cs
           JOIN learning.daily_lessons dl ON dl.id = cs.daily_lesson_id
           JOIN content.skills sk ON sk.id = dl.core_skill_id
           WHERE cs.class_id = c.id
             AND cs.scheduled_on = (now() AT TIME ZONE 'Asia/Ulaanbaatar')::date
-            AND ($2::boolean OR cs.subject_id = ct.subject_id)
+            AND CASE
+                  WHEN e.subject_id IS NOT NULL THEN cs.subject_id = e.subject_id
+                  ELSE EXISTS (
+                    SELECT 1 FROM visible v
+                     WHERE v.class_id = c.id AND v.subject_id = cs.subject_id)
+                END
           LIMIT 1),
          'Өнөөдөр хуваарьт хичээл алга') AS "currentTopic",
        0 AS "needsReview"
-     FROM core.class_teachers ct
-     JOIN core.classes c ON c.id = ct.class_id AND c.is_active
+     FROM entries e
+     JOIN core.classes c ON c.id = e.class_id AND c.is_active
      JOIN core.grade_levels g ON g.id = c.grade_level_id
-     LEFT JOIN core.subjects sub ON sub.id = ct.subject_id
-     WHERE ct.is_active AND ($2::boolean OR ct.teacher_id = $1::bigint)
-     ORDER BY g.grade_number, c.class_code, sub.name_mn`,
+     LEFT JOIN core.subjects sub ON sub.id = e.subject_id
+     ORDER BY g.grade_number, c.class_code, (e.subject_id IS NOT NULL), sub.name_mn`,
     [teacherId ?? 0, isAdmin],
   );
 
 /**
- * The subjects this teacher holds in this class, or null for "all of them".
+ * The subjects this teacher actually takes in this class.
  *
- * This used to read the first row and return one subject, which was right
- * only while a teacher could hold a single subject per class. Now that one
- * person can take maths and physics for the same year group, picking a row
- * would have silently hidden the other timetable. An admin, and a teacher
- * recorded as covering every subject (subject_id IS NULL, how a primary-grade
- * teacher is stored), both get null, meaning do not filter.
+ * Only these may be timetabled and marked, whoever the teacher is: a primary
+ * class teacher takes maths and Mongolian and sees the English, but the
+ * English marks are not theirs to enter. Being the class teacher widens what
+ * is shown, never what may be written, so it is deliberately not consulted
+ * here - see isClassTeacher.
+ *
+ * A row with no subject grants nothing. It once meant "covers everything",
+ * which turned out to describe nobody: the teacher it was meant for takes two
+ * subjects of three.
  */
-export const subjectsTaughtBy = async (
-  teacherId: number | null,
-  classId: number,
-): Promise<number[] | null> => {
-  if (teacherId === null) return null;
+export const subjectsTaughtBy = async (teacherId: number | null, classId: number) => {
+  if (teacherId === null) return [] as number[];
   const rows = await readRows<{ subjectId: number | null }>(
     `SELECT ct.subject_id::int AS "subjectId" FROM core.class_teachers ct
-     WHERE ct.teacher_id = $1::bigint AND ct.class_id = $2::bigint AND ct.is_active`,
+     WHERE ct.teacher_id = $1::bigint AND ct.class_id = $2::bigint
+       AND ct.is_active AND ct.subject_id IS NOT NULL`,
     [teacherId, classId],
   );
-  if (rows.some((row) => row.subjectId === null)) return null;
   return rows.map((row) => row.subjectId as number);
 };
+
+/** Every subject a class actually runs, whoever teaches it. */
+export const subjectsOfClass = (classId: number) =>
+  readRows<{ subjectId: number }>(
+    `SELECT DISTINCT ct.subject_id::int AS "subjectId"
+       FROM core.class_teachers ct
+      WHERE ct.class_id = $1::bigint AND ct.is_active AND ct.subject_id IS NOT NULL`,
+    [classId],
+  ).then((rows) => rows.map((row) => row.subjectId));

@@ -12,7 +12,6 @@ import { SessionProvider, hasRole, useSessionQuery } from '@/lib/session';
 import Login from '@/pages/Login';
 import Password from '@/pages/Password';
 import StudentToday from '@/pages/student/Today';
-import StudentDashboard from '@/pages/student/Dashboard';
 import StudentSubjects from '@/pages/student/Subjects';
 import StudentProgress from '@/pages/student/Progress';
 import StudentProfile from '@/pages/student/Profile';
@@ -22,7 +21,6 @@ import TeacherSchedule from '@/pages/teacher/Schedule';
 import TeacherQuizResults from '@/pages/teacher/QuizResults';
 import TeacherAssessment from '@/pages/teacher/Assessment';
 import AdminBooks from '@/pages/admin/Books';
-import TeacherReviews from '@/pages/teacher/Reviews';
 import TeacherIntegrations from '@/pages/teacher/Integrations';
 import TeacherCatalog from '@/pages/teacher/Catalog';
 
@@ -41,7 +39,6 @@ function StudentRoutes() {
   return (
     <Switch>
       <Route path="/" component={StudentToday} />
-      <Route path="/lessons" component={StudentDashboard} />
       <Route path="/subjects" component={StudentSubjects} />
       <Route path="/progress" component={StudentProgress} />
       <Route path="/profile" component={StudentProfile} />
@@ -52,17 +49,24 @@ function StudentRoutes() {
   );
 }
 
-function StaffRoutes({ admin }: { admin: boolean }) {
+/**
+ * Routes are chosen, not merely hidden from the navigation, so typing an
+ * address cannot reach a screen this account has no business on. The entry
+ * screens need the account to take a lesson somewhere; the integrations
+ * screen describes a connection nobody has made, so it is the administrator's.
+ */
+function StaffRoutes({ admin, takesLessons }: { admin: boolean; takesLessons: boolean }) {
   return (
     <Switch>
       {admin ? <Route path="/teacher/books" component={AdminBooks} /> : null}
+      {admin ? <Route path="/teacher/integrations" component={TeacherIntegrations} /> : null}
       <Route path="/teacher" component={TeacherDashboard} />
       <Route path="/teacher/schedule" component={TeacherSchedule} />
       <Route path="/teacher/results" component={TeacherQuizResults} />
-      <Route path="/teacher/assessment" component={TeacherAssessment} />
-      <Route path="/teacher/reviews" component={TeacherReviews} />
+      {takesLessons || admin ? (
+        <Route path="/teacher/assessment" component={TeacherAssessment} />
+      ) : null}
       <Route path="/teacher/catalog" component={TeacherCatalog} />
-      <Route path="/teacher/integrations" component={TeacherIntegrations} />
       <Route path="/teacher/password" component={Password} />
       <Route component={NotFound} />
     </Switch>
@@ -82,7 +86,11 @@ function RoleRoutes({ user }: { user: AuthenticatedUser }) {
     if (staff && !location.startsWith('/teacher')) navigate('/teacher', { replace: true });
   }, [staff, location, navigate]);
 
-  return staff ? <StaffRoutes admin={hasRole(user, 'ADMIN')} /> : <StudentRoutes />;
+  return staff ? (
+    <StaffRoutes admin={hasRole(user, 'ADMIN')} takesLessons={user.takesLessons} />
+  ) : (
+    <StudentRoutes />
+  );
 }
 
 function RoutedErrorBoundary({ children }: { children: ReactNode }) {
