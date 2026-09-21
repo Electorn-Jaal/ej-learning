@@ -100,6 +100,14 @@ try {
   throw error;
 } finally {
   assert(/^ej-smoke-[0-9a-f]{12}$/.test(project));
+  // The seed writes into the bind-mounted storage as root, so on Linux the
+  // files it leaves belong to root and the user running this script cannot
+  // remove them. Clearing them from inside the container, which is root, is
+  // what makes the temporary directory disposable on a CI runner as well as
+  // on a desktop where the bind mount hides ownership.
+  compose(['run', '--rm', 'tools', 'node', '-e',
+    "const fs=require('node:fs');for(const entry of fs.readdirSync('/app/storage'))" +
+    "fs.rmSync('/app/storage/'+entry,{recursive:true,force:true})"], true);
   const cleanup = compose(['down', '--volumes', '--remove-orphans'], true);
   cleanupComplete = cleanup.status === 0;
   if (cleanupComplete) await rm(temp, { recursive: true, force: true });
