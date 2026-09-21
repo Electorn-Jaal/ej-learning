@@ -1,9 +1,18 @@
 import { Link, useLocation } from "wouter"
+import { useGetCurrentTerm } from "@workspace/api-client-react"
 import {
   LayoutDashboard, BookOpen, TrendingUp, User, Database, LogOut,
-  CalendarDays, Sun, KeyRound, ClipboardCheck, Library, PenLine,
+  CalendarDays, Sun, KeyRound, ClipboardCheck, Library, PenLine, Network, BarChart3,
 } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { hasRole, useSession } from "@/lib/session"
 
@@ -13,10 +22,10 @@ import { hasRole, useSession } from "@/lib/session"
 // Миний хичээлүүд. The page and its endpoint stay in the tree.
 const STUDENT_NAV = [
   { href: "/", label: "Өнөөдрийн хичээл", icon: Sun },
+  { href: "/schedule", label: "Хуваарь", icon: CalendarDays },
   { href: "/subjects", label: "Миний хичээлүүд", icon: BookOpen },
   { href: "/progress", label: "Миний ахиц", icon: TrendingUp },
   { href: "/profile", label: "Миний бүртгэл", icon: User },
-  { href: "/password", label: "Нууц үг солих", icon: KeyRound },
 ]
 
 // What every teacher gets. Looking at a class is not the same as taking one
@@ -26,6 +35,7 @@ const TEACHER_NAV = [
   { href: "/teacher", label: "Хяналтын самбар", icon: LayoutDashboard },
   { href: "/teacher/schedule", label: "Хуваарь", icon: CalendarDays },
   { href: "/teacher/results", label: "Шалгалтын үр дүн", icon: ClipboardCheck },
+  { href: "/teacher/analytics", label: "Дүн шинжилгээ", icon: BarChart3 },
   { href: "/teacher/catalog", label: "Хичээлийн материал", icon: BookOpen },
 ]
 
@@ -44,10 +54,9 @@ const TEACHING_ONLY = [
 // is not connected to anything.
 const ADMIN_ONLY = [
   { href: "/teacher/books", label: "Ном ба бүтэц", icon: Library },
+  { href: "/teacher/content-links", label: "Агуулгын холбоо", icon: Network },
   { href: "/teacher/integrations", label: "Холболтууд", icon: Database },
 ]
-
-const PASSWORD_NAV = { href: "/teacher/password", label: "Нууц үг солих", icon: KeyRound }
 
 const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Админ",
@@ -55,9 +64,90 @@ const ROLE_LABEL: Record<string, string> = {
   STUDENT: "Сурагч",
 }
 
+/**
+ * The account, top right, where a signed-in site puts it.
+ *
+ * The sidebar used to end with the name and a Гарах button, which put the one
+ * irreversible action on the screen next to the navigation and gave the
+ * account's own pages - the profile, the password - places in the middle of a
+ * list of school work. They belong together, behind the name.
+ */
+function AccountMenu({
+  name,
+  roleLabel,
+  profileHref,
+  passwordHref,
+  onSignOut,
+  signingOut,
+}: {
+  name: string
+  roleLabel: string
+  profileHref: string | null
+  passwordHref: string
+  onSignOut: () => void
+  signingOut: boolean
+}) {
+  // Two letters of the display name. A photo would be better and there is
+  // nowhere to put one yet: no upload, no column, no file. Initials are honest
+  // about that; a stock silhouette pretends there is a picture missing.
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toLocaleUpperCase("mn") ?? "")
+    .join("")
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <Avatar className="h-8 w-8">
+            <AvatarFallback className="text-xs font-semibold">{initials}</AvatarFallback>
+          </Avatar>
+          <span className="hidden sm:block">
+            <span className="block text-sm font-semibold leading-tight">{name}</span>
+            <span className="block text-xs leading-tight text-muted-foreground">{roleLabel}</span>
+          </span>
+        </button>
+      </DropdownMenuTrigger>
+
+      <DropdownMenuContent align="end" className="w-52">
+        <DropdownMenuLabel className="font-normal">
+          <span className="block text-sm font-semibold">{name}</span>
+          <span className="block text-xs text-muted-foreground">{roleLabel}</span>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {profileHref ? (
+          <DropdownMenuItem asChild>
+            <Link href={profileHref}>
+              <User className="h-4 w-4" />
+              Миний бүртгэл
+            </Link>
+          </DropdownMenuItem>
+        ) : null}
+        <DropdownMenuItem asChild>
+          <Link href={passwordHref}>
+            <KeyRound className="h-4 w-4" />
+            Нууц үг солих
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={onSignOut} disabled={signingOut}>
+          <LogOut className="h-4 w-4" />
+          {signingOut ? "Гарч байна…" : "Гарах"}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
 export function Shell({ children }: { children: React.ReactNode }) {
   const { user, signOut, signingOut } = useSession()
   const [location] = useLocation()
+  const { data: term } = useGetCurrentTerm()
 
   const staff = hasRole(user, "TEACHER", "ADMIN")
   const admin = hasRole(user, "ADMIN")
@@ -66,7 +156,6 @@ export function Shell({ children }: { children: React.ReactNode }) {
         ...TEACHER_NAV,
         ...(user.takesLessons || admin ? TEACHING_ONLY : []),
         ...(admin ? ADMIN_ONLY : []),
-        PASSWORD_NAV,
       ]
     : STUDENT_NAV
   // An account can hold several roles; name the most privileged one.
@@ -111,31 +200,34 @@ export function Shell({ children }: { children: React.ReactNode }) {
             )
           })}
         </nav>
-        <div className="p-4 border-t border-border bg-card space-y-3">
-          <div>
-            <div className="text-sm font-bold text-foreground">{user.displayName}</div>
-            <div className="text-xs text-muted-foreground">{roleLabel}</div>
+        {/* The school year, not the account: the corner says what everything
+            above it is about. Nothing is printed when today falls outside
+            every recorded term - inventing a year from the month would be a
+            guess, and the school sets its own dates. */}
+        {term ? (
+          <div className="border-t border-border bg-card p-4">
+            <div className="text-sm font-semibold text-foreground">
+              {term.schoolYear} хичээлийн жил
+            </div>
+            <div className="text-xs text-muted-foreground">{term.name}</div>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full"
-            onClick={signOut}
-            disabled={signingOut}
-          >
-            <LogOut className="h-4 w-4" />
-            {signingOut ? "Гарч байна…" : "Гарах"}
-          </Button>
-        </div>
+        ) : null}
       </aside>
 
       <main className="flex-1 flex flex-col h-screen overflow-hidden bg-background">
-        <div className="md:hidden p-4 border-b bg-card flex items-center justify-between flex-shrink-0">
-          <div className="text-lg font-bold text-foreground">EJ Learning</div>
-          <Button variant="ghost" size="sm" onClick={signOut} disabled={signingOut}>
-            <LogOut className="h-4 w-4" />
-            Гарах
-          </Button>
+        <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-border bg-card px-4 py-2">
+          <div className="text-lg font-bold text-foreground md:hidden">EJ Learning</div>
+          <div className="hidden text-sm text-muted-foreground md:block">
+            {term ? `${term.schoolYear} · ${term.name}` : ""}
+          </div>
+          <AccountMenu
+            name={user.displayName}
+            roleLabel={roleLabel}
+            profileHref={staff ? null : "/profile"}
+            passwordHref={staff ? "/teacher/password" : "/password"}
+            onSignOut={signOut}
+            signingOut={signingOut}
+          />
         </div>
 
         <nav
@@ -162,7 +254,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        <div className="flex-1 overflow-auto p-4 md:p-8 lg:p-10">
+        {/* The gutter is reserved whether or not the page is long enough to
+            scroll. Without it a short screen has the full width and a long one
+            loses the bar's width, so the centred column below jumps sideways
+            on every navigation between the two. */}
+        <div className="flex-1 overflow-auto p-4 md:p-8 lg:p-10 [scrollbar-gutter:stable]">
           <div className="max-w-4xl mx-auto">{children}</div>
         </div>
       </main>

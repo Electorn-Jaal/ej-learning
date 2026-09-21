@@ -1,0 +1,2 @@
+CREATE TYPE "learning"."assessment_kind" AS ENUM('LESSON', 'UNIT', 'MONTHLY', 'DIAGNOSTIC');--> statement-breakpoint
+ALTER TABLE "learning"."daily_lessons" ADD COLUMN "assessment_kind" "learning"."assessment_kind" DEFAULT 'LESSON' NOT NULL;

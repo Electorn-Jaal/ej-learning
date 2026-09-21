@@ -5,13 +5,23 @@ import {
   useSubmitQuizAttempt,
   type QuizResult,
 } from '@workspace/api-client-react'
-import { Check, RotateCcw, X } from 'lucide-react'
+import { Check, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
+
+/**
+ * A school runs more than one kind of assessment, and a child sitting the
+ * monthly one should not be told it is the end-of-lesson check.
+ */
+const KIND_LABEL: Record<string, string> = {
+  LESSON: 'Шалгах асуулт',
+  UNIT: 'Бүлгийн шалгалт',
+  MONTHLY: 'Сарын шалгалт',
+  DIAGNOSTIC: 'Оношилгооны шалгалт',
+}
 
 /**
  * Practice check for a lesson.
@@ -38,16 +48,33 @@ export function LessonQuiz({ lessonId }: { lessonId: number }) {
   // worth putting in front of a student.
   if (!paper || paper.questions.length === 0) return null
 
+  // One sitting a day. Showing the paper again would invite a child to answer
+  // twenty questions and be refused at the end, so the score they already have
+  // is what they get instead.
+  if (paper.takenToday && results === null) {
+    return (
+      <div className="space-y-2">
+        <h3 className="text-lg font-semibold">{KIND_LABEL[paper.kind] ?? KIND_LABEL.LESSON}</h3>
+        <p className="text-sm">
+          Өнөөдрийн сорилыг өгсөн байна.
+          {paper.previousMaxScore ? (
+            <>
+              {' '}
+              <strong>
+                {paper.previousScore}/{paper.previousMaxScore}
+              </strong>{' '}
+              оноо авсан.
+            </>
+          ) : null}
+        </p>
+        <p className="text-sm text-muted-foreground">Маргааш дахин өгч болно.</p>
+      </div>
+    )
+  }
+
   const answeredCount = Object.keys(chosen).length
   const allAnswered = answeredCount === paper.questions.length
   const resultFor = (itemId: number) => results?.find((row) => row.itemId === itemId)
-
-  const reset = () => {
-    setChosen({})
-    setResults(null)
-    setScore(null)
-    setError(null)
-  }
 
   const check = () => {
     setError(null)
@@ -72,15 +99,15 @@ export function LessonQuiz({ lessonId }: { lessonId: number }) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-lg">Шалгах асуулт</CardTitle>
+    <div className="space-y-6">
+      <div className="space-y-1">
+        <h3 className="text-lg font-semibold">{KIND_LABEL[paper.kind] ?? KIND_LABEL.LESSON}</h3>
         <p className="text-sm text-muted-foreground">
           {paper.questions.length} асуулт. Дэвтрийн ажлаа хийсний дараа хариулаарай.
         </p>
-      </CardHeader>
+      </div>
 
-      <CardContent className="space-y-6">
+      <div className="space-y-6">
         {paper.questions.map((question, index) => {
           const result = resultFor(question.itemId)
           return (
@@ -95,7 +122,7 @@ export function LessonQuiz({ lessonId }: { lessonId: number }) {
                   setChosen((prev) => ({ ...prev, [question.itemId]: Number(value) }))
                 }
                 disabled={Boolean(results)}
-                className="gap-2"
+                className="grid grid-cols-1 gap-2 sm:grid-cols-2"
               >
                 {question.options.map((option) => {
                   const inputId = `q${question.itemId}-${option.optionId}`
@@ -161,10 +188,7 @@ export function LessonQuiz({ lessonId }: { lessonId: number }) {
                   ? ' Маш сайн!'
                   : ' Буруу хариултын тайлбарыг уншаарай.'}
               </p>
-              <Button variant="outline" size="sm" onClick={reset}>
-                <RotateCcw className="h-4 w-4" />
-                Дахин
-              </Button>
+              <span className="text-sm text-muted-foreground">Маргааш дахин өгч болно.</span>
             </>
           )}
           {error ? (
@@ -175,7 +199,7 @@ export function LessonQuiz({ lessonId }: { lessonId: number }) {
         </div>
 
         <p className="text-xs text-muted-foreground">Хариулт тань багшид харагдана.</p>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }

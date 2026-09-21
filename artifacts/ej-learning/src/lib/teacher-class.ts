@@ -35,3 +35,19 @@ export function currentSelection(
 /** Query parameters, leaving subjectId out when every subject is meant. */
 export const subjectParam = (subjectId: number | null) =>
   subjectId === null ? {} : { subjectId }
+
+/**
+ * The address of `path` for one class, and one subject where there is one.
+ *
+ * A screen opened from a card that already knew its class should not ask for
+ * it again; `useLinkedSelection` reads these back on the other side.
+ */
+export function linkedHref(
+  path: string,
+  classId: number,
+  subjectId: number | null,
+): string {
+  const params = new URLSearchParams({ classId: String(classId) })
+  if (subjectId !== null) params.set('subjectId', String(subjectId))
+  return `${path}?${params.toString()}`
+}

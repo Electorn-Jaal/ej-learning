@@ -1,7 +1,7 @@
-import { useState } from "react"
-import { Link } from "wouter"
+import { useState, type ReactNode } from "react"
 import { useGetTeacherDashboard, type TeacherClassToday } from "@workspace/api-client-react"
 import { BookOpen, ChevronDown, ChevronUp } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
@@ -12,6 +12,28 @@ const REASON_DOT: Record<string, string> = {
   NOT_ANSWERED: "bg-muted-foreground/50",
 }
 
+/** One of the small buttons a class opens onto. */
+function Choice({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <Button
+      size="sm"
+      variant={active ? "default" : "outline"}
+      aria-pressed={active}
+      onClick={onClick}
+    >
+      {children}
+    </Button>
+  )
+}
+
 /**
  * One class, closed by default.
  *
@@ -19,6 +41,11 @@ const REASON_DOT: Record<string, string> = {
  * the detail: the summary row carries what is decided at a glance - today's
  * topic, how many have answered, how many need looking at - and the breakdown
  * waits until it is asked for.
+ *
+ * Opening a class offers a choice rather than answering one. Today's topic and
+ * the list of names used to unroll together, so a teacher who wanted the names
+ * scrolled past the topic and one who wanted the topic got a column of
+ * children first. Pressing a button again puts it away.
  */
 function ClassRow({
   klass,
@@ -29,6 +56,7 @@ function ClassRow({
   open: boolean
   onToggle: () => void
 }) {
+  const [view, setView] = useState<"lesson" | "students" | null>(null)
   const pages =
     klass.pageFrom === null
       ? null
@@ -98,6 +126,17 @@ function ClassRow({
 
       {open ? (
       <div className="space-y-4 border-t border-border px-4 py-4">
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Юу нээх">
+          <Choice active={view === "lesson"} onClick={() => setView(view === "lesson" ? null : "lesson")}>
+            Хичээл
+          </Choice>
+          <Choice active={view === "students"} onClick={() => setView(view === "students" ? null : "students")}>
+            Сурагчид
+            {klass.attention.length > 0 ? ` · ${klass.attention.length}` : ""}
+          </Choice>
+        </div>
+
+        {view === "lesson" ? (
         <div className="flex items-start gap-3 border-l-2 border-primary py-1 pl-4">
           <BookOpen className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
           <div className="min-w-0">
@@ -118,8 +157,10 @@ function ClassRow({
             )}
           </div>
         </div>
+        ) : null}
 
-        {klass.attention.length > 0 ? (
+        {view === "students" ? (
+          klass.attention.length > 0 ? (
           <div className="space-y-2">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Анхаарах — {klass.attention.length}
@@ -159,18 +200,10 @@ function ClassRow({
               </p>
             ) : null}
           </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">Бүгд хийсэн байна.</p>
-        )}
-
-        <div className="flex flex-wrap gap-4 border-t pt-3 text-sm">
-          <Link href="/teacher/results" className="underline underline-offset-4">
-            Үр дүн
-          </Link>
-          <Link href="/teacher/schedule" className="underline underline-offset-4">
-            Хуваарь
-          </Link>
-        </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Бүгд хийсэн байна.</p>
+          )
+        ) : null}
       </div>
       ) : null}
     </li>

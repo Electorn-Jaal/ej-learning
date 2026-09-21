@@ -20,4 +20,10 @@ export interface ScheduleDayInput {
      * @nullable
      */
   lessonId: number | null;
+  /**
+     * What the teacher wants the class to know about this day - which pages to read, which exercises to do, what to watch out for. The student sees it. Leave the field out to keep whatever note is already there; send null or an empty string to remove it. Clearing the day removes the note with it.
+     * @maxLength 2000
+     * @nullable
+     */
+  note?: string | null;
 }

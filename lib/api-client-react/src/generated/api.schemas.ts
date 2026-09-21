@@ -61,6 +61,11 @@ export interface DailyLessonView {
   independentPractice: string | null;
   /** @nullable */
   studentMessage: string | null;
+  /**
+     * The note the teacher left on this day of the timetable, if any. It belongs to the class's day rather than to the lesson, so the same lesson taught to another class on another day carries a different one - and a lesson reached outside the timetable carries none.
+     * @nullable
+     */
+  teacherNote: string | null;
   /** @nullable */
   estimatedMinutes: number | null;
   book: BookReference | null;
@@ -105,6 +110,68 @@ export interface UploadedFile {
 export interface PageOffsetInput {
   materialId: number;
   pageOffset: number;
+}
+
+export interface SkillChainLink {
+  dependencyCode: string;
+  skillCode: string;
+  skillName: string;
+  prerequisiteCode: string;
+  prerequisiteName: string;
+  subjectName: string;
+  /** REQUIRED or RECOMMENDED. Only REQUIRED is walked; a RECOMMENDED link is a note for whoever plans a year. */
+  relationType: string;
+  /** Recorded, but the remediation walk does not read it. */
+  importance: string;
+  status: string;
+  /** Why this prerequisite. The column is NOT NULL, so there is always one. */
+  reason: string;
+  /** True when this link is both APPROVED and REQUIRED - that is, when remediation actually walks it. Everything else is documentation. */
+  followed: boolean;
+  /** Whether the prerequisite has an approved, web-ready lesson. Without one the walk reaches a dead end and keeps looking further back. */
+  prerequisiteHasLesson: boolean;
+}
+
+export interface SkillChain {
+  links: SkillChainLink[];
+  /** Loops among the followed links, each given as the skill codes around it. The database only forbids a skill pointing at itself, so a two-step loop is possible; the walk survives it on the depth limit alone and returns nonsense. */
+  cycles: string[][];
+}
+
+export interface SkillMapSkill {
+  skillCode: string;
+  name: string;
+  /** The skill's own review status. Only APPROVED skills reach a student. */
+  status: string;
+  /** The one skill a topic is mainly about. It decides which book pages open with the lesson, so a topic carrying two of them is a fault even though the database permits it. */
+  isPrimary: boolean;
+  /** The link's own review status, separate from the skill's. Anything but APPROVED is invisible to students. */
+  mapStatus: string;
+  lessonCount: number;
+}
+
+export interface SkillMapNode {
+  contentCode: string;
+  name: string;
+  /** DOMAIN, UNIT, TOPIC, SUBTOPIC or SEGMENT. */
+  levelType: string;
+  subjectName: string;
+  status: string;
+  skills: SkillMapSkill[];
+}
+
+export interface SkillMapOrphanSkill {
+  skillCode: string;
+  name: string;
+  subjectName: string;
+  status: string;
+  /** Lessons written against a skill no topic carries. They can be taught, but nothing will find them a page in a book. */
+  lessonCount: number;
+}
+
+export interface SkillMap {
+  nodes: SkillMapNode[];
+  unmappedSkills: SkillMapOrphanSkill[];
 }
 
 export interface AdminMaterial {
@@ -218,6 +285,12 @@ export interface ScheduleDayInput {
      * @nullable
      */
   lessonId: number | null;
+  /**
+     * What the teacher wants the class to know about this day - which pages to read, which exercises to do, what to watch out for. The student sees it. Leave the field out to keep whatever note is already there; send null or an empty string to remove it. Clearing the day removes the note with it.
+     * @maxLength 2000
+     * @nullable
+     */
+  note?: string | null;
 }
 
 export interface QuizOption {
@@ -231,11 +304,56 @@ export interface QuizQuestion {
   options: QuizOption[];
 }
 
+export interface Term {
+  schoolYear: string;
+  termNumber: number;
+  name: string;
+  startsOn: string;
+  endsOn: string;
+}
+
+export interface StudentPlan {
+  date: string;
+  /** Empty string when the day has no plan; there is no separate null. */
+  body: string;
+}
+
+export interface StudentPlanInput {
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  date: string;
+  /**
+     * Blank or whitespace removes the day's plan.
+     * @maxLength 2000
+     */
+  body: string;
+}
+
+/**
+ * Which sort of assessment this is - the check at the end of a lesson, a unit test, a monthly one, a diagnostic. Recorded against the lesson that carries the questions; it is not yet an assessment of its own, with an owner and a window.
+ */
+export type QuizPaperKind = typeof QuizPaperKind[keyof typeof QuizPaperKind];
+
+
+export const QuizPaperKind = {
+  LESSON: 'LESSON',
+  UNIT: 'UNIT',
+  MONTHLY: 'MONTHLY',
+  DIAGNOSTIC: 'DIAGNOSTIC',
+} as const;
+
 export interface QuizPaper {
   lessonId: number;
   lessonCode: string;
   skillName: string;
   questions: QuizQuestion[];
+  /** Which sort of assessment this is - the check at the end of a lesson, a unit test, a monthly one, a diagnostic. Recorded against the lesson that carries the questions; it is not yet an assessment of its own, with an owner and a window. */
+  kind: QuizPaperKind;
+  /** Whether this student has already sat this quiz today. A quiz may be taken once a day, so the paper says so up front rather than letting a child answer everything again and be refused at the end. */
+  takenToday: boolean;
+  /** @nullable */
+  previousScore: number | null;
+  /** @nullable */
+  previousMaxScore: number | null;
 }
 
 /**
@@ -878,6 +996,11 @@ export interface TeacherClassToday {
   gradeLevel: number;
   subjectName: string;
   /**
+     * Null for an administrator's card, which stands for the whole class rather than one subject. Carried so a link from this card can open the timetable or the results on the subject the card is about, instead of dropping the reader on whatever the page picks first.
+     * @nullable
+     */
+  subjectId: number | null;
+  /**
      * The proficiency ladder this subject uses, or null where it uses none.
      * @nullable
      */
@@ -1139,6 +1262,14 @@ export interface CatalogItem {
   sourceTitle: string | null;
 }
 
+export type GetStudentScheduleParams = {
+/**
+ * Calendar date in Ulaanbaatar, defaults to today
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+date?: string;
+};
+
 export type GetTeacherScheduleParams = {
 classId: number;
 /**
@@ -1207,5 +1338,13 @@ classId: number;
  * Narrow to one subject the teacher holds in this class. Omitted means every subject they hold there, which for a class teacher or a primary-grade teacher is every subject the class runs.
  */
 subjectId?: number;
+};
+
+export type GetStudentPlanParams = {
+/**
+ * Defaults to today in Ulaanbaatar.
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+date?: string;
 };
 

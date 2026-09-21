@@ -1,6 +1,6 @@
 import path from "node:path";
 import { stat } from "node:fs/promises";
-import { badRequest, forbidden } from "../../shared/http-error";
+import { badRequest, conflict, forbidden } from "../../shared/http-error";
 import type { AuthenticatedUser } from "../identity/service";
 import * as repository from "./repository";
 import { recordSkillEvidence, recordTeacherMastery } from "./mastery";
@@ -40,6 +40,7 @@ function toLessonView(row: repository.LessonRow) {
     guidedPractice: row.guidedPractice,
     independentPractice: row.independentPractice,
     studentMessage: row.studentMessage,
+    teacherNote: row.teacherNote,
     estimatedMinutes: row.estimatedMinutes,
     book:
       row.materialId === null
@@ -56,14 +57,13 @@ function toLessonView(row: repository.LessonRow) {
   };
 }
 
-export async function studentToday(user: AuthenticatedUser) {
+export async function studentToday(user: AuthenticatedUser, date = todayInUlaanbaatar()) {
   if (user.studentId === null) {
     throw forbidden(
       "Энэ бүртгэл сурагчийн бүртгэлтэй холбогдоогүй байна.",
       "NO_STUDENT_LINK",
     );
   }
-  const date = todayInUlaanbaatar();
   const [enrolment] = await repository.studentClass(user.studentId);
   const classRows = await repository.todayLesson(user.studentId, date);
   const assignments = await repository.assignmentForDay(user.studentId, date);
@@ -122,7 +122,7 @@ export async function studentToday(user: AuthenticatedUser) {
       ? "Хичээлээ дэвтэртээ гүйцэтгээд шалгах асуултад хариулна."
       : !enrolment
         ? "Та ангид бүртгэгдээгүй байна. Багштайгаа холбогдоно уу."
-        : "Өнөөдөр хуваарьт хичээл алга.",
+        : "Энэ өдөр хуваарьт хичээл алга.",
   };
 }
 
@@ -626,6 +626,16 @@ export async function generateSchedule(
   };
 }
 
+/**
+ * How long a day's note may be.
+ *
+ * Long enough for "read pages 41-44 and do exercises 3, 5 and 7, watch the
+ * signs on the negatives", which is what this field is for, and short enough
+ * that nobody pastes a lesson plan into a line the whole class reads on a
+ * phone.
+ */
+const MAX_NOTE_LENGTH = 2000;
+
 export async function setScheduleDay(
   user: AuthenticatedUser,
   input: {
@@ -633,10 +643,30 @@ export async function setScheduleDay(
     scheduledOn: string;
     lessonId: number | null;
     subjectId?: number | null;
+    note?: string | null;
   },
 ) {
   const klass = await authorisedClass(user, input.classId);
   const subjectIds = await editableSubjects(user, klass.classId, input.subjectId ?? null);
+  const date = new Date(input.scheduledOn + "T00:00:00Z");
+  if (!isDate(input.scheduledOn) || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== input.scheduledOn) {
+    throw badRequest("Огноо буруу байна.", "INVALID_DATE");
+  }
+  if ((date.getUTCDay() === 0 || date.getUTCDay() === 6) && !user.roles.includes("ADMIN")) {
+    throw forbidden("Амралтын өдрийн нөхөх хичээлийг зөвхөн админ өөрчилнө.", "ADMIN_REQUIRED_FOR_WEEKEND");
+  }
+
+  // Whitespace and an empty box both mean "no note"; the column is text with
+  // no limit of its own, so the cap is set here rather than left to the day a
+  // pasted document arrives.
+  const trimmed = typeof input.note === "string" ? input.note.trim() : null;
+  if (trimmed !== null && trimmed.length > MAX_NOTE_LENGTH) {
+    throw badRequest(
+      `Тайлбар ${MAX_NOTE_LENGTH} тэмдэгтээс урт байна.`,
+      "NOTE_TOO_LONG",
+    );
+  }
+  const note = trimmed === "" ? null : trimmed;
 
   if (input.lessonId === null) {
     await repository.clearScheduleDay(klass.classId, input.scheduledOn, subjectIds);
@@ -667,6 +697,8 @@ export async function setScheduleDay(
     dailyLessonId: input.lessonId,
     scheduledOn: input.scheduledOn,
     createdBy: user.id,
+    note,
+    replaceNote: input.note !== undefined,
   });
 }
 
@@ -699,6 +731,7 @@ export async function teacherDashboard(user: AuthenticatedUser) {
         className: klass.className,
         gradeLevel: klass.gradeLevel,
         subjectName: klass.subjectName,
+        subjectId: klass.subjectId,
         levelFramework: framework?.framework ?? null,
         lessonCode: lesson?.lessonCode ?? null,
         skillName: lesson?.skillName ?? null,
@@ -741,6 +774,59 @@ function groupQuestions(rows: repository.QuizItemRow[]): QuizQuestion[] {
   return [...byItem.values()];
 }
 
+/**
+ * The child's own plan for a day, and the writing of it.
+ *
+ * Free text on purpose: it is not school work, carries no skill and is not
+ * scored. The only rules are the ones the column itself needs - a real date,
+ * and no more text than it holds.
+ */
+const MAX_PLAN_LENGTH = 2000;
+
+const planDate = (raw: unknown) => {
+  if (raw === undefined || raw === null || raw === "") return todayInUlaanbaatar();
+  if (!isDate(raw)) throw badRequest("Огноо буруу байна.", "INVALID_DATE");
+  const date = new Date(`${raw}T00:00:00Z`);
+  if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== raw) {
+    throw badRequest("Огноо буруу байна.", "INVALID_DATE");
+  }
+  return raw;
+};
+
+/** The term today falls in, or null between terms. */
+export async function currentTerm() {
+  const [term] = await repository.termOn(todayInUlaanbaatar());
+  return term ?? null;
+}
+
+export async function studentPlan(user: AuthenticatedUser, rawDate?: unknown) {
+  if (user.studentId === null) {
+    throw forbidden("Сурагчийн бүртгэлгүй байна.", "NO_STUDENT_LINK");
+  }
+  const date = planDate(rawDate);
+  const [row] = await repository.dayPlan(user.studentId, date);
+  return { date, body: row?.body ?? "" };
+}
+
+export async function saveStudentPlan(
+  user: AuthenticatedUser,
+  input: { date: string; body: string },
+) {
+  if (user.studentId === null) {
+    throw forbidden("Сурагчийн бүртгэлгүй байна.", "NO_STUDENT_LINK");
+  }
+  const date = planDate(input.date);
+  const trimmed = input.body.trim();
+  if (trimmed.length > MAX_PLAN_LENGTH) {
+    throw badRequest(
+      `Төлөвлөгөө ${MAX_PLAN_LENGTH} тэмдэгтээс урт байна.`,
+      "PLAN_TOO_LONG",
+    );
+  }
+  await repository.saveDayPlan(user.studentId, date, trimmed === "" ? null : trimmed);
+  return { date, body: trimmed };
+}
+
 export async function quizPaper(user: AuthenticatedUser, lessonId: number) {
   if (user.studentId === null) {
     throw forbidden("Сурагчийн бүртгэлгүй байна.", "NO_STUDENT_LINK");
@@ -751,11 +837,20 @@ export async function quizPaper(user: AuthenticatedUser, lessonId: number) {
 
   const [header] = await repository.lessonHeader(lessonId);
   const rows = await repository.quizItemsForLesson(lessonId);
+  const [taken] = await repository.attemptOnDate(
+    user.studentId,
+    lessonId,
+    todayInUlaanbaatar(),
+  );
   return {
     lessonId,
     lessonCode: header?.lessonCode ?? "",
     skillName: header?.skillName ?? "",
     questions: groupQuestions(rows),
+    kind: header?.assessmentKind ?? "LESSON",
+    takenToday: Boolean(taken),
+    previousScore: taken?.score ?? null,
+    previousMaxScore: taken?.maxScore ?? null,
   };
 }
 
@@ -775,6 +870,21 @@ export async function recordQuizAttemptScored(
   }
   if (!(await repository.lessonReachableByStudent(input.lessonId, user.studentId))) {
     throw forbidden("Энэ хичээл танд оногдоогүй байна.", "LESSON_NOT_ASSIGNED");
+  }
+
+  // One sitting a day (FR-C5). Checked before anything is marked, so a second
+  // set of answers is refused rather than scored and thrown away - and refused
+  // with a status the client can tell apart from a malformed request.
+  const [already] = await repository.attemptOnDate(
+    user.studentId,
+    input.lessonId,
+    todayInUlaanbaatar(),
+  );
+  if (already) {
+    throw conflict(
+      "Энэ сорилыг өнөөдөр аль хэдийн өгсөн байна.",
+      "QUIZ_ALREADY_TAKEN",
+    );
   }
 
   const rows = await repository.quizItemsForLesson(input.lessonId);

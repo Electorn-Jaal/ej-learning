@@ -231,3 +231,107 @@ export async function insertSourceVersion(row: {
       WHERE id = ${row.materialId}`);
   }
 }
+
+/**
+ * Every topic with the skills mapped to it, and every skill mapped to none.
+ *
+ * A LEFT JOIN rather than an inner one, because a topic carrying no skill at
+ * all is the fault worth seeing most: lessons under it can be timetabled and
+ * nothing they do will ever be measured. The map's own status comes back
+ * beside the skill's, since they are separate gates and a link left at DRAFT
+ * is invisible to students however approved the skill it names.
+ */
+export const skillMapRows = () =>
+  readRows<{
+    nodeId: number;
+    contentCode: string;
+    nodeName: string;
+    levelType: string;
+    nodeStatus: string;
+    subjectName: string;
+    skillCode: string | null;
+    skillName: string | null;
+    skillStatus: string | null;
+    isPrimary: boolean | null;
+    mapStatus: string | null;
+    lessonCount: number | null;
+  }>(
+    `SELECT cn.id::int AS "nodeId", cn.content_code AS "contentCode",
+       cn.name_mn AS "nodeName", cn.level_type::text AS "levelType",
+       cn.status::text AS "nodeStatus", sub.name_mn AS "subjectName",
+       s.skill_code AS "skillCode", s.name_mn AS "skillName",
+       s.status::text AS "skillStatus", m.is_primary AS "isPrimary",
+       m.status::text AS "mapStatus",
+       (SELECT count(*)::int FROM learning.daily_lessons dl
+        WHERE dl.core_skill_id = s.id) AS "lessonCount"
+     FROM content.content_nodes cn
+     JOIN core.subjects sub ON sub.id = cn.subject_id
+     LEFT JOIN content.content_skill_maps m ON m.content_node_id = cn.id
+     LEFT JOIN content.skills s ON s.id = m.skill_id
+     ORDER BY sub.code, cn.sequence_no, cn.content_code,
+       m.is_primary DESC NULLS LAST, s.skill_code`,
+  );
+
+/**
+ * Skills no topic carries. A lesson can still be written against one, which is
+ * why the lesson count matters: those lessons teach, but the walk from skill
+ * to book pages runs through this mapping and will find nothing.
+ */
+export const unmappedSkills = () =>
+  readRows<{
+    skillCode: string;
+    name: string;
+    subjectName: string;
+    status: string;
+    lessonCount: number;
+  }>(
+    `SELECT s.skill_code AS "skillCode", s.name_mn AS name,
+       sub.name_mn AS "subjectName", s.status::text AS status,
+       (SELECT count(*)::int FROM learning.daily_lessons dl
+        WHERE dl.core_skill_id = s.id) AS "lessonCount"
+     FROM content.skills s
+     JOIN core.subjects sub ON sub.id = s.subject_id
+     WHERE NOT EXISTS (
+       SELECT 1 FROM content.content_skill_maps m WHERE m.skill_id = s.id)
+     ORDER BY sub.code, s.skill_code`,
+  );
+
+/**
+ * The prerequisite chain, with the facts that decide whether each link does
+ * anything.
+ *
+ * `followed` is the one that matters: remediation walks a link only when it is
+ * both APPROVED and REQUIRED, so a link that is neither sits in the table
+ * looking like a decision while changing nothing. The dead-end check mirrors
+ * the walk's own condition on the lesson it would send a child to.
+ */
+export const skillChainLinks = () =>
+  readRows<{
+    dependencyCode: string;
+    skillCode: string;
+    skillName: string;
+    prerequisiteCode: string;
+    prerequisiteName: string;
+    subjectName: string;
+    relationType: string;
+    importance: string;
+    status: string;
+    reason: string;
+    prerequisiteHasLesson: boolean;
+  }>(
+    `SELECT d.dependency_code AS "dependencyCode",
+       s.skill_code AS "skillCode", s.name_mn AS "skillName",
+       p.skill_code AS "prerequisiteCode", p.name_mn AS "prerequisiteName",
+       sub.name_mn AS "subjectName", d.relation_type::text AS "relationType",
+       d.importance::text AS importance, d.status::text AS status,
+       d.reason_mn AS reason,
+       EXISTS (SELECT 1 FROM learning.daily_lessons dl
+               WHERE dl.core_skill_id = p.id
+                 AND dl.status = 'APPROVED' AND dl.web_ready)
+         AS "prerequisiteHasLesson"
+     FROM content.skill_dependencies d
+     JOIN content.skills s ON s.id = d.skill_id
+     JOIN content.skills p ON p.id = d.prerequisite_skill_id
+     JOIN core.subjects sub ON sub.id = s.subject_id
+     ORDER BY sub.code, s.skill_code, p.skill_code`,
+  );

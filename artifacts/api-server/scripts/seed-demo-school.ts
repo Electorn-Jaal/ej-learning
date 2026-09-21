@@ -372,6 +372,12 @@ try {
   const itemIds = new Map<string, { id: number; correctOptionId: number; prompt: string }[]>();
 
   for (const [index, skill] of SKILLS.entries()) {
+    // Most checks are the one at the end of a lesson. A couple of the demo
+    // skills carry a unit test and a monthly one instead, so the screens have
+    // something to tell apart - a school runs more than one kind of
+    // assessment, and a demo where everything is the same kind shows nothing.
+    const assessmentKind =
+      index === 2 ? "UNIT" : index === 5 ? "MONTHLY" : index === 7 ? "DIAGNOSTIC" : "LESSON";
     const printedFrom = 1 + index * PAGES_PER_SKILL;
     const printedTo = printedFrom + PAGES_PER_SKILL - 1;
 
@@ -414,13 +420,14 @@ try {
       INSERT INTO learning.daily_lessons
         (lesson_code, core_skill_id, lesson_type, learning_goal_mn, remember_mn,
          worked_example_mn, independent_practice_mn, estimated_minutes,
-         student_message_mn, print_ready, web_ready, source_material_id, status)
+         student_message_mn, print_ready, web_ready, source_material_id, status,
+         assessment_kind)
       VALUES (${skill.code + "-LESSON"}, ${skillRow.id}, 'CORE', ${skill.outcome},
         ${"Гол санаа: " + skill.name + ". Энэ бол зохиомол демо агуулга."},
         ${"Жишээ: " + skill.name + " дээрх нэг бодлогыг алхам алхмаар бодов."},
         ${"Номын " + printedFrom + "-" + printedTo + " хуудасны дасгалыг гүйцэтгэ."},
         25, ${"Өнөөдөр " + skill.name + " сэдвийг үзнэ."}, true, true,
-        ${material.id}, 'APPROVED')
+        ${material.id}, 'APPROVED', ${assessmentKind}::learning.assessment_kind)
       RETURNING id`);
     lessonIds.set(skill.code, lesson.id);
 

@@ -1,4 +1,9 @@
 import { useGetStudentProgress } from "@workspace/api-client-react"
+import {
+  SkillStandingChart,
+  StandingTable,
+  type StandingRow,
+} from "@/components/charts/SkillStandingChart"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 
@@ -74,6 +79,18 @@ export default function StudentProgress() {
   const measured = progress.skills.filter((s) => s.status !== "unassessed")
   const mastered = progress.skills.filter((s) => s.status === "mastered")
 
+  // One bar per subject. The sections below say which skills; this says how
+  // each subject is going, which is what a child and a parent actually ask -
+  // and it is the one place the subjects can be compared with each other.
+  const standing: StandingRow[] = subjects.map(([subject, skills]) => ({
+    key: subject,
+    label: subject,
+    mastered: skills.filter((s) => s.status === "mastered").length,
+    developing: skills.filter((s) => s.status === "developing").length,
+    needs_support: skills.filter((s) => s.status === "needs_support").length,
+    unassessed: skills.filter((s) => s.status === "unassessed").length,
+  }))
+
   return (
     <div className="space-y-8 pb-10">
       <header className="space-y-1">
@@ -84,6 +101,21 @@ export default function StudentProgress() {
             : `${measured.length} чадвар үнэлэгдсэн, ${mastered.length} нь эзэмшсэн.`}
         </p>
       </header>
+
+      {standing.length > 0 ? (
+        <section className="space-y-3 rounded-md border border-border bg-card p-4">
+          <h2 className="text-sm font-semibold">Хичээл тус бүрээр</h2>
+          <SkillStandingChart rows={standing} unit="чадвар" />
+          <details>
+            <summary className="cursor-pointer text-sm text-muted-foreground">
+              Хүснэгтээр харах
+            </summary>
+            <div className="mt-2">
+              <StandingTable rows={standing} head="Хичээл" />
+            </div>
+          </details>
+        </section>
+      ) : null}
 
       {subjects.map(([subject, skills]) => {
         const counts = STATUS_ORDER.map((status) => ({

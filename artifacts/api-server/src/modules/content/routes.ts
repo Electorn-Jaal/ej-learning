@@ -2,6 +2,8 @@ import express, { Router, type IRouter } from "express";
 import {
   GetAdminMaterialsResponse,
   GetMaterialOutlineResponse,
+  GetSkillChainResponse,
+  GetSkillMapResponse,
   SaveMaterialOutlineBody,
   SaveMaterialOutlineResponse,
   SetMaterialPageOffsetBody,
@@ -14,6 +16,8 @@ import {
   listMaterials,
   materialOutline,
   saveOutline,
+  skillChain,
+  skillMap,
   storeMaterialFile,
   updatePageOffset,
 } from "./service";
@@ -32,6 +36,22 @@ const materialId = (raw: unknown) => {
 router.get("/admin/materials", asAdmin, async (_req, res, next) => {
   try {
     res.json(GetAdminMaterialsResponse.parse(await listMaterials()));
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/admin/skill-chain", asAdmin, async (_req, res, next) => {
+  try {
+    res.json(GetSkillChainResponse.parse(await skillChain()));
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/admin/skill-map", asAdmin, async (_req, res, next) => {
+  try {
+    res.json(GetSkillMapResponse.parse(await skillMap()));
   } catch (error) {
     next(error);
   }
