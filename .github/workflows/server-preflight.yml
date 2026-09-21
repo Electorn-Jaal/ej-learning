@@ -60,4 +60,22 @@ jobs:
             docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}\t{{.CPUPerc}}'
             printf '\nListening TCP ports\n'
             ss -ltn
+            printf '\nEJ internal health\n'
+            curl --fail --silent --show-error http://127.0.0.1:18080/ej/api/healthz
+            printf '\nTMS gateway mounts\n'
+            docker inspect diploma-system-nginx-1 --format '{{json .Mounts}}'
+            printf '\nGateway networks\n'
+            docker inspect diploma-system-nginx-1 --format '{{json .NetworkSettings.Networks}}'
+            printf '\nEJ web networks\n'
+            docker inspect ej-learning-web-1 --format '{{json .NetworkSettings.Networks}}'
+            printf '\nTMS nginx routing configuration\n'
+            docker exec diploma-system-nginx-1 nginx -T 2>&1 | grep -E 'configuration file|server_name|listen |location |proxy_pass|include |resolver '
+            printf '\nProvisioning prerequisites\n'
+            command -v python3
+            command -v openssl
+            command -v crontab || true
+            test -w "$HOME/diplom/infra/nginx/nginx.conf" && echo 'TMS source config writable' || true
+            printf '\nHTTP root and EJ status\n'
+            curl --silent --output /dev/null --write-out 'root=%{http_code}\n' http://127.0.0.1/
+            curl --silent --output /dev/null --write-out 'ej=%{http_code}\n' http://127.0.0.1/ej/
             printf '\nRead-only inspection completed. No deploy, restart, migration or cleanup performed.\n'
