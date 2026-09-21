@@ -46,5 +46,6 @@ jobs:
         run: |
           curl --fail --silent --show-error https://116.206.83.75/ | grep -q login.xhtml
           curl --fail --silent --show-error https://116.206.83.75/login.xhtml > /dev/null
+          curl --fail --silent --show-error --head https://116.206.83.75/login.xhtml | grep -qi 'Content-Security-Policy: upgrade-insecure-requests'
           curl --fail --silent --show-error --retry 5 https://116.206.83.75/ej/api/healthz
           curl --fail --silent --show-error https://116.206.83.75/ej/ | grep -q /ej/assets/
