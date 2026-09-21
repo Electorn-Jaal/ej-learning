@@ -41,6 +41,13 @@
   --color-destructive: hsl(var(--destructive));
   --color-destructive-foreground: hsl(var(--destructive-foreground));
 
+  --color-sidebar: hsl(var(--sidebar));
+  --color-sidebar-header: hsl(var(--sidebar-header));
+  --color-sidebar-active: hsl(var(--sidebar-active));
+  --color-sidebar-line: hsl(var(--sidebar-line));
+  --color-brand-wash: hsl(var(--brand-wash));
+  --color-brand-wash-border: hsl(var(--brand-wash-border));
+
   --font-sans: var(--app-font-sans);
   --font-serif: var(--app-font-serif);
 
@@ -58,13 +65,14 @@
 
   --border: 36 14% 86%;
   --input: 36 14% 86%;
-  --ring: 212 44% 30%;
+  --ring: 210 90% 25%;
 
-  /* Deep ink blue, low saturation on purpose. The previous 89% cyan is what
-     made tinted-pill patterns (a 10% wash under text of the same hue) look
-     machine-made. At this saturation the colour can only be used as a solid
-     accent, which is the point. */
-  --primary: 212 44% 30%;
+  /* The navy off the school's badge - hsl(210, 96%, 24-30%) there, a quarter
+     of the mark - kept a shade softer than the print original. Still
+     solid-only: the 89% cyan this replaced was bright enough to invite
+     tinted-pill patterns, a 10% wash under text of the same hue, which is
+     what makes an interface look generated. */
+  --primary: 210 90% 25%;
   --primary-foreground: 40 30% 98%;
 
   --secondary: 38 20% 92%;
@@ -73,7 +81,7 @@
   --muted: 38 20% 93%;
   --muted-foreground: 215 12% 42%;
 
-  --accent: 212 44% 30%;
+  --accent: 210 90% 25%;
   --accent-foreground: 40 30% 98%;
 
   /* Muted forest, not signal green */
@@ -87,6 +95,47 @@
   /* Brick, not fire engine */
   --destructive: 4 52% 44%;
   --destructive-foreground: 40 30% 98%;
+
+  /* The navigation is furniture, not paper: the amber off the school's badge,
+     so the eye reads the column as a fixed edge rather than as more of the
+     same sheet. Its title block goes several steps stronger again. Only the
+     column is coloured - the page beside it stays the near-white it was.
+
+     The badge is 21% amber at hue 36 and 23% navy at hue 210, and the page
+     has always been hue 38, so the column, the paper and the logo are one
+     family. Amber is darker than a lemon of the same lightness, so the column
+     sits where the navigation's muted grey still reads 4.56:1 on it; two
+     steps deeper it falls to 4.41:1. The title block goes much further,
+     because the two lines on it are ink and seven tenths of ink. */
+  --sidebar: 38 95% 68%;
+  --sidebar-header: 38 95% 68%;
+
+  /* The column is one colour top to bottom - header, navigation and the school
+     year in the corner alike - and every word on it is ink rather than grey,
+     which on this amber reads 9.62:1.
+
+     Marking the row you are on costs something for that: the white it used to
+     wear would be a white block in the middle of a yellow column. A lighter
+     yellow is 1.36:1 against it, which is faint on its own, so the navy rule
+     down its left edge and the heavier weight are what carry the state. */
+  --sidebar-active: 42 100% 86%;
+
+  /* The rule under the title block, and the edge of anything amber sitting on
+     the near-white page. The border the rest of the page uses is 1.19:1 on the
+     column - invisible - and that line is what keeps the column's header on
+     the same baseline as the bar beside it. Against the paper it is 3.25:1, so
+     an amber button has a boundary and not just a soft edge. */
+  --sidebar-line: 32 45% 48%;
+
+  /* The login page's fields: a yellow pulled most of the way to grey, so they
+     read as the school's colour without competing with the button, which wears
+     the column's full amber. Ink on it is 13.24:1. */
+  --brand-wash: 38 30% 92%;
+
+  /* That fill is 1.08:1 against the paper behind it - a shape with no edge -
+     so the fields outline themselves at 3:1, the floor for a control's
+     boundary. */
+  --brand-wash-border: 36 20% 50%;
 
   /* Cards sit a shade lighter than the paper, so they lift without a shadow */
   --card: 40 40% 99%;
@@ -132,6 +181,15 @@
 
   --destructive: 4 48% 58%;
   --destructive-foreground: 215 30% 12%;
+
+  /* The same idea in the dark. Amber at this lightness is its olive end:
+     anything brighter puts the navigation's muted grey under the floor. */
+  --sidebar: 38 34% 23%;
+  --sidebar-header: 38 34% 23%;
+  --sidebar-active: 38 26% 33%;
+  --sidebar-line: 36 20% 36%;
+  --brand-wash: 38 12% 19%;
+  --brand-wash-border: 36 14% 46%;
 
   --card: 30 8% 14%;
   --card-foreground: 38 20% 92%;

@@ -171,10 +171,32 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen bg-background text-foreground font-sans">
-      <aside className="w-64 border-r border-border bg-card flex-col hidden md:flex">
-        <div className="flex h-14 shrink-0 items-center border-b border-border px-6">
-          <div className="block text-lg font-bold text-foreground cursor-default">
-            EJ Learning
+      <aside className="hidden w-64 flex-col border-r border-border bg-sidebar md:flex">
+        <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-sidebar-line bg-sidebar-header px-5">
+          {/*
+            * The school's own badge. It is a circular seal with its name
+            * around the ring, so at this size the ring reads and the words do
+            * not - the name beside it is what carries them.
+            */}
+          <img
+            src={import.meta.env.BASE_URL + 'logo.png'}
+            alt=""
+            width={32}
+            height={32}
+            className="h-8 w-8 shrink-0"
+          />
+          <div className="min-w-0">
+            <div className="truncate text-sm font-bold leading-tight text-foreground">
+              Электрон Жаал
+            </div>
+            {/*
+              * Not muted-foreground: that grey is pitched for the page, and on
+              * the title block's tan it falls to 3.96:1 - under the floor, at
+              * 11px. Seven tenths of the ink clears 4.5:1 in both themes.
+              */}
+            <div className="truncate text-[11px] leading-tight text-foreground/70">
+              Сургуулийн нэгдсэн систем
+            </div>
           </div>
         </div>
         <nav className="flex-1 space-y-0.5 py-4 pr-4">
@@ -189,9 +211,13 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   // by a wash of the accent colour under text of that same
                   // colour - that pairing is what makes a page look generated.
                   "flex items-center gap-3 border-l-2 py-2 pl-3 pr-2 text-sm transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  // A lighter yellow, not white: the column is meant to be one
+                  // colour, and a white row would be a hole in it. That fill is
+                  // only 1.36:1 on its own, so the navy rule and the weight are
+                  // what actually say "you are here".
                   isActive(item.href)
-                    ? "border-primary bg-secondary font-semibold text-foreground"
-                    : "border-transparent font-medium text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
+                    ? "border-primary bg-sidebar-active font-semibold text-foreground"
+                    : "border-transparent font-medium text-foreground hover:bg-sidebar-active/60",
                 )}
               >
                 <Icon className="h-4 w-4" />
@@ -205,18 +231,27 @@ export function Shell({ children }: { children: React.ReactNode }) {
             every recorded term - inventing a year from the month would be a
             guess, and the school sets its own dates. */}
         {term ? (
-          <div className="border-t border-border bg-card p-4">
+          <div className="border-t border-sidebar-line bg-sidebar p-4">
             <div className="text-sm font-semibold text-foreground">
               {term.schoolYear} хичээлийн жил
             </div>
-            <div className="text-xs text-muted-foreground">{term.name}</div>
+            <div className="text-xs text-foreground/80">{term.name}</div>
           </div>
         ) : null}
       </aside>
 
       <main className="flex-1 flex flex-col h-screen overflow-hidden bg-background">
         <div className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-card px-4">
-          <div className="text-lg font-bold text-foreground md:hidden">EJ Learning</div>
+          <div className="flex items-center gap-2 md:hidden">
+            <img
+              src={import.meta.env.BASE_URL + 'logo.png'}
+              alt=""
+              width={28}
+              height={28}
+              className="h-7 w-7 shrink-0"
+            />
+            <span className="text-base font-bold text-foreground">Электрон Жаал</span>
+          </div>
           <div className="hidden text-sm text-muted-foreground md:block">
             {term ? `${term.schoolYear} · ${term.name}` : ""}
           </div>
