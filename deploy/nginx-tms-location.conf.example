@@ -1,0 +1,15 @@
+# Add INSIDE the existing TMS server {} after inspecting the live config.
+# EJ web must be connected to the gateway's network with alias ej-learning-web.
+# Preserve all current TMS locations. Test nginx -t before a graceful reload.
+# Keep this addition in the TMS source config too, or its next deploy may remove it.
+location = /ej {
+    return 308 /ej/;
+}
+location ^~ /ej/ {
+    resolver 127.0.0.11 valid=10s ipv6=off;
+    set $ej_upstream http://ej-learning-web:80;
+    proxy_pass $ej_upstream;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}

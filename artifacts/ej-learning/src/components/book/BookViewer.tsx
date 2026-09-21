@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { appPath } from '@/lib/app-path'
 
 type Book = {
   materialId: number
@@ -30,7 +31,7 @@ export function BookViewer({ book }: { book: Book }) {
 
   // The printed number is what the student is told; the file page is where the
   // viewer has to open, and on a scanned book they differ.
-  const src = `${book.fileUrl}#page=${book.filePage ?? book.pageFrom ?? 1}&view=FitH`
+  const src = `${appPath(book.fileUrl)}#page=${book.filePage ?? book.pageFrom ?? 1}&view=FitH`
   const pages =
     book.pageFrom === null
       ? null

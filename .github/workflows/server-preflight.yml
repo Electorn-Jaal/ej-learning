@@ -1,0 +1,63 @@
+name: Server preflight (read only)
+
+on:
+  push:
+    branches: [chore/ej-deploy-preflight]
+    paths: [.github/workflows/server-preflight.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ej-server-preflight
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check required configuration
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_SSH_PASSWORD: ${{ secrets.SERVER_SSH_PASSWORD }}
+        run: |
+          set -eu
+          test -n "$SERVER_HOST" || { echo 'Missing SERVER_HOST'; exit 1; }
+          test -n "$SERVER_USER" || { echo 'Missing SERVER_USER'; exit 1; }
+          test -n "$SERVER_SSH_PASSWORD" || { echo 'Missing SERVER_SSH_PASSWORD'; exit 1; }
+          case "$SERVER_HOST" in *://*|*/*) echo 'SERVER_HOST must be a hostname or IP, without http:// or /'; exit 1;; esac
+      - name: Inspect host without changing services
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_SSH_PASSWORD }}
+          port: ${{ vars.SERVER_PORT || '22' }}
+          fingerprint: ${{ secrets.SERVER_FINGERPRINT }}
+          timeout: 30s
+          command_timeout: 2m
+          script: |
+            set -eu
+            printf '\nHost architecture\n'
+            uname -sm
+            printf '\nOperating system\n'
+            if [ -r /etc/os-release ]; then grep '^PRETTY_NAME=' /etc/os-release; fi
+            printf '\nAvailable memory\n'
+            free -m
+            printf '\nDisk capacity\n'
+            df -h / /var/lib/docker 2>/dev/null || df -h /
+            printf '\nDocker versions\n'
+            docker version --format '{{.Server.Version}}'
+            docker compose version
+            printf '\nExisting Compose projects\n'
+            docker compose ls
+            printf '\nContainer ports and status\n'
+            docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}\t{{.Status}}'
+            printf '\nContainer memory usage\n'
+            docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}\t{{.CPUPerc}}'
+            printf '\nListening TCP ports\n'
+            ss -ltn
+            printf '\nRead-only inspection completed. No deploy, restart, migration or cleanup performed.\n'
