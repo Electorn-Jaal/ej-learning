@@ -285,11 +285,13 @@ export const attemptsForClass = (
     score: number;
     maxScore: number;
     submittedAt: string;
+    kind: string;
     answers: QuizAnswer[];
   }>(
     `SELECT qa.id::int AS id, st.id::int AS "studentId", st.display_name AS "studentName",
        st.student_code AS "studentCode", qa.lesson_code AS "lessonCode",
-       sk.name_mn AS "skillName", qa.score::int AS score,
+       sk.name_mn AS "skillName", dl.assessment_kind::text AS kind,
+       qa.score::int AS score,
        qa.max_score::int AS "maxScore",
        -- node-postgres hands back a JS Date for timestamptz, which the string
        -- contract rejects. to_json gives ISO 8601; ::text gives a space in

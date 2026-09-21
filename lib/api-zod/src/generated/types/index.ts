@@ -113,6 +113,7 @@ export * from './teacherClass';
 export * from './teacherClassToday';
 export * from './teacherDashboard';
 export * from './teacherQuizAttemptRow';
+export * from './teacherQuizAttemptRowKind';
 export * from './teacherQuizAttempts';
 export * from './teacherSchedule';
 export * from './teacherScheduleStage';

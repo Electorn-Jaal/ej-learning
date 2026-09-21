@@ -806,6 +806,7 @@ export const GetTeacherQuizAttemptsResponse = zod.object({
   "studentCode": zod.string(),
   "lessonCode": zod.string(),
   "skillName": zod.string(),
+  "kind": zod.enum(['LESSON', 'UNIT', 'MONTHLY', 'DIAGNOSTIC']).describe('Which sort of assessment this sitting was - the check at the end of a lesson, a unit test, a monthly one, a diagnostic. A teacher reading a month of results needs the monthly test told apart from the daily checks.\n'),
   "score": zod.number().int(),
   "maxScore": zod.number().int(),
   "submittedAt": zod.string(),
