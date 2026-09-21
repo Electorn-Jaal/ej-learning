@@ -1,0 +1,12 @@
+# Optional overlay, only after identifying the TMS gateway network.
+# Only EJ web joins it; PostgreSQL and API stay on EJ's own network.
+services:
+  web:
+    networks:
+      default:
+      gateway:
+        aliases: [ej-learning-web]
+networks:
+  gateway:
+    external: true
+    name: ${EJ_GATEWAY_NETWORK:?Set inspected TMS gateway network}

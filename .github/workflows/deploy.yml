@@ -1,0 +1,115 @@
+name: EJ container check and manual deploy
+
+on:
+  push:
+    branches: [chore/ej-subpath-deploy]
+  pull_request:
+    paths:
+      - deploy/**
+      - .dockerignore
+      - .github/workflows/deploy.yml
+      - artifacts/ej-learning/src/main.tsx
+      - artifacts/ej-learning/src/lib/app-path.ts
+      - artifacts/ej-learning/src/components/book/BookViewer.tsx
+  workflow_dispatch:
+    inputs:
+      initialize_empty_database:
+        description: 'First deployment only: initialize a NEW empty database (no demo accounts)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ej-deploy-${{ github.event_name == 'workflow_dispatch' && 'server' || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Build the complete release
+        run: |
+          set -eu
+          for target in tools api web; do
+            docker build -f deploy/Dockerfile --target "$target" -t "ej-learning-$target:ej-check" .
+          done
+      - name: Verify schema and /ej routing with a disposable database
+        run: node deploy/smoke.mjs
+      - name: Save tested images
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+        run: docker save ej-learning-api:ej-check ej-learning-web:ej-check ej-learning-tools:ej-check | gzip > images.tar.gz
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+        with:
+          name: tested-images
+          path: images.tar.gz
+          retention-days: 1
+
+  deploy:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: tested-images
+      - name: Publish exactly the tested images
+        id: image
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eu
+          prefix="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          gzip -dc images.tar.gz | docker load
+          for target in api web tools; do
+            docker tag "ej-learning-$target:ej-check" "$prefix-$target:$GITHUB_SHA"
+            docker push "$prefix-$target:$GITHUB_SHA"
+          done
+      - name: Copy release configuration
+        uses: appleboy/scp-action@917f8b81dfc1ccd331fef9e2d61bdc6c8be94634 # v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_SSH_PASSWORD }}
+          port: ${{ vars.SERVER_PORT || '22' }}
+          fingerprint: ${{ secrets.SERVER_FINGERPRINT }}
+          source: deploy/compose.yml,deploy/compose.gateway.yml,deploy/release.sh
+          target: ej-learning/releases/${{ github.sha }}
+      - name: Start the isolated EJ release
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+          EJ_RELEASE_SHA: ${{ github.sha }}
+          EJ_IMAGE_PREFIX: ${{ steps.image.outputs.prefix }}
+          EJ_INITIALIZE_EMPTY: ${{ inputs.initialize_empty_database }}
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_SSH_PASSWORD }}
+          port: ${{ vars.SERVER_PORT || '22' }}
+          fingerprint: ${{ secrets.SERVER_FINGERPRINT }}
+          envs: GHCR_TOKEN,GHCR_USER,EJ_RELEASE_SHA,EJ_IMAGE_PREFIX,EJ_INITIALIZE_EMPTY
+          command_timeout: 15m
+          script: |
+            set -eu
+            DOCKER_CONFIG=$(mktemp -d)
+            export DOCKER_CONFIG
+            trap 'rm -rf -- "$DOCKER_CONFIG"' EXIT
+            printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            unset GHCR_TOKEN
+            bash "$HOME/ej-learning/releases/$EJ_RELEASE_SHA/deploy/release.sh" "$EJ_RELEASE_SHA"
