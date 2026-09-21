@@ -51,25 +51,45 @@ export default function Login() {
      * the image's own background is #ffffff, and any other colour would show
      * as a rectangle around it.
      *
-     * On a phone there is no room for two columns, so the artwork becomes a
-     * shorter band above the form rather than being dropped.
+     * On a phone the artwork is dropped rather than shrunk. At that width it
+     * had to be small enough that its lettering stopped reading, and it still
+     * pushed the form down the screen; the school's badge alone says the same
+     * thing in a fraction of the room.
      */
-    <div className="flex min-h-screen flex-col md:flex-row-reverse">
-      <div className="flex shrink-0 items-center justify-center bg-white px-6 py-8 md:w-1/2 md:py-12">
+    <div className="flex min-h-dvh flex-col justify-center bg-white pb-24 md:flex-row-reverse md:justify-normal md:pb-0">
+      <div className="hidden shrink-0 items-center justify-center bg-white px-6 md:flex md:w-1/2 md:py-12">
         <img
           src={import.meta.env.BASE_URL + 'login-art.png'}
           alt="Электрон Жаал бүрэн дунд сургууль"
           width={405}
           height={533}
-          className="h-48 w-auto max-w-full md:h-auto md:w-full md:max-w-[405px]"
+          className="h-32 w-auto max-w-full md:h-auto md:w-full md:max-w-[405px]"
         />
       </div>
 
-      <div className="flex flex-1 items-center justify-center bg-white p-4">
+      <div className="flex items-start justify-center bg-white p-4 md:flex-1 md:items-center md:pt-4">
         <div className="w-full max-w-md">
-          <div className="space-y-1.5 pb-9">
-            <h1 className="text-3xl font-semibold tracking-tight">Нэвтрэх</h1>
-            <p className="text-base text-muted-foreground">Сургуулийн нэгдсэн систем</p>
+          <img
+            src={import.meta.env.BASE_URL + 'logo.png'}
+            alt="Электрон Жаал"
+            width={104}
+            height={104}
+            className="mx-auto mb-20 h-[104px] w-[104px] md:hidden"
+          />
+
+          {/*
+            * On a phone the badge does this job on its own, so neither line is
+            * drawn. The heading is hidden rather than removed: a page still
+            * needs one for anything reading it aloud, and "Нэвтрэх" is the
+            * only thing here that says what the page is.
+            */}
+          <div className="md:space-y-1.5 md:pb-9 md:text-left">
+            <h1 className="sr-only font-semibold tracking-tight md:not-sr-only md:text-3xl">
+              Нэвтрэх
+            </h1>
+            <p className="hidden text-muted-foreground md:block md:text-base">
+              Сургуулийн нэгдсэн систем
+            </p>
           </div>
 
           {/*
@@ -83,20 +103,20 @@ export default function Login() {
             * it focuses carries type under 16px, and a child signing in on a
             * phone should not have to pinch the page back out.
             */}
-          <form onSubmit={submit} className="space-y-8">
-            <div className="space-y-3">
-              <Label htmlFor="username" className="text-base font-semibold">
+          <form onSubmit={submit} className="space-y-5 md:space-y-8">
+            <div className="space-y-2 md:space-y-3">
+              <Label htmlFor="username" className="text-[13px] font-semibold md:text-base">
                 Нэвтрэх нэр
               </Label>
               <div className="relative">
                 <User
                   aria-hidden="true"
-                  className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
+                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground md:left-4 md:h-5 md:w-5"
                 />
                 <Input
                   id="username"
                   name="username"
-                  className="h-14 border-brand-wash-border bg-brand-wash pl-12"
+                  className="h-11 border-brand-wash-border bg-brand-wash pl-10 md:h-14 md:pl-12"
                   autoComplete="username"
                   required
                   autoFocus
@@ -105,19 +125,19 @@ export default function Login() {
                 />
               </div>
             </div>
-            <div className="space-y-3">
-              <Label htmlFor="password" className="text-base font-semibold">
+            <div className="space-y-2 md:space-y-3">
+              <Label htmlFor="password" className="text-[13px] font-semibold md:text-base">
                 Нууц үг
               </Label>
               <div className="relative">
                 <Lock
                   aria-hidden="true"
-                  className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground"
+                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground md:left-4 md:h-5 md:w-5"
                 />
                 <Input
                   id="password"
                   name="password"
-                  className="h-14 border-brand-wash-border bg-brand-wash pl-12 pr-14"
+                  className="h-11 border-brand-wash-border bg-brand-wash pl-10 pr-11 md:h-14 md:pl-12 md:pr-14"
                   type={revealed ? 'text' : 'password'}
                   autoComplete="current-password"
                   required
@@ -133,12 +153,12 @@ export default function Login() {
                   onClick={() => setRevealed((shown) => !shown)}
                   aria-label={revealed ? 'Нууц үгийг нуух' : 'Нууц үгийг харах'}
                   aria-pressed={revealed}
-                  className="absolute right-2 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  className="absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring md:right-2 md:h-10 md:w-10"
                 >
                   {revealed ? (
-                    <EyeOff aria-hidden="true" className="h-5 w-5" />
+                    <EyeOff aria-hidden="true" className="h-4 w-4 md:h-5 md:w-5" />
                   ) : (
-                    <Eye aria-hidden="true" className="h-5 w-5" />
+                    <Eye aria-hidden="true" className="h-4 w-4 md:h-5 md:w-5" />
                   )}
                 </button>
               </div>
@@ -147,7 +167,7 @@ export default function Login() {
             {error ? (
               <p
                 role="alert"
-                className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-2.5 text-base text-destructive"
+                className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive md:px-4 md:py-2.5 md:text-base"
               >
                 {error}
               </p>
@@ -164,7 +184,7 @@ export default function Login() {
               */}
             <Button
               type="submit"
-              className="h-14 w-full bg-sidebar text-lg text-foreground hover:bg-sidebar/85"
+              className="h-11 w-full bg-sidebar text-sm text-foreground hover:bg-sidebar/85 md:h-14 md:text-lg"
               disabled={isPending}
             >
               {isPending ? 'Нэвтэрч байна…' : 'Нэвтрэх'}
