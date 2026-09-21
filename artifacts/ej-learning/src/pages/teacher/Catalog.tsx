@@ -94,7 +94,7 @@ export default function Catalog() {
 
       <div className="flex flex-wrap items-end gap-3">
         <Select value={subject} onValueChange={setSubject}>
-          <SelectTrigger className="w-44" aria-label="Хичээл">
+          <SelectTrigger className="w-full sm:w-44" aria-label="Хичээл">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -107,7 +107,7 @@ export default function Catalog() {
           </SelectContent>
         </Select>
 
-        <div className="relative min-w-56 flex-1">
+        <div className="relative w-full flex-1 sm:min-w-56">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="pl-9"
@@ -119,7 +119,7 @@ export default function Catalog() {
         </div>
 
         <Select value={kind} onValueChange={setKind}>
-          <SelectTrigger className="w-40" aria-label="Төрөл">
+          <SelectTrigger className="w-full sm:w-40" aria-label="Төрөл">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -134,7 +134,7 @@ export default function Catalog() {
 
         {levels.length > 1 ? (
           <Select value={level} onValueChange={setLevel}>
-            <SelectTrigger className="w-36" aria-label="Түвшин">
+            <SelectTrigger className="w-full sm:w-36" aria-label="Түвшин">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -161,17 +161,24 @@ export default function Catalog() {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-8">
+        <div className="space-y-3">
           {sections.map(([name, entries]) => (
-            <section key={name} className="space-y-3">
-              <h2 className="flex items-baseline gap-2 border-b border-border pb-2">
-                <span className="text-lg font-bold">{name}</span>
+            <details
+              key={name}
+              // A search or a filter has already narrowed things down, so what
+              // is left is worth showing; otherwise the subject stays shut.
+              open={sections.length === 1 || needle !== "" || kind !== "all" || level !== "all"}
+              className="overflow-hidden rounded-md border border-border bg-card"
+            >
+              <summary className="flex cursor-pointer flex-wrap items-baseline gap-2 px-4 py-3 transition-colors hover:bg-secondary/50">
+                <span className="text-base font-bold">{name}</span>
                 <span className="text-sm font-normal text-muted-foreground">
-                  {entries.length} материал
+                  {entries.length} материал ·{" "}
+                  {entries.filter((entry) => entry.kind === "lesson").length} хичээл
                 </span>
-              </h2>
+              </summary>
 
-              <ul className="divide-y rounded-md border border-border bg-card">
+              <ul className="divide-y border-t border-border">
                 {entries.map((item) => {
                   const status = STATUS[item.status] ?? STATUS.DRAFT
                   const level = levelOf(item.skill)
@@ -224,7 +231,7 @@ export default function Catalog() {
                   )
                 })}
               </ul>
-            </section>
+            </details>
           ))}
         </div>
       )}

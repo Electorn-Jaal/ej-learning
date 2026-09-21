@@ -572,6 +572,26 @@ describe("EJ Learning API", { concurrency: false }, () => {
       assert.ok(res.payload.previousMaxScore > 0);
     });
 
+    it("says which kind of assessment each attempt was", async () => {
+      const teacher = createClient(harness.baseUrl);
+      await teacher.signIn(byName["demo-teacher"]);
+      const [own] = await harness.sql(
+        "SELECT id FROM core.classes WHERE class_code = 'MOCK-LOCAL-9A'",
+      );
+
+      const res = await teacher.request(`/teacher/quiz-attempts?classId=${own.id}`);
+      assert.equal(res.status, 200);
+      assert.ok(res.payload.attempts.length > 0, "expected the sitting from earlier");
+      for (const attempt of res.payload.attempts) {
+        // Without this a month of results buries the monthly test among the
+        // daily checks, and the teacher cannot tell them apart.
+        assert.ok(
+          ["LESSON", "UNIT", "MONTHLY", "DIAGNOSTIC"].includes(attempt.kind),
+          `unexpected kind ${attempt.kind}`,
+        );
+      }
+    });
+
     it("shows the attempts to that class's teacher, and nobody else's", async () => {
       const teacher = createClient(harness.baseUrl);
       await teacher.signIn(byName["demo-teacher"]);

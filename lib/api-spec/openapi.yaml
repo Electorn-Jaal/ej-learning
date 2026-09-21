@@ -1773,6 +1773,14 @@ components:
           type: string
         skillName:
           type: string
+        kind:
+          description: >
+            Which sort of assessment this sitting was - the check at the end of
+            a lesson, a unit test, a monthly one, a diagnostic. A teacher
+            reading a month of results needs the monthly test told apart from
+            the daily checks.
+          type: string
+          enum: [LESSON, UNIT, MONTHLY, DIAGNOSTIC]
         score:
           type: integer
         maxScore:
@@ -1790,6 +1798,7 @@ components:
         - studentCode
         - lessonCode
         - skillName
+        - kind
         - score
         - maxScore
         - submittedAt

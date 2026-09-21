@@ -401,6 +401,19 @@ export interface QuizAttempt {
   results: QuizResult[];
 }
 
+/**
+ * Which sort of assessment this sitting was - the check at the end of a lesson, a unit test, a monthly one, a diagnostic. A teacher reading a month of results needs the monthly test told apart from the daily checks.
+ */
+export type TeacherQuizAttemptRowKind = typeof TeacherQuizAttemptRowKind[keyof typeof TeacherQuizAttemptRowKind];
+
+
+export const TeacherQuizAttemptRowKind = {
+  LESSON: 'LESSON',
+  UNIT: 'UNIT',
+  MONTHLY: 'MONTHLY',
+  DIAGNOSTIC: 'DIAGNOSTIC',
+} as const;
+
 export interface TeacherQuizAttemptRow {
   id: number;
   /** Needed to assign this student extra work straight from the row. */
@@ -409,6 +422,8 @@ export interface TeacherQuizAttemptRow {
   studentCode: string;
   lessonCode: string;
   skillName: string;
+  /** Which sort of assessment this sitting was - the check at the end of a lesson, a unit test, a monthly one, a diagnostic. A teacher reading a month of results needs the monthly test told apart from the daily checks. */
+  kind: TeacherQuizAttemptRowKind;
   score: number;
   maxScore: number;
   submittedAt: string;

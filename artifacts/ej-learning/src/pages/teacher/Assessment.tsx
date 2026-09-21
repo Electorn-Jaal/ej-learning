@@ -19,13 +19,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { SKILL_STATUS } from '@/components/charts/status-palette'
 import { cn } from '@/lib/utils'
 import { currentSelection, entryKey, subjectParam } from '@/lib/teacher-class'
 
-const LEVELS: { value: MasteryStatus; label: string; dot: string }[] = [
-  { value: 'GAP', label: 'Дутуу', dot: 'bg-destructive' },
-  { value: 'DEVELOPING', label: 'Хөгжиж буй', dot: 'bg-pending' },
-  { value: 'MASTERED', label: 'Эзэмшсэн', dot: 'bg-success' },
+const LEVELS: { value: MasteryStatus; label: string; short: string; colour: string }[] = [
+  { value: 'GAP', label: 'Дутуу', short: '1', colour: SKILL_STATUS.needs_support.color },
+  { value: 'DEVELOPING', label: 'Хөгжиж буй', short: '2', colour: SKILL_STATUS.developing.color },
+  { value: 'MASTERED', label: 'Эзэмшсэн', short: '3', colour: SKILL_STATUS.mastered.color },
 ]
 
 const WHEN = new Intl.DateTimeFormat('mn-MN', {
@@ -44,6 +45,12 @@ type Draft = { status: MasteryStatus | null; score: string }
  * that has to be opened for each one turns a minute into ten. The score is
  * optional and sits to the side, because the requirement is that a teacher may
  * state a level without inventing a percentage for it.
+ *
+ * 1, 2 and 3 do the same thing from the keyboard. Marking a class in the
+ * evening is thirty identical decisions, and reaching for the mouse between
+ * each of them is most of the time it takes. A row already marked in this
+ * sitting carries a rule down its left edge, so the eye can find where it got
+ * to without counting.
  */
 function StudentRow({
   student,
@@ -57,7 +64,22 @@ function StudentRow({
   const existing = LEVELS.find((level) => level.value === student.masteryStatus)
 
   return (
-    <li className="flex flex-wrap items-center gap-3 py-2.5">
+    <li
+      // Focusable so the number keys have somewhere to land, but not a stop on
+      // the way to the buttons inside it.
+      tabIndex={-1}
+      onKeyDown={(event) => {
+        const level = LEVELS.find((entry) => entry.short === event.key)
+        if (!level || event.metaKey || event.ctrlKey || event.altKey) return
+        if ((event.target as HTMLElement).tagName === 'INPUT') return
+        event.preventDefault()
+        onChange({ ...draft, status: draft.status === level.value ? null : level.value })
+      }}
+      className={cn(
+        'flex flex-wrap items-center gap-3 border-l-2 py-2.5 pl-3 outline-none',
+        draft.status ? 'border-primary bg-secondary/40' : 'border-transparent',
+      )}
+    >
       <span className="min-w-0 flex-1">
         <span className="block truncate text-sm font-medium">{student.studentName}</span>
         <span className="block truncate text-xs text-muted-foreground">
@@ -91,13 +113,18 @@ function StudentRow({
               onClick={() =>
                 onChange({ ...draft, status: active ? null : level.value })
               }
+              title={`${level.label} (${level.short})`}
               className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 text-xs transition-colors',
+                // Big enough to hit with a thumb while holding a notebook.
+                'flex min-h-9 items-center gap-1.5 px-3 py-1.5 text-xs transition-colors',
                 index > 0 && 'border-l border-border',
                 active ? 'bg-secondary font-semibold' : 'hover:bg-secondary/50',
               )}
             >
-              <span className={cn('h-1.5 w-1.5 rounded-full', level.dot)} />
+              <span
+                className="h-1.5 w-1.5 rounded-full"
+                style={{ backgroundColor: level.colour }}
+              />
               {level.label}
             </button>
           )
@@ -276,28 +303,39 @@ export default function TeacherAssessment() {
                 ))}
               </ul>
 
-              <div className="flex flex-wrap items-center gap-3 border-t pt-4">
-                <Button onClick={save} disabled={isPending || marked === 0}>
-                  {isPending ? 'Хадгалж байна…' : `${marked} сурагчийг хадгалах`}
-                </Button>
-                {marked > 0 ? (
-                  <Button variant="ghost" size="sm" onClick={reset}>
-                    Цэвэрлэх
+              {/*
+                * Stuck to the bottom of the screen rather than the end of the
+                * list. Thirty students is a page and a half, and a teacher who
+                * has just marked the last one should not have to scroll to
+                * find the button - nor lose sight of how many are left.
+                */}
+              <div className="sticky bottom-0 -mx-6 border-t bg-card px-6 pb-2 pt-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button onClick={save} disabled={isPending || marked === 0}>
+                    {isPending ? 'Хадгалж байна…' : `${marked} сурагчийг хадгалах`}
                   </Button>
-                ) : null}
-                {done ? (
-                  <span className="border-l-2 border-success py-1 pl-3 text-sm">{done}</span>
-                ) : null}
-                {error ? (
-                  <span role="alert" className="text-sm text-destructive">
-                    {error}
+                  <span className="text-sm tabular-nums text-muted-foreground">
+                    {marked}/{sheet.students.length} тэмдэглэсэн
                   </span>
-                ) : null}
+                  {marked > 0 ? (
+                    <Button variant="ghost" size="sm" onClick={reset}>
+                      Цэвэрлэх
+                    </Button>
+                  ) : null}
+                  {done ? (
+                    <span className="border-l-2 border-success py-1 pl-3 text-sm">{done}</span>
+                  ) : null}
+                  {error ? (
+                    <span role="alert" className="text-sm text-destructive">
+                      {error}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="pt-2 text-xs text-muted-foreground">
+                  1, 2, 3 товчоор ч тэмдэглэнэ. Оруулсан түвшин хэн, хэзээ оруулсан
+                  тэмдэглэлтэйгээр хадгалагдана.
+                </p>
               </div>
-
-              <p className="text-xs text-muted-foreground">
-                Таны оруулсан түвшин хэн, хэзээ оруулсан тэмдэглэлтэйгээр хадгалагдана.
-              </p>
             </CardContent>
           </Card>
         )

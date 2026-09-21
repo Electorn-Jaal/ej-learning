@@ -320,16 +320,25 @@ function AssignExtra({
  * across the page buries the one number a teacher came for; the levels open
  * when asked, one at a time.
  */
+const KIND_LABEL: Record<string, string> = {
+  LESSON: 'Хичээлийн',
+  UNIT: 'Бүлгийн',
+  MONTHLY: 'Сарын',
+  DIAGNOSTIC: 'Оношилгооны',
+}
+
 function Attempts({
   classId,
   subjectId,
   range,
   today,
+  kind,
 }: {
   classId: number
   subjectId: number | null
   range: Range
   today: string
+  kind: string
 }) {
   const { data, isLoading, isError, error } = useGetTeacherQuizAttempts({
     classId,
@@ -361,8 +370,17 @@ function Attempts({
     return <p className="text-sm text-muted-foreground">Сонгосон өдөр энэ хичээлийн шалгалтын үр дүн алга. Өөр өдөр сонгоно уу.</p>
   }
 
+  const attempts = kind === 'all' ? data.attempts : data.attempts.filter((row) => row.kind === kind)
+  if (attempts.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Сонгосон өдөр {(KIND_LABEL[kind] ?? kind).toLocaleLowerCase('mn')} шалгалт өгөгдөөгүй байна.
+      </p>
+    )
+  }
+
   const byDay = new Map<string, TeacherQuizAttemptRow[]>()
-  for (const attempt of data.attempts) {
+  for (const attempt of attempts) {
     const day = dayOf(attempt.submittedAt)
     byDay.set(day, [...(byDay.get(day) ?? []), attempt])
   }
@@ -372,7 +390,9 @@ function Attempts({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">{data.className} — шалгах асуултын үр дүн</CardTitle>
+        <CardTitle className="text-lg">
+          {data.className} — {kind === 'all' ? 'бүх шалгалт' : (KIND_LABEL[kind] ?? kind).toLocaleLowerCase('mn') + ' шалгалт'}
+        </CardTitle>
         <p className="text-sm text-muted-foreground">
           {data.attempts.length} хариулт, {days.length} өдөрт · дундаж{' '}
           {percent(data.attempts)}%. Огноо, дараа нь сэдвээр. Сэдэв дээр дарж хэн хэрхэн
@@ -553,6 +573,7 @@ export default function TeacherQuizResults() {
   const linked = useLinkedSelection()
   const today = dayOf(new Date().toISOString())
   const [day, setDay] = useState(today)
+  const [kind, setKind] = useState('all')
 
   if (isLoading) return <Skeleton className="h-64 w-full" />
   if (!classes?.length) {
@@ -570,10 +591,10 @@ export default function TeacherQuizResults() {
   return (
     <div className="space-y-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-bold">Шалгах асуултын үр дүн</h1>
+        <h1 className="text-2xl font-bold">Шалгалт</h1>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-2">
           <label htmlFor="results-class" className="block text-sm font-medium">Анги</label>
           <select id="results-class" className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring" value={String(classId)} onChange={(event) => {
@@ -593,9 +614,16 @@ export default function TeacherQuizResults() {
           <p className="text-sm font-medium">Өдөр</p>
           <DatePicker value={day} onChange={setDay} />
         </div>
+        <div className="space-y-2">
+          <label htmlFor="results-kind" className="block text-sm font-medium">Төрөл</label>
+          <select id="results-kind" className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring" value={kind} onChange={(event) => setKind(event.target.value)}>
+            <option value="all">Бүх төрөл</option>
+            {Object.entries(KIND_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </div>
       </div>
 
-      <Attempts key={selectionKey} classId={classId} subjectId={subjectId} range={{ from: day, to: day }} today={today} />
+      <Attempts key={selectionKey} classId={classId} subjectId={subjectId} range={{ from: day, to: day }} today={today} kind={kind} />
 
     </div>
   )

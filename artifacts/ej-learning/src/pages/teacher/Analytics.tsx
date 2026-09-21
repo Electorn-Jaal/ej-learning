@@ -58,11 +58,18 @@ export default function TeacherAnalytics() {
     subjects[0]?.subjectId ??
     null
 
+  const klass = uniqueClasses.find((entry) => Number(entry.id) === classId)
+  if (klass === undefined) return null
+
   return (
     <div className="space-y-6 pb-10">
       <PageHeader
         title="Дүн шинжилгээ"
-        description="Анги ямар чадвар дээр хаана байгаа, өнөөдрийн хариулт хэрхэн тархсаныг харуулна."
+        description="Анги ямар чадвар дээр хаана байгаа, хэнд тусламж хэрэгтэйг харуулна."
+        stats={[
+          { label: 'Анги', value: klass.name },
+          { label: 'Сурагч', value: klass.studentCount },
+        ]}
       />
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -108,9 +115,72 @@ export default function TeacherAnalytics() {
         ) : null}
       </div>
 
+      <WhoNeedsHelp classId={classId} subjectId={subjectId} />
       <SkillStanding classId={classId} subjectId={subjectId} />
       <TodayScores classId={classId} subjectId={subjectId} />
     </div>
+  )
+}
+
+/**
+ * The answer first, in words, with names in it.
+ *
+ * The charts below say how the class stands; this says what to do about it.
+ * A teacher does not act on a bar - they act on a name, and the endpoint has
+ * been returning the names all along.
+ */
+function WhoNeedsHelp({ classId, subjectId }: { classId: number; subjectId: number | null }) {
+  const { data, isLoading } = useGetClassSkills({ classId, ...subjectParam(subjectId) })
+  const skills = data?.skills ?? []
+
+  if (isLoading) return <Skeleton className="h-40 w-full" />
+  if (skills.length === 0) return null
+
+  const worst = [...skills]
+    .filter((skill) => skill.gap > 0)
+    .sort((a, b) => share(b) - share(a))
+    .slice(0, 3)
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-lg">Хэн юунд дэмжлэг хэрэгтэй вэ</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {worst.length === 0 ? (
+          <p className="text-sm">
+            Хэмжигдсэн {skills.length} чадварын аль нь ч дутуу сурагчгүй байна.
+          </p>
+        ) : (
+          <div className="space-y-5">
+            {worst.map((skill) => (
+              <div key={skill.skillId} className="space-y-1.5">
+                <p className="text-sm">
+                  <span className="font-semibold">{skill.skillName}</span> — хэмжигдсэн{' '}
+                  {skill.assessed} сурагчийн{' '}
+                  <span className="font-semibold">{skill.gap}</span> нь дутуу.
+                </p>
+                {skill.weakest.length > 0 ? (
+                  <ul className="flex flex-wrap gap-x-4 gap-y-1">
+                    {skill.weakest.map((student) => (
+                      <li key={student.studentId} className="text-sm text-muted-foreground">
+                        {student.studentName}
+                        <span className="ml-1.5 tabular-nums">{student.score}%</span>
+                      </li>
+                    ))}
+                    {skill.weakestTotal > skill.weakest.length ? (
+                      <li className="text-sm text-muted-foreground">
+                        … бас {skill.weakestTotal - skill.weakest.length}
+                      </li>
+                    ) : null}
+                  </ul>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -137,7 +207,8 @@ function SkillStanding({ classId, subjectId }: { classId: number; subjectId: num
       <CardHeader className="pb-3">
         <CardTitle className="text-lg">Чадвар бүрээр анги хаана байна</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Зөвхөн нотолгоотой сурагчид тоологдоно. Дэмжлэг хэрэгтэй нь эхэнд.
+          Мөр бүр нэг чадвар. Улаан нь дэмжлэг хэрэгтэй, шар нь сайжирч байгаа, ногоон нь
+          эзэмшсэн сурагчийн тоо. Сорил өгөөгүй сурагч эндээ тоологдохгүй.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -187,9 +258,11 @@ function TodayScores({ classId, subjectId }: { classId: number; subjectId: numbe
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-lg">Өнөөдрийн хариултын тархалт</CardTitle>
+        <CardTitle className="text-lg">Өнөөдөр хэр зөв хариуллаа</CardTitle>
         <p className="text-sm text-muted-foreground">
-          {percentages.length} сурагч хариулсан. Босго нь чадварын үнэлгээний 80 ба 50.
+          {percentages.length === 0
+            ? 'Өнөөдөр хариулсан сурагч алга.'
+            : `${percentages.length} сурагч хариулсан. ${percentages.filter((value) => value >= 80).length} нь 80-аас дээш, ${percentages.filter((value) => value < 50).length} нь 50-аас доош.`}
         </p>
       </CardHeader>
       <CardContent>

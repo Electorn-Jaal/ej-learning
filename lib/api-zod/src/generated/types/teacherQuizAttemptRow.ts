@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { QuizAnswer } from './quizAnswer';
+import type { TeacherQuizAttemptRowKind } from './teacherQuizAttemptRowKind';
 
 export interface TeacherQuizAttemptRow {
   id: number;
@@ -15,6 +16,8 @@ export interface TeacherQuizAttemptRow {
   studentCode: string;
   lessonCode: string;
   skillName: string;
+  /** Which sort of assessment this sitting was - the check at the end of a lesson, a unit test, a monthly one, a diagnostic. A teacher reading a month of results needs the monthly test told apart from the daily checks. */
+  kind: TeacherQuizAttemptRowKind;
   score: number;
   maxScore: number;
   submittedAt: string;
