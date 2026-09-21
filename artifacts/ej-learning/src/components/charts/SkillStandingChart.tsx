@@ -75,7 +75,12 @@ export function SkillStandingChart({
         <YAxis
           type="category"
           dataKey="label"
-          width={150}
+          // 150px of label left a 360px phone under 200px of chart. Recharts
+          // takes a number here and nothing else, so the column is narrower
+          // and the long names are cut rather than allowed to set the width.
+          // The full name is in the tooltip and in the table underneath.
+          width={116}
+          tickFormatter={(value: string) => (value.length > 20 ? value.slice(0, 19) + '…' : value)}
           tickLine={false}
           axisLine={false}
           fontSize={11}

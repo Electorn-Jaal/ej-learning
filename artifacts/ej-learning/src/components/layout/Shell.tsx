@@ -34,7 +34,7 @@ const STUDENT_NAV = [
 const TEACHER_NAV = [
   { href: "/teacher", label: "Хяналтын самбар", icon: LayoutDashboard },
   { href: "/teacher/schedule", label: "Хуваарь", icon: CalendarDays },
-  { href: "/teacher/results", label: "Шалгалтын үр дүн", icon: ClipboardCheck },
+  { href: "/teacher/results", label: "Шалгалт", icon: ClipboardCheck },
   { href: "/teacher/analytics", label: "Дүн шинжилгээ", icon: BarChart3 },
   { href: "/teacher/catalog", label: "Хичээлийн материал", icon: BookOpen },
 ]
@@ -172,8 +172,8 @@ export function Shell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen bg-background text-foreground font-sans">
       <aside className="w-64 border-r border-border bg-card flex-col hidden md:flex">
-        <div className="p-6 border-b border-border">
-          <div className="block text-xl font-bold text-foreground cursor-default">
+        <div className="flex h-14 shrink-0 items-center border-b border-border px-6">
+          <div className="block text-lg font-bold text-foreground cursor-default">
             EJ Learning
           </div>
         </div>
@@ -215,7 +215,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       </aside>
 
       <main className="flex-1 flex flex-col h-screen overflow-hidden bg-background">
-        <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-border bg-card px-4 py-2">
+        <div className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-card px-4">
           <div className="text-lg font-bold text-foreground md:hidden">EJ Learning</div>
           <div className="hidden text-sm text-muted-foreground md:block">
             {term ? `${term.schoolYear} · ${term.name}` : ""}
