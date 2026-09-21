@@ -1,0 +1,19 @@
+{
+  "name": "EJ Learning",
+  "short_name": "EJ",
+  "description": "Сурагч өдрийн хичээлээ үзэж, шалгалт өгч, ахицаа хардаг. Багш хуваарь тавьж, үр дүнг харна.",
+  "lang": "mn",
+  "dir": "ltr",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f7f5f2",
+  "theme_color": "#2b4a6e",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
