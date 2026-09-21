@@ -3,24 +3,36 @@ import { useGetClassSkills, type ClassSkill } from '@workspace/api-client-react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { SKILL_STATUS, type SkillStatus } from '@/components/charts/status-palette'
 import { cn } from '@/lib/utils'
 import { subjectParam } from '@/lib/teacher-class'
 
 /**
- * A bar that reads left to right as gap, developing, mastered.
+ * A bar that reads as gap, developing, mastered.
  *
  * Proportions rather than numbers, because the question a teacher asks of this
  * list is which row to look at first, and that is answered faster by a shape
  * than by three figures to subtract from each other. The figures are underneath
  * for when the shape is not enough.
+ *
+ * It used to paint itself from the theme's own status tokens, which measure 10.7
+ * apart in normal vision - under the 15 a colour needs to be told from its
+ * neighbour, before colour blindness is considered at all. It now draws on the
+ * one status palette the charts share.
  */
 function Spread({ skill }: { skill: ClassSkill }) {
   const share = (n: number) => (n / skill.assessed) * 100
+  const segment = (status: SkillStatus, n: number) => (
+    <span
+      title={`${SKILL_STATUS[status].label}: ${n}`}
+      style={{ width: `${share(n)}%`, backgroundColor: SKILL_STATUS[status].color }}
+    />
+  )
   return (
     <span className="flex h-1.5 w-28 shrink-0 overflow-hidden rounded-full bg-muted">
-      <span className="bg-destructive" style={{ width: `${share(skill.gap)}%` }} />
-      <span className="bg-pending" style={{ width: `${share(skill.developing)}%` }} />
-      <span className="bg-success" style={{ width: `${share(skill.mastered)}%` }} />
+      {segment('needs_support', skill.gap)}
+      {segment('developing', skill.developing)}
+      {segment('mastered', skill.mastered)}
     </span>
   )
 }
@@ -62,15 +74,24 @@ function SkillRow({ skill }: { skill: ClassSkill }) {
         <div className="space-y-3 border-t border-border px-4 py-3">
           <p className="text-xs text-muted-foreground">
             <span className="mr-3 inline-flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-destructive" />
+              <span
+                className="h-1.5 w-1.5 rounded-full"
+                style={{ backgroundColor: SKILL_STATUS.needs_support.color }}
+              />
               {skill.gap} дутуу
             </span>
             <span className="mr-3 inline-flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-pending" />
+              <span
+                className="h-1.5 w-1.5 rounded-full"
+                style={{ backgroundColor: SKILL_STATUS.developing.color }}
+              />
               {skill.developing} хөгжиж буй
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-success" />
+              <span
+                className="h-1.5 w-1.5 rounded-full"
+                style={{ backgroundColor: SKILL_STATUS.mastered.color }}
+              />
               {skill.mastered} эзэмшсэн
             </span>
           </p>

@@ -25,6 +25,11 @@ export interface DailyLessonView {
   independentPractice: string | null;
   /** @nullable */
   studentMessage: string | null;
+  /**
+     * The note the teacher left on this day of the timetable, if any. It belongs to the class's day rather than to the lesson, so the same lesson taught to another class on another day carries a different one - and a lesson reached outside the timetable carries none.
+     * @nullable
+     */
+  teacherNote: string | null;
   /** @nullable */
   estimatedMinutes: number | null;
   book: BookReference | null;

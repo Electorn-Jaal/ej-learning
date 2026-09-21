@@ -8,15 +8,11 @@ import {
   type SchedulableLesson,
   type TeacherQuizAttemptRow,
 } from '@workspace/api-client-react'
-import { Calendar as CalendarIcon, Check, ChevronDown, ChevronUp, X } from 'lucide-react'
-import type { DateRange } from 'react-day-picker'
-import { ClassSkills } from '@/components/teacher/ClassSkills'
-import { ItemAnalysis } from '@/components/teacher/ItemAnalysis'
+import { Check, ChevronDown, ChevronUp, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Calendar } from '@/components/ui/calendar'
+import { DatePicker } from '@/components/DatePicker'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Select,
@@ -25,8 +21,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { cn } from '@/lib/utils'
-import { currentSelection, entryKey, subjectParam } from '@/lib/teacher-class'
+import { useLinkedSelection } from '@/lib/linked-selection'
+import { subjectParam } from '@/lib/teacher-class'
 
 /** The calendar day an attempt belongs to, in the school's own timezone. */
 const dayOf = (iso: string) =>
@@ -37,12 +33,6 @@ const DAY_LABEL = new Intl.DateTimeFormat('mn-MN', {
   day: 'numeric',
   weekday: 'long',
   timeZone: 'Asia/Ulaanbaatar',
-})
-
-const SHORT_DAY = new Intl.DateTimeFormat('mn-MN', {
-  month: 'numeric',
-  day: 'numeric',
-  timeZone: 'UTC',
 })
 
 const WHEN = new Intl.DateTimeFormat('mn-MN', {
@@ -63,14 +53,6 @@ const isoDay = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
     date.getDate(),
   ).padStart(2, '0')}`
-
-const fromIsoDay = (day: string) => new Date(`${day}T00:00:00`)
-
-const shiftDays = (day: string, by: number) => {
-  const date = fromIsoDay(day)
-  date.setDate(date.getDate() + by)
-  return isoDay(date)
-}
 
 /** Marks out of marks available, as a whole percent. */
 const percent = (rows: { score: number; maxScore: number }[]) => {
@@ -105,139 +87,62 @@ function Share({ value }: { value: number }) {
 
 type Range = { from: string | null; to: string | null }
 
-const PRESETS: { label: string; of: (today: string) => Range }[] = [
-  { label: 'Өнөөдөр', of: (today) => ({ from: today, to: today }) },
-  { label: '7 хоног', of: (today) => ({ from: shiftDays(today, -6), to: today }) },
-  { label: '30 хоног', of: (today) => ({ from: shiftDays(today, -29), to: today }) },
-  { label: 'Бүгд', of: () => ({ from: null, to: null }) },
-]
 
-const sameRange = (a: Range, b: Range) => a.from === b.from && a.to === b.to
-
-/**
- * Which stretch of days the screen is looking at.
- *
- * The four buttons come first because they are what a teacher actually wants:
- * today's lesson, this week, this month. The calendar is for the case they do
- * not cover - a parents' evening about last term - and stays folded away until
- * it is asked for, rather than taking up the top of the page every day.
- */
-function RangePicker({
-  today,
-  value,
-  onChange,
-}: {
-  today: string
-  value: Range
-  onChange: (range: Range) => void
-}) {
+function OptionalDetails({ title, children }: { title: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
-  const custom = !PRESETS.some((preset) => sameRange(preset.of(today), value))
-
-  const selected: DateRange | undefined =
-    value.from === null
-      ? undefined
-      : { from: fromIsoDay(value.from), to: value.to ? fromIsoDay(value.to) : undefined }
-
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {PRESETS.map((preset) => {
-        const range = preset.of(today)
-        return (
-          <Button
-            key={preset.label}
-            size="sm"
-            variant={sameRange(range, value) ? 'default' : 'outline'}
-            onClick={() => onChange(range)}
-          >
-            {preset.label}
-          </Button>
-        )
-      })}
-
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button size="sm" variant={custom ? 'default' : 'outline'}>
-            <CalendarIcon className="h-4 w-4" />
-            {custom && value.from
-              ? `${value.from} — ${value.to ?? '…'}`
-              : 'Хугацаа сонгох'}
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
-          <Calendar
-            mode="range"
-            selected={selected}
-            defaultMonth={value.from ? fromIsoDay(value.from) : undefined}
-            onSelect={(next) => {
-              if (!next?.from) return
-              const from = isoDay(next.from)
-              const to = next.to ? isoDay(next.to) : from
-              onChange({ from, to })
-              // Folded away once both ends are in: leaving it open over the
-              // results the teacher just asked for hides the answer.
-              if (next.to) setOpen(false)
-            }}
-          />
-        </PopoverContent>
-      </Popover>
-    </div>
+    <section className="space-y-3">
+      <Button variant="outline" onClick={() => setOpen(!open)} aria-expanded={open}>
+        {title}
+        {open ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+      </Button>
+      {open ? children : null}
+    </section>
   )
 }
 
-/**
- * How the class did each day of the range, as columns.
- *
- * Deliberately CSS rather than a charting library: these are a dozen numbers
- * between nought and a hundred, and pulling in recharts for them would cost
- * more to download than every other screen in the app put together.
- *
- * Days with no work are drawn empty rather than skipped. A quiet week that
- * looks like a busy one is the kind of picture that gets acted on wrongly.
- */
-function DailyTrend({
-  days,
-  today,
-}: {
-  days: { day: string; share: number; count: number }[]
-  today: string
-}) {
-  if (days.length < 2) return null
-
+/** All detail panels use the same filtered attempts as the summary. */
+function FilteredAnalysis({ attempts }: { attempts: TeacherQuizAttemptRow[] }) {
+  const questions = new Map<string, { prompt: string; skillName: string; correct: number; total: number }>()
+  const skills = new Map<string, TeacherQuizAttemptRow[]>()
+  for (const attempt of attempts) {
+    skills.set(attempt.skillName, [...(skills.get(attempt.skillName) ?? []), attempt])
+    for (const answer of attempt.answers) {
+      const key = attempt.lessonCode + ':' + answer.questionId
+      const row = questions.get(key) ?? { prompt: answer.prompt, skillName: attempt.skillName, correct: 0, total: 0 }
+      row.total += 1
+      row.correct += answer.correct ? 1 : 0
+      questions.set(key, row)
+    }
+  }
   return (
-    <div>
-      <p className="mb-2 text-sm font-medium">Өдрийн дундаж</p>
-      <ol className="flex items-end gap-1 overflow-x-auto pb-1">
-        {days.map((entry) => (
-          <li
-            key={entry.day}
-            className="flex min-w-0 flex-1 basis-6 flex-col items-center gap-1"
-            title={
-              entry.count === 0
-                ? `${entry.day}: хариулт алга`
-                : `${entry.day}: ${entry.count} хариулт, ${entry.share}%`
-            }
-          >
-            <span className="text-[10px] tabular-nums text-muted-foreground">
-              {entry.count === 0 ? '' : entry.share}
-            </span>
-            <span className="flex h-20 w-full items-end rounded-sm bg-secondary/60">
-              <span
-                className={cn('w-full rounded-sm', entry.count === 0 ? '' : band(entry.share))}
-                style={{ height: `${entry.count === 0 ? 0 : Math.max(entry.share, 3)}%` }}
-              />
-            </span>
-            <span
-              className={cn(
-                'text-[10px] whitespace-nowrap text-muted-foreground',
-                entry.day === today && 'font-semibold text-foreground',
-              )}
-            >
-              {SHORT_DAY.format(fromIsoDay(entry.day))}
-            </span>
-          </li>
-        ))}
-      </ol>
+    <div className="space-y-3 border-t pt-4">
+      <OptionalDetails title="Асуулт бүрээр харах">
+        <ul className="divide-y">
+          {[...questions.entries()].map(([key, row], index) => (
+            <li key={key} className="flex items-center gap-4 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">{index + 1}. {row.prompt}</p>
+                <p className="text-xs text-muted-foreground">{row.skillName} · {row.correct}/{row.total} зөв</p>
+              </div>
+              <Share value={Math.round(row.correct / row.total * 100)} />
+            </li>
+          ))}
+        </ul>
+      </OptionalDetails>
+      <OptionalDetails title="Чадвараар харах">
+        <ul className="divide-y">
+          {[...skills.entries()].map(([name, rows]) => (
+            <li key={name} className="flex items-center gap-4 py-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">{name}</p>
+                <p className="text-xs text-muted-foreground">{rows.length} хариулт</p>
+              </div>
+              <Share value={percent(rows)} />
+            </li>
+          ))}
+        </ul>
+      </OptionalDetails>
     </div>
   )
 }
@@ -453,15 +358,7 @@ function Attempts({
   }
 
   if (data.attempts.length === 0) {
-    return (
-      <Card>
-        <CardContent className="py-10 text-center text-sm text-muted-foreground">
-          {range.from === null
-            ? `${data.className} ангид хараахан хариулсан сурагч алга.`
-            : 'Энэ хугацаанд хариулт алга. Өөр хугацаа сонгож үзнэ үү.'}
-        </CardContent>
-      </Card>
-    )
+    return <p className="text-sm text-muted-foreground">Сонгосон өдөр энэ хичээлийн шалгалтын үр дүн алга. Өөр өдөр сонгоно уу.</p>
   }
 
   const byDay = new Map<string, TeacherQuizAttemptRow[]>()
@@ -471,20 +368,6 @@ function Attempts({
   }
   const days = [...byDay.entries()].sort(([a], [b]) => b.localeCompare(a))
 
-  // The trend runs over the range that was asked for, so a day nobody answered
-  // on is a gap in the line rather than missing from it. With no range asked
-  // for there is nothing to fill between, so only the days that exist are
-  // drawn. Capped at a month: past that the columns are too thin to read.
-  const trendDays: string[] = []
-  if (range.from && range.to) {
-    for (let day = range.from; day <= range.to; day = shiftDays(day, 1)) trendDays.push(day)
-  } else {
-    trendDays.push(...[...byDay.keys()].sort())
-  }
-  const trend = (trendDays.length > 31 ? trendDays.slice(-31) : trendDays).map((day) => {
-    const rows = byDay.get(day) ?? []
-    return { day, share: percent(rows), count: rows.length }
-  })
 
   return (
     <Card>
@@ -506,7 +389,6 @@ function Attempts({
 
       <CardContent className="space-y-6">
         <div className="space-y-5 rounded-md border border-border p-4">
-          <DailyTrend days={trend} today={today} />
           <BandSpread attempts={data.attempts} />
         </div>
 
@@ -658,6 +540,7 @@ function Attempts({
             </section>
           )
         })}
+        <FilteredAnalysis attempts={data.attempts} />
       </CardContent>
     </Card>
   )
@@ -665,51 +548,55 @@ function Attempts({
 
 export default function TeacherQuizResults() {
   const { data: classes, isLoading } = useGetTeacherClasses()
-  const [selected, setSelected] = useState<string | null>(null)
+  const [selectedClass, setSelectedClass] = useState<string | null>(null)
+  const [selectedSubject, setSelectedSubject] = useState<string | null>(null)
+  const linked = useLinkedSelection()
   const today = dayOf(new Date().toISOString())
-  // A month back by default: enough for a trend to have a shape, short enough
-  // that the figures are about the class as it is now.
-  const [range, setRange] = useState<Range>({ from: shiftDays(today, -29), to: today })
+  const [day, setDay] = useState(today)
 
   if (isLoading) return <Skeleton className="h-64 w-full" />
   if (!classes?.length) {
     return <p className="text-sm text-muted-foreground">Анги олдсонгүй.</p>
   }
 
-  const { key, classId, subjectId } = currentSelection(classes, selected)
+  const uniqueClasses = [...new Map(classes.map((entry) => [entry.id, entry])).values()]
+  const chosenClass = selectedClass ?? linked.classId
+  const classId = Number(uniqueClasses.find((entry) => String(entry.id) === chosenClass)?.id ?? uniqueClasses[0]!.id)
+  const subjects = classes.filter((entry) => Number(entry.id) === classId && entry.subjectId != null)
+  const chosenSubject = selectedSubject ?? linked.subjectId
+  const subjectId = subjects.find((entry) => String(entry.subjectId) === chosenSubject)?.subjectId ?? subjects[0]?.subjectId ?? null
+  const selectionKey = classId + ':' + subjectId + ':' + day
 
   return (
     <div className="space-y-6">
       <header className="space-y-1">
         <h1 className="text-2xl font-bold">Шалгах асуултын үр дүн</h1>
-        <p className="text-sm text-muted-foreground">
-          Сурагчид өдрийн хичээлийн дараа хариулсан асуултууд, шинэ нь эхэндээ.
-        </p>
       </header>
 
-      <div className="flex flex-wrap items-center gap-3">
-        {classes.length > 1 ? (
-          <Select value={key ?? ''} onValueChange={setSelected}>
-            <SelectTrigger className="w-full sm:w-64">
-              <SelectValue placeholder="Анги сонгох" />
-            </SelectTrigger>
-            <SelectContent>
-              {classes.map((klass) => (
-                <SelectItem key={entryKey(klass)} value={entryKey(klass)}>
-                  {klass.name}
-                  {klass.subject ? ` · ${klass.subject}` : ''}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ) : null}
-
-        <RangePicker today={today} value={range} onChange={setRange} />
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="space-y-2">
+          <label htmlFor="results-class" className="block text-sm font-medium">Анги</label>
+          <select id="results-class" className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring" value={String(classId)} onChange={(event) => {
+            setSelectedClass(event.target.value)
+            setSelectedSubject(null)
+          }}>
+            {uniqueClasses.map((klass) => <option key={klass.id} value={String(klass.id)}>{klass.name}</option>)}
+          </select>
+        </div>
+        <div className="space-y-2">
+          <label htmlFor="results-subject" className="block text-sm font-medium">Хичээл</label>
+          <select id="results-subject" className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring" value={subjectId === null ? 'all' : String(subjectId)} onChange={(event) => setSelectedSubject(event.target.value)}>
+            {subjects.length ? subjects.map((subject) => <option key={subject.subjectId} value={String(subject.subjectId)}>{subject.subject}</option>) : <option value="all">Бүх хичээл</option>}
+          </select>
+        </div>
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Өдөр</p>
+          <DatePicker value={day} onChange={setDay} />
+        </div>
       </div>
 
-      <ItemAnalysis classId={classId} />
-      <ClassSkills classId={classId} subjectId={subjectId} />
-      <Attempts classId={classId} subjectId={subjectId} range={range} today={today} />
+      <Attempts key={selectionKey} classId={classId} subjectId={subjectId} range={{ from: day, to: day }} today={today} />
+
     </div>
   )
 }

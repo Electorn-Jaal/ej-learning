@@ -40,6 +40,8 @@ import type {
   GetAssessmentSheetParams,
   GetClassSkillsParams,
   GetItemAnalysisParams,
+  GetStudentPlanParams,
+  GetStudentScheduleParams,
   GetTeacherLessonsParams,
   GetTeacherQuizAttemptsParams,
   GetTeacherScheduleParams,
@@ -60,7 +62,11 @@ import type {
   SchedulableLesson,
   ScheduleDayInput,
   SessionEnvelope,
+  SkillChain,
+  SkillMap,
   StudentDashboard,
+  StudentPlan,
+  StudentPlanInput,
   StudentProgress,
   StudentToday,
   SubjectOverview,
@@ -70,6 +76,7 @@ import type {
   TeacherDashboard,
   TeacherQuizAttempts,
   TeacherSchedule,
+  Term,
   UploadedFile,
   WorkspaceIntegrationDashboard,
   WorkspaceSimulationInput
@@ -1861,6 +1868,90 @@ export function useGetStudentToday<TData = Awaited<ReturnType<typeof getStudentT
 
 
 
+export const getGetStudentScheduleUrl = (params?: GetStudentScheduleParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/student/schedule?${stringifiedParams}` : `/api/student/schedule`
+}
+
+/**
+ * @summary The signed-in student's class lessons and personal work for one day
+ */
+export const getStudentSchedule = async (params?: GetStudentScheduleParams, options?: Parameters<typeof customFetch>[1]): Promise<StudentToday> => {
+
+  return customFetch<StudentToday>(getGetStudentScheduleUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStudentScheduleQueryKey = (params?: GetStudentScheduleParams,) => {
+    return [
+    `/api/student/schedule`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetStudentScheduleQueryOptions = <TData = Awaited<ReturnType<typeof getStudentSchedule>>, TError = ErrorType<void>>(params?: GetStudentScheduleParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStudentSchedule>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStudentScheduleQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStudentSchedule>>> = ({ signal }) => getStudentSchedule(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStudentSchedule>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetStudentScheduleQueryResult = NonNullable<Awaited<ReturnType<typeof getStudentSchedule>>>
+export type GetStudentScheduleQueryError = ErrorType<void>
+
+
+/**
+ * @summary The signed-in student's class lessons and personal work for one day
+ */
+
+export function useGetStudentSchedule<TData = Awaited<ReturnType<typeof getStudentSchedule>>, TError = ErrorType<void>>(
+ params?: GetStudentScheduleParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStudentSchedule>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetStudentScheduleQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getGetTeacherScheduleUrl = (params: GetTeacherScheduleParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -1877,7 +1968,7 @@ export const getGetTeacherScheduleUrl = (params: GetTeacherScheduleParams,) => {
 }
 
 /**
- * @summary A class's scheduled lessons over a date range
+ * @summary A class's calendar days and subject slots, including blank and weekend rows
  */
 export const getTeacherSchedule = async (params: GetTeacherScheduleParams, options?: Parameters<typeof customFetch>[1]): Promise<TeacherSchedule> => {
 
@@ -1924,7 +2015,7 @@ export type GetTeacherScheduleQueryError = ErrorType<ApiError>
 
 
 /**
- * @summary A class's scheduled lessons over a date range
+ * @summary A class's calendar days and subject slots, including blank and weekend rows
  */
 
 export function useGetTeacherSchedule<TData = Awaited<ReturnType<typeof getTeacherSchedule>>, TError = ErrorType<ApiError>>(
@@ -2811,7 +2902,7 @@ export const getSetScheduleDayUrl = () => {
 }
 
 /**
- * The teacher's correction surface. A null lessonId clears the day, which is how a holiday or a school event is recorded.
+ * The teacher's correction surface. A null lessonId clears the day, which is how a holiday or a school event is recorded. Weekend lessons may only be assigned, changed, or cleared by an administrator.
  * @summary Set, replace or clear one day's lesson
  */
 export const setScheduleDay = async (scheduleDayInput: ScheduleDayInput, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
@@ -2956,6 +3047,162 @@ export function useGetAdminMaterials<TData = Awaited<ReturnType<typeof getAdminM
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetAdminMaterialsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetSkillMapUrl = () => {
+
+
+
+
+  return `/api/admin/skill-map`
+}
+
+/**
+ * Read-only. Nothing in the product shows this mapping today, yet every lesson reaches its book pages through it and every mastery score is keyed on the skill it names. An import that lands the topics and the skills but drops the links between them leaves a system that can timetable lessons and cannot measure anything - and there is currently no way to see that has happened short of writing SQL.
+ * @summary Which topics carry which skills, and what is missing
+ */
+export const getSkillMap = async ( options?: Parameters<typeof customFetch>[1]): Promise<SkillMap> => {
+
+  return customFetch<SkillMap>(getGetSkillMapUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSkillMapQueryKey = () => {
+    return [
+    `/api/admin/skill-map`
+    ] as const;
+    }
+
+
+export const getGetSkillMapQueryOptions = <TData = Awaited<ReturnType<typeof getSkillMap>>, TError = ErrorType<ApiError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSkillMap>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSkillMapQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSkillMap>>> = ({ signal }) => getSkillMap({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSkillMap>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSkillMapQueryResult = NonNullable<Awaited<ReturnType<typeof getSkillMap>>>
+export type GetSkillMapQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Which topics carry which skills, and what is missing
+ */
+
+export function useGetSkillMap<TData = Awaited<ReturnType<typeof getSkillMap>>, TError = ErrorType<ApiError>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSkillMap>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSkillMapQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetSkillChainUrl = () => {
+
+
+
+
+  return `/api/admin/skill-chain`
+}
+
+/**
+ * Read-only. The remediation walk follows these links to decide what a struggling child should study instead, five levels back at most, and until now nothing in the product showed them. Three things about the chain are invisible and each breaks it silently: a link that is not REQUIRED and APPROVED is never followed, a prerequisite with no approved web-ready lesson ends the walk, and a cycle is only stopped by the depth limit - the database blocks a skill pointing at itself and nothing more.
+ * @summary Which skill a skill depends on, and whether the chain works
+ */
+export const getSkillChain = async ( options?: Parameters<typeof customFetch>[1]): Promise<SkillChain> => {
+
+  return customFetch<SkillChain>(getGetSkillChainUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSkillChainQueryKey = () => {
+    return [
+    `/api/admin/skill-chain`
+    ] as const;
+    }
+
+
+export const getGetSkillChainQueryOptions = <TData = Awaited<ReturnType<typeof getSkillChain>>, TError = ErrorType<ApiError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSkillChain>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSkillChainQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSkillChain>>> = ({ signal }) => getSkillChain({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSkillChain>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSkillChainQueryResult = NonNullable<Awaited<ReturnType<typeof getSkillChain>>>
+export type GetSkillChainQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Which skill a skill depends on, and whether the chain works
+ */
+
+export function useGetSkillChain<TData = Awaited<ReturnType<typeof getSkillChain>>, TError = ErrorType<ApiError>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSkillChain>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSkillChainQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -3403,6 +3650,257 @@ export const useAssignExtraWork = <TError = ErrorType<ApiError>,
         TContext
       > => {
       return useMutation(getAssignExtraWorkMutationOptions(options));
+    }
+
+export const getGetCurrentTermUrl = () => {
+
+
+
+
+  return `/api/term/current`
+}
+
+/**
+ * Read from learning.terms rather than worked out from the month: the school sets its own term boundaries each year and they move. Null when today falls outside every recorded term, which is what a holiday between terms looks like, and what an unseeded database looks like too.
+ * @summary The term today falls in
+ */
+export const getCurrentTerm = async ( options?: Parameters<typeof customFetch>[1]): Promise<Term | null> => {
+
+  return customFetch<Term | null>(getGetCurrentTermUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetCurrentTermQueryKey = () => {
+    return [
+    `/api/term/current`
+    ] as const;
+    }
+
+
+export const getGetCurrentTermQueryOptions = <TData = Awaited<ReturnType<typeof getCurrentTerm>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCurrentTerm>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetCurrentTermQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getCurrentTerm>>> = ({ signal }) => getCurrentTerm({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getCurrentTerm>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetCurrentTermQueryResult = NonNullable<Awaited<ReturnType<typeof getCurrentTerm>>>
+export type GetCurrentTermQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary The term today falls in
+ */
+
+export function useGetCurrentTerm<TData = Awaited<ReturnType<typeof getCurrentTerm>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getCurrentTerm>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetCurrentTermQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetStudentPlanUrl = (params?: GetStudentPlanParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/student/plan?${stringifiedParams}` : `/api/student/plan`
+}
+
+/**
+ * The child's own plan, which is not the school's work. Free text and private to them: no teacher endpoint reads this, and none should until somebody decides a teacher ought to see it.
+ * @summary What this student wrote for themselves for a day
+ */
+export const getStudentPlan = async (params?: GetStudentPlanParams, options?: Parameters<typeof customFetch>[1]): Promise<StudentPlan> => {
+
+  return customFetch<StudentPlan>(getGetStudentPlanUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStudentPlanQueryKey = (params?: GetStudentPlanParams,) => {
+    return [
+    `/api/student/plan`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetStudentPlanQueryOptions = <TData = Awaited<ReturnType<typeof getStudentPlan>>, TError = ErrorType<ApiError>>(params?: GetStudentPlanParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStudentPlan>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStudentPlanQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStudentPlan>>> = ({ signal }) => getStudentPlan(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStudentPlan>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetStudentPlanQueryResult = NonNullable<Awaited<ReturnType<typeof getStudentPlan>>>
+export type GetStudentPlanQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary What this student wrote for themselves for a day
+ */
+
+export function useGetStudentPlan<TData = Awaited<ReturnType<typeof getStudentPlan>>, TError = ErrorType<ApiError>>(
+ params?: GetStudentPlanParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStudentPlan>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetStudentPlanQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSaveStudentPlanUrl = () => {
+
+
+
+
+  return `/api/student/plan`
+}
+
+/**
+ * @summary Write or replace a day's plan
+ */
+export const saveStudentPlan = async (studentPlanInput: StudentPlanInput, options?: Parameters<typeof customFetch>[1]): Promise<StudentPlan> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<StudentPlan>(getSaveStudentPlanUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(studentPlanInput)
+  }
+);}
+
+
+
+
+
+export const getSaveStudentPlanMutationKey = () => ['saveStudentPlan'] as const;
+
+export const getSaveStudentPlanMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveStudentPlan>>, TError,SaveStudentPlanMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveStudentPlan>>, TError,SaveStudentPlanMutationVariables, TContext> => {
+
+const mutationKey = getSaveStudentPlanMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveStudentPlan>>, SaveStudentPlanMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  saveStudentPlan(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveStudentPlanMutationResult = NonNullable<Awaited<ReturnType<typeof saveStudentPlan>>>
+    export type SaveStudentPlanMutationBody = BodyType<StudentPlanInput>
+    export type SaveStudentPlanMutationError = ErrorType<ApiError>
+    export type SaveStudentPlanMutationVariables = {data: BodyType<StudentPlanInput>}
+
+    /**
+ * @summary Write or replace a day's plan
+ */
+export const useSaveStudentPlan = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveStudentPlan>>, TError,SaveStudentPlanMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof saveStudentPlan>>,
+        TError,
+        SaveStudentPlanMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSaveStudentPlanMutationOptions(options));
     }
 
 export const getGetQuizPaperUrl = (lessonId: number,) => {

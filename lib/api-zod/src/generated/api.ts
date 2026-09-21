@@ -272,6 +272,7 @@ export const GetTeacherDashboardResponse = zod.object({
   "className": zod.string(),
   "gradeLevel": zod.number().int(),
   "subjectName": zod.string(),
+  "subjectId": zod.number().int().nullable().describe('Null for an administrator\'s card, which stands for the whole class rather than one subject. Carried so a link from this card can open the timetable or the results on the subject the card is about, instead of dropping the reader on whatever the page picks first.\n'),
   "levelFramework": zod.string().nullable().describe('The proficiency ladder this subject uses, or null where it uses none.'),
   "lessonCode": zod.string().nullable(),
   "skillName": zod.string().nullable(),
@@ -562,6 +563,7 @@ export const GetStudentTodayResponse = zod.object({
   "guidedPractice": zod.string().nullable(),
   "independentPractice": zod.string().nullable(),
   "studentMessage": zod.string().nullable(),
+  "teacherNote": zod.string().nullable().describe('The note the teacher left on this day of the timetable, if any. It belongs to the class\'s day rather than to the lesson, so the same lesson taught to another class on another day carries a different one - and a lesson reached outside the timetable carries none.\n'),
   "estimatedMinutes": zod.number().int().nullable(),
   "book": zod.union([zod.object({
   "materialId": zod.number().int(),
@@ -585,6 +587,7 @@ export const GetStudentTodayResponse = zod.object({
   "guidedPractice": zod.string().nullable(),
   "independentPractice": zod.string().nullable(),
   "studentMessage": zod.string().nullable(),
+  "teacherNote": zod.string().nullable().describe('The note the teacher left on this day of the timetable, if any. It belongs to the class\'s day rather than to the lesson, so the same lesson taught to another class on another day carries a different one - and a lesson reached outside the timetable carries none.\n'),
   "estimatedMinutes": zod.number().int().nullable(),
   "book": zod.union([zod.object({
   "materialId": zod.number().int(),
@@ -605,7 +608,82 @@ export const GetStudentTodayResponse = zod.object({
 
 
 /**
- * @summary A class's scheduled lessons over a date range
+ * @summary The signed-in student's class lessons and personal work for one day
+ */
+export const getStudentScheduleQueryDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const GetStudentScheduleQueryParams = zod.object({
+  "date": zod.coerce.string().regex(getStudentScheduleQueryDateRegExp).optional().describe('Calendar date in Ulaanbaatar, defaults to today')
+})
+
+export const getStudentScheduleResponseDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const GetStudentScheduleResponse = zod.object({
+  "date": zod.string().regex(getStudentScheduleResponseDateRegExp).describe('Calendar date, YYYY-MM-DD. Not an instant, so not format:date.'),
+  "dateLabel": zod.string(),
+  "className": zod.string(),
+  "subjects": zod.array(zod.object({
+  "subjectCode": zod.string(),
+  "subjectName": zod.string(),
+  "lesson": zod.union([zod.object({
+  "id": zod.number().int(),
+  "lessonCode": zod.string(),
+  "lessonType": zod.enum(['CORE', 'RECOVERY', 'REINFORCE']),
+  "skillName": zod.string(),
+  "learningGoal": zod.string().nullable(),
+  "remember": zod.string().nullable(),
+  "workedExample": zod.string().nullable(),
+  "guidedPractice": zod.string().nullable(),
+  "independentPractice": zod.string().nullable(),
+  "studentMessage": zod.string().nullable(),
+  "teacherNote": zod.string().nullable().describe('The note the teacher left on this day of the timetable, if any. It belongs to the class\'s day rather than to the lesson, so the same lesson taught to another class on another day carries a different one - and a lesson reached outside the timetable carries none.\n'),
+  "estimatedMinutes": zod.number().int().nullable(),
+  "book": zod.union([zod.object({
+  "materialId": zod.number().int(),
+  "title": zod.string().nullable(),
+  "chapterTitle": zod.string().nullable(),
+  "pageFrom": zod.number().int().nullable(),
+  "pageTo": zod.number().int().nullable(),
+  "filePage": zod.number().int().nullable().describe('Which page of the file to open at. Not the same as pageFrom: a scanned book carries covers and front matter the printed numbering does not count, so printed page 3 can be file page 9. The student is shown the printed numbers and the viewer opens the file page.\n'),
+  "fileUrl": zod.string().nullable()
+}).describe('Where in the book this lesson sits.'),zod.null()])
+}),zod.null()]).describe('What the class is scheduled to study in this subject today.'),
+  "extra": zod.union([zod.object({
+  "lesson": zod.object({
+  "id": zod.number().int(),
+  "lessonCode": zod.string(),
+  "lessonType": zod.enum(['CORE', 'RECOVERY', 'REINFORCE']),
+  "skillName": zod.string(),
+  "learningGoal": zod.string().nullable(),
+  "remember": zod.string().nullable(),
+  "workedExample": zod.string().nullable(),
+  "guidedPractice": zod.string().nullable(),
+  "independentPractice": zod.string().nullable(),
+  "studentMessage": zod.string().nullable(),
+  "teacherNote": zod.string().nullable().describe('The note the teacher left on this day of the timetable, if any. It belongs to the class\'s day rather than to the lesson, so the same lesson taught to another class on another day carries a different one - and a lesson reached outside the timetable carries none.\n'),
+  "estimatedMinutes": zod.number().int().nullable(),
+  "book": zod.union([zod.object({
+  "materialId": zod.number().int(),
+  "title": zod.string().nullable(),
+  "chapterTitle": zod.string().nullable(),
+  "pageFrom": zod.number().int().nullable(),
+  "pageTo": zod.number().int().nullable(),
+  "filePage": zod.number().int().nullable().describe('Which page of the file to open at. Not the same as pageFrom: a scanned book carries covers and front matter the printed numbering does not count, so printed page 3 can be file page 9. The student is shown the printed numbers and the viewer opens the file page.\n'),
+  "fileUrl": zod.string().nullable()
+}).describe('Where in the book this lesson sits.'),zod.null()])
+}),
+  "source": zod.enum(['AUTO', 'TEACHER']),
+  "reason": zod.string().nullable()
+}),zod.null()]).describe('Work assigned to this student personally in this subject. Where the class works through one book it is remediation on top; where the subject places students by level it is the whole of the day\'s work.\n')
+})).describe('One entry per subject the student has work in today. A child studies several subjects a day, so this is a list rather than a single lesson.\n'),
+  "notice": zod.string()
+})
+
+
+/**
+ * @summary A class's calendar days and subject slots, including blank and weekend rows
  */
 export const getTeacherScheduleQueryFromRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
 export const getTeacherScheduleQueryToRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
@@ -899,17 +977,20 @@ export const GenerateScheduleResponse = zod.object({
 
 
 /**
- * The teacher's correction surface. A null lessonId clears the day, which is how a holiday or a school event is recorded.
+ * The teacher's correction surface. A null lessonId clears the day, which is how a holiday or a school event is recorded. Weekend lessons may only be assigned, changed, or cleared by an administrator.
  * @summary Set, replace or clear one day's lesson
  */
 export const setScheduleDayBodyScheduledOnRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const setScheduleDayBodyNoteMax = 2000;
+
 
 
 export const SetScheduleDayBody = zod.object({
   "classId": zod.number().int(),
   "subjectId": zod.number().int().nullish().describe('Which subject\'s day this is. Setting a lesson takes the subject from the lesson itself, so this only matters when clearing: without it, emptying Tuesday in the maths timetable would also empty Tuesday\'s physics. Null clears every subject the teacher holds in the class.\n'),
   "scheduledOn": zod.string().regex(setScheduleDayBodyScheduledOnRegExp),
-  "lessonId": zod.number().int().nullable().describe('null clears the day.')
+  "lessonId": zod.number().int().nullable().describe('null clears the day.'),
+  "note": zod.string().max(setScheduleDayBodyNoteMax).nullish().describe('What the teacher wants the class to know about this day - which pages to read, which exercises to do, what to watch out for. The student sees it. Leave the field out to keep whatever note is already there; send null or an empty string to remove it. Clearing the day removes the note with it.\n')
 })
 
 export const SetScheduleDayResponse = zod.void()
@@ -930,6 +1011,59 @@ export const GetAdminMaterialsResponseItem = zod.object({
   "sectionCount": zod.number().int()
 })
 export const GetAdminMaterialsResponse = zod.array(GetAdminMaterialsResponseItem)
+
+
+/**
+ * Read-only. Nothing in the product shows this mapping today, yet every lesson reaches its book pages through it and every mastery score is keyed on the skill it names. An import that lands the topics and the skills but drops the links between them leaves a system that can timetable lessons and cannot measure anything - and there is currently no way to see that has happened short of writing SQL.
+ * @summary Which topics carry which skills, and what is missing
+ */
+export const GetSkillMapResponse = zod.object({
+  "nodes": zod.array(zod.object({
+  "contentCode": zod.string(),
+  "name": zod.string(),
+  "levelType": zod.string().describe('DOMAIN, UNIT, TOPIC, SUBTOPIC or SEGMENT.'),
+  "subjectName": zod.string(),
+  "status": zod.string(),
+  "skills": zod.array(zod.object({
+  "skillCode": zod.string(),
+  "name": zod.string(),
+  "status": zod.string().describe('The skill\'s own review status. Only APPROVED skills reach a student.'),
+  "isPrimary": zod.boolean().describe('The one skill a topic is mainly about. It decides which book pages open with the lesson, so a topic carrying two of them is a fault even though the database permits it.\n'),
+  "mapStatus": zod.string().describe('The link\'s own review status, separate from the skill\'s. Anything but APPROVED is invisible to students.\n'),
+  "lessonCount": zod.number().int()
+}))
+})),
+  "unmappedSkills": zod.array(zod.object({
+  "skillCode": zod.string(),
+  "name": zod.string(),
+  "subjectName": zod.string(),
+  "status": zod.string(),
+  "lessonCount": zod.number().int().describe('Lessons written against a skill no topic carries. They can be taught, but nothing will find them a page in a book.\n')
+}))
+})
+
+
+/**
+ * Read-only. The remediation walk follows these links to decide what a struggling child should study instead, five levels back at most, and until now nothing in the product showed them. Three things about the chain are invisible and each breaks it silently: a link that is not REQUIRED and APPROVED is never followed, a prerequisite with no approved web-ready lesson ends the walk, and a cycle is only stopped by the depth limit - the database blocks a skill pointing at itself and nothing more.
+ * @summary Which skill a skill depends on, and whether the chain works
+ */
+export const GetSkillChainResponse = zod.object({
+  "links": zod.array(zod.object({
+  "dependencyCode": zod.string(),
+  "skillCode": zod.string(),
+  "skillName": zod.string(),
+  "prerequisiteCode": zod.string(),
+  "prerequisiteName": zod.string(),
+  "subjectName": zod.string(),
+  "relationType": zod.string().describe('REQUIRED or RECOMMENDED. Only REQUIRED is walked; a RECOMMENDED link is a note for whoever plans a year.\n'),
+  "importance": zod.string().describe('Recorded, but the remediation walk does not read it.'),
+  "status": zod.string(),
+  "reason": zod.string().describe('Why this prerequisite. The column is NOT NULL, so there is always one.'),
+  "followed": zod.boolean().describe('True when this link is both APPROVED and REQUIRED - that is, when remediation actually walks it. Everything else is documentation.\n'),
+  "prerequisiteHasLesson": zod.boolean().describe('Whether the prerequisite has an approved, web-ready lesson. Without one the walk reaches a dead end and keeps looking further back.\n')
+})),
+  "cycles": zod.array(zod.array(zod.string())).describe('Loops among the followed links, each given as the skill codes around it. The database only forbids a skill pointing at itself, so a two-step loop is possible; the walk survives it on the depth limit alone and returns nonsense.\n')
+})
 
 
 /**
@@ -1061,6 +1195,55 @@ export const AssignExtraWorkResponse = zod.object({
 
 
 /**
+ * Read from learning.terms rather than worked out from the month: the school sets its own term boundaries each year and they move. Null when today falls outside every recorded term, which is what a holiday between terms looks like, and what an unseeded database looks like too.
+ * @summary The term today falls in
+ */
+export const GetCurrentTermResponse = zod.union([zod.object({
+  "schoolYear": zod.string(),
+  "termNumber": zod.number().int(),
+  "name": zod.string(),
+  "startsOn": zod.string(),
+  "endsOn": zod.string()
+}),zod.null()])
+
+
+/**
+ * The child's own plan, which is not the school's work. Free text and private to them: no teacher endpoint reads this, and none should until somebody decides a teacher ought to see it.
+ * @summary What this student wrote for themselves for a day
+ */
+export const getStudentPlanQueryDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const GetStudentPlanQueryParams = zod.object({
+  "date": zod.coerce.string().regex(getStudentPlanQueryDateRegExp).optional().describe('Defaults to today in Ulaanbaatar.')
+})
+
+export const GetStudentPlanResponse = zod.object({
+  "date": zod.string(),
+  "body": zod.string().describe('Empty string when the day has no plan; there is no separate null.')
+})
+
+
+/**
+ * @summary Write or replace a day's plan
+ */
+export const saveStudentPlanBodyDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const saveStudentPlanBodyBodyMax = 2000;
+
+
+
+export const SaveStudentPlanBody = zod.object({
+  "date": zod.string().regex(saveStudentPlanBodyDateRegExp),
+  "body": zod.string().max(saveStudentPlanBodyBodyMax).describe('Blank or whitespace removes the day\'s plan.')
+})
+
+export const SaveStudentPlanResponse = zod.object({
+  "date": zod.string(),
+  "body": zod.string().describe('Empty string when the day has no plan; there is no separate null.')
+})
+
+
+/**
  * The key is never sent. It used to live in the frontend bundle, where any student could read it, and it stays on the server now so that a score means something.
  * @summary The questions for a lesson, without the answers
  */
@@ -1079,7 +1262,11 @@ export const GetQuizPaperResponse = zod.object({
   "optionId": zod.number().int(),
   "text": zod.string()
 }))
-}))
+})),
+  "kind": zod.enum(['LESSON', 'UNIT', 'MONTHLY', 'DIAGNOSTIC']).describe('Which sort of assessment this is - the check at the end of a lesson, a unit test, a monthly one, a diagnostic. Recorded against the lesson that carries the questions; it is not yet an assessment of its own, with an owner and a window.\n'),
+  "takenToday": zod.boolean().describe('Whether this student has already sat this quiz today. A quiz may be taken once a day, so the paper says so up front rather than letting a child answer everything again and be refused at the end.\n'),
+  "previousScore": zod.number().int().nullable(),
+  "previousMaxScore": zod.number().int().nullable()
 })
 
 

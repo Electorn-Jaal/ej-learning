@@ -1,0 +1,4 @@
+ALTER TABLE "learning"."daily_lessons" ADD COLUMN "source_outline_node_id" bigint;--> statement-breakpoint
+ALTER TABLE "assessment"."diagnostic_items" ADD COLUMN "source_outline_node_id" bigint;--> statement-breakpoint
+ALTER TABLE "learning"."daily_lessons" ADD CONSTRAINT "daily_lessons_source_outline_node_id_fkey" FOREIGN KEY ("source_outline_node_id") REFERENCES "content"."source_outline_nodes"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "assessment"."diagnostic_items" ADD CONSTRAINT "diagnostic_items_source_outline_node_id_fkey" FOREIGN KEY ("source_outline_node_id") REFERENCES "content"."source_outline_nodes"("id") ON DELETE no action ON UPDATE no action;

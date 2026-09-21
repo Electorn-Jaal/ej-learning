@@ -40,6 +40,26 @@ describe("EJ Learning API", { concurrency: false }, () => {
       assert.ok(applied.n >= 13, `only ${applied.n} migrations recorded`);
     });
 
+    it("takes a fourth term", async () => {
+      // The school year has four terms; the check used to stop at three, so a
+      // fourth could not be recorded at all.
+      const [year] = await harness.sql(
+        "INSERT INTO learning.terms (school_year, term_number, name_mn, starts_on, ends_on) VALUES ('2099-2100', 4, 'MOCK-LOCAL-TERM-4', '2100-04-01', '2100-06-01') RETURNING term_number::int AS n",
+      );
+      assert.equal(year.n, 4);
+
+      await assert.rejects(
+        () =>
+          harness.sql(
+            "INSERT INTO learning.terms (school_year, term_number, name_mn, starts_on, ends_on) VALUES ('2099-2100', 5, 'MOCK-LOCAL-TERM-5', '2100-06-02', '2100-07-01')",
+          ),
+        /terms_term_number_check/,
+        "a fifth term is still refused",
+      );
+
+      await harness.sql("DELETE FROM learning.terms WHERE school_year = '2099-2100'");
+    });
+
     it("seeds an account per role, and two teachers to tell apart", async () => {
       assert.deepEqual(
         harness.accounts.map((a) => a.username).sort(),
@@ -56,6 +76,134 @@ describe("EJ Learning API", { concurrency: false }, () => {
         const code = Object.values(row)[0];
         assert.match(code, /^MOCK-LOCAL-/, `${code} does not look synthetic`);
       }
+    });
+  });
+
+  describe("student schedule", () => {
+    it("requires a student session", async () => {
+      const client = createClient(harness.baseUrl);
+      assert.equal((await client.request("/student/schedule")).status, 401);
+      await client.signIn(accountsByRole.TEACHER);
+      assert.equal((await client.request("/student/schedule")).status, 403);
+    });
+
+    it("defaults to today and ignores a supplied class id", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(accountsByRole.STUDENT);
+      const today = await client.request("/student/today");
+      const schedule = await client.request("/student/schedule?classId=999999");
+      assert.equal(schedule.status, 200);
+      assert.deepEqual(schedule.payload, today.payload);
+    });
+
+    it("reads the selected day and rejects invalid dates", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(accountsByRole.STUDENT);
+      const schedule = await client.request("/student/schedule?date=2000-01-01");
+      assert.equal(schedule.status, 200);
+      assert.equal(schedule.payload.date, "2000-01-01");
+      assert.deepEqual(schedule.payload.subjects, []);
+      for (const date of ["invalid", "2026-02-30", "2026-13-01"]) {
+        assert.equal((await client.request("/student/schedule?date=" + date)).status, 400);
+      }
+    });
+  });
+
+  describe("calendar schedule and admin makeup lessons", () => {
+    let classId, subjectId, weekend, lessonId, admin, teacher, student;
+    before(async () => {
+      [{ id: classId }] = await harness.sql("SELECT id FROM core.classes WHERE class_code = 'MOCK-LOCAL-9A'");
+      [{ id: subjectId }] = await harness.sql("SELECT id FROM core.subjects WHERE code = 'MATH'");
+      [{ day: weekend }] = await harness.sql(
+        "SELECT d::date::text AS day FROM learning.terms t CROSS JOIN LATERAL generate_series(t.starts_on, t.ends_on, interval '1 day') d WHERE extract(isodow FROM d) = 6 AND NOT EXISTS (SELECT 1 FROM learning.class_schedule cs WHERE cs.class_id = $1 AND cs.scheduled_on = d::date) ORDER BY d LIMIT 1", [classId],
+      );
+      admin = createClient(harness.baseUrl);
+      teacher = createClient(harness.baseUrl);
+      student = createClient(harness.baseUrl);
+      await admin.signIn(accountsByRole.ADMIN);
+      await teacher.signIn(byName["demo-teacher"]);
+      await student.signIn(accountsByRole.STUDENT);
+      const lessons = await admin.request('/teacher/lessons?classId=' + classId + '&subjectId=' + subjectId);
+      lessonId = lessons.payload[0].id;
+    });
+
+    it("returns blank weekend slots for every subject", async () => {
+      const res = await teacher.request('/teacher/schedule?classId=' + classId + '&from=' + weekend + '&to=' + weekend);
+      assert.equal(res.status, 200);
+      assert.equal(res.payload.days.length, 2);
+      assert.ok(res.payload.days.every((row) => row.scheduledOn === weekend && row.subjectId !== null && row.lessonId === null));
+    });
+
+    it("keeps nine consecutive calendar dates for one subject", async () => {
+      const end = new Date(weekend + 'T00:00:00Z');
+      end.setUTCDate(end.getUTCDate() + 8);
+      const res = await teacher.request('/teacher/schedule?classId=' + classId + '&subjectId=' + subjectId + '&from=' + weekend + '&to=' + end.toISOString().slice(0, 10));
+      assert.equal(res.status, 200);
+      assert.equal(res.payload.days.length, 9);
+      assert.equal(new Set(res.payload.days.map((row) => row.scheduledOn)).size, 9);
+    });
+
+    it("keeps the teacher's note on the day, and the student reads it", async () => {
+      // A weekday, so the teacher may set it without the admin-only weekend rule.
+      const [{ day: weekday }] = await harness.sql(
+        "SELECT d::date::text AS day FROM learning.terms t CROSS JOIN LATERAL generate_series(t.starts_on, t.ends_on, interval '1 day') d WHERE extract(isodow FROM d) < 6 AND NOT EXISTS (SELECT 1 FROM learning.class_schedule cs WHERE cs.class_id = $1 AND cs.scheduled_on = d::date) ORDER BY d LIMIT 1",
+        [classId],
+      );
+      const day = { classId: Number(classId), subjectId: Number(subjectId), scheduledOn: weekday };
+      const read = async () => {
+        const res = await teacher.request(
+          '/teacher/schedule?classId=' + classId + '&subjectId=' + subjectId + '&from=' + weekday + '&to=' + weekday,
+        );
+        return res.payload.days[0];
+      };
+
+      const note = "41-44 хуудсыг уншаад 3, 5, 7-р дасгалыг хий.";
+      assert.equal((await teacher.request('/teacher/schedule/day', { method: 'PUT', body: { ...day, lessonId, note } })).status, 204);
+      assert.equal((await read()).note, note);
+
+      // Changing the lesson says nothing about the note, so the note stands.
+      assert.equal((await teacher.request('/teacher/schedule/day', { method: 'PUT', body: { ...day, lessonId } })).status, 204);
+      assert.equal((await read()).note, note, "swapping the lesson discarded the note");
+
+      // Whitespace is not a note.
+      assert.equal((await teacher.request('/teacher/schedule/day', { method: 'PUT', body: { ...day, lessonId, note: "   " } })).status, 204);
+      assert.equal((await read()).note, null);
+
+      // The student sees it on the day it belongs to.
+      assert.equal((await teacher.request('/teacher/schedule/day', { method: 'PUT', body: { ...day, lessonId, note } })).status, 204);
+      const personal = await student.request('/student/schedule?date=' + weekday);
+      const shown = personal.payload.subjects.find((row) => row.lesson?.id === lessonId);
+      assert.ok(shown, "the student should have this lesson that day");
+      assert.equal(shown.lesson.teacherNote, note);
+
+      // Too long is refused rather than silently truncated.
+      const tooLong = await teacher.request('/teacher/schedule/day', {
+        method: 'PUT',
+        body: { ...day, lessonId, note: "x".repeat(2001) },
+      });
+      assert.equal(tooLong.status, 400);
+      assert.equal((await read()).note, note, "a refused write must not change the note");
+
+      // Clearing the day takes the note with it.
+      assert.equal((await teacher.request('/teacher/schedule/day', { method: 'PUT', body: { ...day, lessonId: null } })).status, 204);
+      assert.equal((await read()).note, null);
+    });
+
+    it("only an admin can add a makeup lesson and students can read it", async () => {
+      const body = { classId: Number(classId), subjectId: Number(subjectId), scheduledOn: weekend, lessonId };
+      assert.equal((await teacher.request('/teacher/schedule/day', { method: 'PUT', body })).status, 403);
+      assert.equal((await student.request('/teacher/schedule/day', { method: 'PUT', body })).status, 403);
+      const saved = await admin.request('/teacher/schedule/day', { method: 'PUT', body });
+      assert.equal(saved.status, 204, JSON.stringify(saved.payload));
+      const shown = await teacher.request('/teacher/schedule?classId=' + classId + '&subjectId=' + subjectId + '&from=' + weekend + '&to=' + weekend);
+      assert.equal(shown.payload.days[0].lessonId, lessonId);
+      const personal = await student.request('/student/schedule?date=' + weekend);
+      assert.ok(personal.payload.subjects.some((row) => row.lesson?.id === lessonId));
+      const clearing = { ...body, lessonId: null };
+      assert.equal((await teacher.request('/teacher/schedule/day', { method: 'PUT', body: clearing })).status, 403);
+      assert.equal((await admin.request('/teacher/schedule/day', { method: 'PUT', body: clearing })).status, 204);
+      const cleared = await teacher.request('/teacher/schedule?classId=' + classId + '&subjectId=' + subjectId + '&from=' + weekend + '&to=' + weekend);
+      assert.equal(cleared.payload.days[0].lessonId, null);
     });
   });
 
@@ -149,15 +297,113 @@ describe("EJ Learning API", { concurrency: false }, () => {
       assert.equal((await client.request("/teacher/dashboard")).status, 200);
     });
 
+    it("names the subject each dashboard card stands for", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(accountsByRole.TEACHER);
+
+      const res = await client.request("/teacher/dashboard");
+      assert.equal(res.status, 200);
+      const cards = res.payload.classes;
+      assert.ok(cards.length > 0, "expected at least one class card");
+
+      // The card is one subject of one class, and its links carry both. A card
+      // that named the subject only in prose could not point anywhere useful.
+      for (const card of cards) {
+        assert.ok("subjectId" in card, "a card must say which subject it is");
+        assert.ok(
+          card.subjectId === null || Number.isInteger(card.subjectId),
+          `${card.className} gave a subjectId of ${card.subjectId}`,
+        );
+      }
+      assert.ok(
+        cards.some((card) => Number.isInteger(card.subjectId)),
+        "a teacher's own cards are per subject, so at least one carries an id",
+      );
+    });
+
     it("keeps a student out of the teacher's pages", async () => {
       const client = createClient(harness.baseUrl);
       await client.signIn(accountsByRole.STUDENT);
 
-      for (const pathname of ["/teacher/dashboard", "/teacher/lessons", "/admin/materials"]) {
+      for (const pathname of [
+        "/teacher/dashboard",
+        "/teacher/lessons",
+        "/admin/materials",
+        "/admin/skill-map",
+        "/admin/skill-chain",
+      ]) {
         const res = await client.request(pathname);
         assert.ok(
           res.status === 401 || res.status === 403,
           `${pathname} answered ${res.status} to a student`,
+        );
+      }
+    });
+
+    it("shows an admin which topics carry which skills", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(accountsByRole.ADMIN);
+
+      const res = await client.request("/admin/skill-map");
+      assert.equal(res.status, 200);
+
+      const { nodes, unmappedSkills } = res.payload;
+      assert.ok(Array.isArray(nodes) && nodes.length > 0, "expected seeded topics");
+      assert.ok(Array.isArray(unmappedSkills), "expected the orphan list, even if empty");
+
+      // A topic with no skill still has to come back: it is the fault the
+      // screen exists to show, and an inner join would hide it.
+      for (const node of nodes) {
+        assert.ok(typeof node.contentCode === "string" && node.contentCode.length > 0);
+        assert.ok(Array.isArray(node.skills));
+      }
+
+      const mapped = nodes.flatMap((node) => node.skills);
+      assert.ok(mapped.length > 0, "the demo school maps at least one skill");
+      assert.ok(
+        mapped.some((skill) => skill.isPrimary),
+        "a mapped skill should be marked primary",
+      );
+      assert.ok(
+        mapped.every((skill) => typeof skill.mapStatus === "string"),
+        "the link's own status is what decides whether a student sees it",
+      );
+
+      const codes = nodes.flatMap((node) => node.skills.map((skill) => skill.skillCode));
+      const orphanCodes = new Set(unmappedSkills.map((skill) => skill.skillCode));
+      assert.ok(
+        codes.every((code) => !orphanCodes.has(code)),
+        "a skill cannot be both mapped and unmapped",
+      );
+    });
+
+    it("shows an admin the prerequisite chain and what it does not follow", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(accountsByRole.ADMIN);
+
+      const res = await client.request("/admin/skill-chain");
+      assert.equal(res.status, 200);
+
+      const { links, cycles } = res.payload;
+      assert.ok(Array.isArray(links), "expected the link list");
+      assert.ok(Array.isArray(cycles), "expected the cycle list, even if empty");
+      assert.deepEqual(cycles, [], "the seeded chain should not loop");
+
+      for (const link of links) {
+        // followed is the whole point: a link that is not both APPROVED and
+        // REQUIRED sits in the table looking like a decision and changes
+        // nothing, which is exactly what the screen has to say out loud.
+        assert.equal(
+          link.followed,
+          link.status === "APPROVED" && link.relationType === "REQUIRED",
+          `${link.dependencyCode} disagreed about whether remediation follows it`,
+        );
+        assert.equal(typeof link.reason, "string");
+        assert.equal(typeof link.prerequisiteHasLesson, "boolean");
+        assert.notEqual(
+          link.skillCode,
+          link.prerequisiteCode,
+          "a skill cannot be its own prerequisite",
         );
       }
     });
@@ -218,20 +464,112 @@ describe("EJ Learning API", { concurrency: false }, () => {
       assert.equal(res.payload.results[0].correctOptionId, right.optionId);
     });
 
-    it("scores the right answer and records the attempt", async () => {
+    it("refuses a second sitting the same day and keeps the first", async () => {
       const question = paper.questions[0];
       const right = question.options.find((o) => o.text === "2");
 
+      // A quiz may be taken once a day (FR-C5). The right answer is sent this
+      // time, so a refusal cannot be mistaken for a marking failure.
       const res = await client.request("/student/quiz-attempts", {
         method: "POST",
         body: { lessonId: paper.lessonId, answers: [{ itemId: question.itemId, optionId: right.optionId }] },
       });
-      assert.equal(res.status, 201);
-      assert.equal(res.payload.score, res.payload.maxScore);
-      assert.equal(res.payload.results[0].correct, true);
+      assert.equal(res.status, 409, JSON.stringify(res.payload));
+      assert.equal(res.payload.code, "QUIZ_ALREADY_TAKEN");
 
       const rows = await harness.sql("SELECT count(*)::int AS n FROM learning.quiz_attempts");
-      assert.equal(rows[0].n, 2, "both attempts should be stored");
+      assert.equal(rows[0].n, 1, "the refused sitting must not be stored");
+    });
+
+    it("asks only what this day of the skill covers", async () => {
+      const before = (await client.request(`/student/quiz/${paper.lessonId}`)).payload.questions
+        .length;
+      assert.ok(before > 0, "expected the seeded questions");
+
+      // Two sections of the same book: the one this day covers, and a later
+      // one the class has not reached.
+      const [{ id: thisWeek }] = await harness.sql(
+        "INSERT INTO content.source_outline_nodes (source_material_id, outline_code, node_type, title, page_from, page_to, sequence_no, status) SELECT source_material_id, 'MOCK-LOCAL-SEC-A', 'SECTION', 'Энэ долоо хоног', 1, 4, 90, 'APPROVED' FROM content.source_outline_nodes ORDER BY id LIMIT 1 RETURNING id",
+      );
+      const [{ id: nextWeek }] = await harness.sql(
+        "INSERT INTO content.source_outline_nodes (source_material_id, outline_code, node_type, title, page_from, page_to, sequence_no, status) SELECT source_material_id, 'MOCK-LOCAL-SEC-B', 'SECTION', 'Дараа долоо хоног', 5, 8, 91, 'APPROVED' FROM content.source_outline_nodes ORDER BY id LIMIT 1 RETURNING id",
+      );
+
+      const [{ id: itemId }] = await harness.sql(
+        "SELECT i.id FROM assessment.diagnostic_items i JOIN learning.daily_lessons dl ON dl.core_skill_id = i.skill_id WHERE dl.id = $1 ORDER BY i.item_order LIMIT 1",
+        [paper.lessonId],
+      );
+      await harness.sql(
+        "UPDATE learning.daily_lessons SET source_outline_node_id = $2 WHERE id = $1",
+        [paper.lessonId, thisWeek],
+      );
+      await harness.sql(
+        "UPDATE assessment.diagnostic_items SET source_outline_node_id = $2 WHERE id = $1",
+        [itemId, nextWeek],
+      );
+
+      const narrowed = (await client.request(`/student/quiz/${paper.lessonId}`)).payload.questions;
+      assert.equal(narrowed.length, before - 1, "the later section's question should drop out");
+      assert.ok(
+        !narrowed.some((question) => question.itemId === Number(itemId)),
+        "the dropped question is the one from the later section",
+      );
+
+      // The same question, moved to this day's section, comes back.
+      await harness.sql(
+        "UPDATE assessment.diagnostic_items SET source_outline_node_id = $2 WHERE id = $1",
+        [itemId, thisWeek],
+      );
+      assert.equal(
+        (await client.request(`/student/quiz/${paper.lessonId}`)).payload.questions.length,
+        before,
+      );
+
+      // A question that names no section belongs to the whole skill and is
+      // asked on every one of its days.
+      await harness.sql(
+        "UPDATE assessment.diagnostic_items SET source_outline_node_id = NULL WHERE id = $1",
+        [itemId],
+      );
+      assert.equal(
+        (await client.request(`/student/quiz/${paper.lessonId}`)).payload.questions.length,
+        before,
+        "an unsectioned question is asked on every day of its skill",
+      );
+
+      await harness.sql(
+        "UPDATE learning.daily_lessons SET source_outline_node_id = NULL WHERE id = $1",
+        [paper.lessonId],
+      );
+    });
+
+    it("says what kind of assessment the paper is", async () => {
+      // Everything imported so far is the check at the end of a lesson, which
+      // is the default the column carries.
+      const asSeeded = await client.request(`/student/quiz/${paper.lessonId}`);
+      assert.equal(asSeeded.status, 200);
+      assert.equal(asSeeded.payload.kind, "LESSON");
+
+      // A school runs more than one kind, and the paper has to say which.
+      await harness.sql(
+        "UPDATE learning.daily_lessons SET assessment_kind = 'MONTHLY' WHERE id = $1",
+        [paper.lessonId],
+      );
+      const monthly = await client.request(`/student/quiz/${paper.lessonId}`);
+      assert.equal(monthly.payload.kind, "MONTHLY");
+
+      await harness.sql(
+        "UPDATE learning.daily_lessons SET assessment_kind = 'LESSON' WHERE id = $1",
+        [paper.lessonId],
+      );
+    });
+
+    it("says on the paper that today's sitting is spent, with the score", async () => {
+      const res = await client.request(`/student/quiz/${paper.lessonId}`);
+      assert.equal(res.status, 200);
+      assert.equal(res.payload.takenToday, true);
+      assert.equal(res.payload.previousScore, 0, "the first sitting scored zero");
+      assert.ok(res.payload.previousMaxScore > 0);
     });
 
     it("shows the attempts to that class's teacher, and nobody else's", async () => {
@@ -843,6 +1181,140 @@ ${run.output}`);
       await student.signIn(accountsByRole.STUDENT);
       const none = await student.request("/auth/me");
       assert.equal(none.payload.user.takesLessons, false);
+    });
+  });
+
+  describe("the term today falls in", () => {
+    it("names the school year for anyone signed in, and nobody else", async () => {
+      const anon = createClient(harness.baseUrl);
+      assert.equal((await anon.request("/term/current")).status, 401);
+
+      for (const account of [accountsByRole.STUDENT, accountsByRole.TEACHER]) {
+        const client = createClient(harness.baseUrl);
+        await client.signIn(account);
+        const res = await client.request("/term/current");
+        assert.equal(res.status, 200);
+        // Null is a real answer: a day between terms belongs to none of them.
+        if (res.payload !== null) {
+          assert.ok(res.payload.schoolYear, "a term must name its school year");
+          assert.ok(res.payload.termNumber >= 1 && res.payload.termNumber <= 4);
+          assert.ok(res.payload.startsOn <= res.payload.endsOn);
+        }
+      }
+    });
+  });
+
+  describe("a child's own plan for the day", () => {
+    let client;
+
+    before(async () => {
+      client = createClient(harness.baseUrl);
+      await client.signIn(accountsByRole.STUDENT);
+    });
+
+    it("starts empty, keeps what is written, and replaces it", async () => {
+      const empty = await client.request("/student/plan");
+      assert.equal(empty.status, 200);
+      assert.match(empty.payload.date, /^\d{4}-\d{2}-\d{2}$/);
+      assert.equal(empty.payload.body, "", "a day nobody has planned is blank, not null");
+
+      const date = empty.payload.date;
+      const first = await client.request("/student/plan", {
+        method: "PUT",
+        body: { date, body: "  20 минут ном унших  " },
+      });
+      assert.equal(first.status, 200);
+      assert.equal(first.payload.body, "20 минут ном унших", "whitespace is trimmed");
+      assert.equal((await client.request("/student/plan")).payload.body, "20 минут ном унших");
+
+      // One plan a day: writing again replaces rather than adds.
+      await client.request("/student/plan", {
+        method: "PUT",
+        body: { date, body: "Үржүүлэхийн хүрд давтах" },
+      });
+      assert.equal((await client.request("/student/plan")).payload.body, "Үржүүлэхийн хүрд давтах");
+      const [rows] = await harness.sql(
+        "SELECT count(*)::int AS n FROM learning.student_day_plans",
+      );
+      assert.equal(rows.n, 1, "the second write must replace the first");
+    });
+
+    it("treats a blank plan as no plan", async () => {
+      const { date } = (await client.request("/student/plan")).payload;
+      await client.request("/student/plan", { method: "PUT", body: { date, body: "   " } });
+
+      assert.equal((await client.request("/student/plan")).payload.body, "");
+      const [rows] = await harness.sql(
+        "SELECT count(*)::int AS n FROM learning.student_day_plans",
+      );
+      assert.equal(rows.n, 0, "clearing the box should leave no row behind");
+    });
+
+    it("refuses a bad date and more text than the column takes", async () => {
+      assert.equal((await client.request("/student/plan?date=2026-02-30")).status, 400);
+
+      const tooLong = await client.request("/student/plan", {
+        method: "PUT",
+        body: { date: "2026-09-21", body: "x".repeat(2001) },
+      });
+      assert.equal(tooLong.status, 400);
+    });
+
+    it("is the student's own: staff have no way to read it", async () => {
+      const teacher = createClient(harness.baseUrl);
+      await teacher.signIn(byName["demo-teacher"]);
+      const refused = await teacher.request("/student/plan");
+      assert.ok(
+        refused.status === 401 || refused.status === 403,
+        `a teacher reading a child's plan answered ${refused.status}`,
+      );
+    });
+  });
+
+  // Last on purpose: it wipes this student's quiz history to measure a clean
+  // first sitting, which would pull the ground out from under any test that
+  // counted attempts.
+  describe("one clean sitting is enough while a quiz may only be taken once", () => {
+    it("marks the skill mastered on the first full-marks attempt", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(accountsByRole.STUDENT);
+
+      const [{ id: studentId }] = await harness.sql(
+        "SELECT id FROM core.students WHERE student_code = 'MOCK-LOCAL-STUDENT'",
+      );
+      await harness.sql("DELETE FROM learning.quiz_attempts WHERE student_id = $1", [studentId]);
+      await harness.sql(
+        "DELETE FROM learning.student_skill_mastery WHERE student_id = $1",
+        [studentId],
+      );
+
+      const today = await client.request("/student/today");
+      const lesson = today.payload.subjects.map((s) => s.lesson).find(Boolean);
+      const paper = await client.request(`/student/quiz/${lesson.id}`);
+      assert.equal(paper.status, 200);
+
+      // Every question right, in one sitting.
+      const answers = paper.payload.questions.map((question) => ({
+        itemId: question.itemId,
+        optionId: question.options.find((option) => option.text === "2")?.optionId
+          ?? question.options[0].optionId,
+      }));
+      const attempt = await client.request("/student/quiz-attempts", {
+        method: "POST",
+        body: { lessonId: paper.payload.lessonId, answers },
+      });
+      assert.equal(attempt.status, 201);
+      assert.equal(attempt.payload.score, attempt.payload.maxScore, "the sitting must be perfect");
+
+      const progress = await client.request("/student/progress");
+      assert.equal(progress.status, 200);
+      const skill = progress.payload.skills.find((row) => row.code === "MOCK-LOCAL-SKILL");
+      assert.ok(skill, "expected the seeded skill on the progress page");
+      assert.equal(
+        skill.status,
+        "mastered",
+        "a single perfect sitting has to count, or nobody ever masters anything",
+      );
     });
   });
 });

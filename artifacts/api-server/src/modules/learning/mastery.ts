@@ -26,11 +26,17 @@ export const MASTERED_AT = 80;
 export const DEVELOPING_AT = 50;
 
 /**
- * Mastery means repeatable, so it is never awarded on a single sitting - three
- * lucky guesses out of three would otherwise close a skill for good. A student
- * scoring 100% first time is DEVELOPING until they do it again.
+ * How many sittings a skill has to be held across before it counts as mastered.
+ *
+ * Two would be the better rule - mastery means repeatable, and three lucky
+ * guesses out of three should not close a skill for good. It cannot be two
+ * while a quiz may only be taken once (FR-C5): the second sitting would never
+ * arrive, every child would sit at DEVELOPING for ever, and remediation would
+ * read the whole school as a gap. One is therefore what the retry rule allows,
+ * not what the measurement wants, and it goes back up the day a quiz can be
+ * taken twice.
  */
-export const SITTINGS_FOR_MASTERY = 2;
+export const SITTINGS_FOR_MASTERY = 1;
 
 export type SkillEvidence = {
   skillId: number;

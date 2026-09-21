@@ -15,6 +15,118 @@ const storageRoot = () =>
 
 export const listMaterials = () => repository.adminMaterials();
 
+/**
+ * The topic-to-skill mapping, assembled for a screen that only reads it.
+ *
+ * The rows arrive flat because one query answers the whole question; the
+ * grouping happens here rather than in SQL so that a topic with no skill keeps
+ * its place in the list instead of disappearing into an empty aggregate.
+ */
+export async function skillMap() {
+  const rows = await repository.skillMapRows();
+  const nodes: {
+    contentCode: string;
+    name: string;
+    levelType: string;
+    subjectName: string;
+    status: string;
+    skills: {
+      skillCode: string;
+      name: string;
+      status: string;
+      isPrimary: boolean;
+      mapStatus: string;
+      lessonCount: number;
+    }[];
+  }[] = [];
+  const byNode = new Map<number, (typeof nodes)[number]>();
+
+  for (const row of rows) {
+    let node = byNode.get(row.nodeId);
+    if (!node) {
+      node = {
+        contentCode: row.contentCode,
+        name: row.nodeName,
+        levelType: row.levelType,
+        subjectName: row.subjectName,
+        status: row.nodeStatus,
+        skills: [],
+      };
+      byNode.set(row.nodeId, node);
+      nodes.push(node);
+    }
+    // The LEFT JOIN leaves these null for a topic nothing maps to.
+    if (row.skillCode === null) continue;
+    node.skills.push({
+      skillCode: row.skillCode,
+      name: row.skillName ?? row.skillCode,
+      status: row.skillStatus ?? "DRAFT",
+      isPrimary: row.isPrimary ?? false,
+      mapStatus: row.mapStatus ?? "DRAFT",
+      lessonCount: row.lessonCount ?? 0,
+    });
+  }
+
+  return { nodes, unmappedSkills: await repository.unmappedSkills() };
+}
+
+/**
+ * The prerequisite chain, plus any loops in the part of it that is actually
+ * walked.
+ *
+ * The database forbids a skill naming itself and nothing else, and the
+ * remediation walk is a recursive query stopped only by its depth limit - it
+ * keeps no record of where it has been. A two-step loop therefore costs
+ * nothing at query time and quietly produces a recommendation that sends a
+ * child round in a circle, so the loops are found here and named, which is the
+ * one thing a screen can do about them today.
+ */
+export async function skillChain() {
+  const rows = await repository.skillChainLinks();
+  const links = rows.map((row) => ({
+    ...row,
+    followed: row.status === "APPROVED" && row.relationType === "REQUIRED",
+  }));
+
+  // Only the followed links can trap the walk; the rest are documentation.
+  const edges = new Map<string, string[]>();
+  for (const link of links) {
+    if (!link.followed) continue;
+    edges.set(link.skillCode, [...(edges.get(link.skillCode) ?? []), link.prerequisiteCode]);
+  }
+
+  const cycles: string[][] = [];
+  const seen = new Set<string>();
+  const found = new Set<string>();
+  const path: string[] = [];
+  const onPath = new Set<string>();
+
+  const walk = (code: string) => {
+    if (onPath.has(code)) {
+      const cycle = path.slice(path.indexOf(code));
+      // One loop is reachable from every skill on it; keep the first spelling.
+      const key = [...cycle].sort().join(">");
+      if (!found.has(key)) {
+        found.add(key);
+        cycles.push(cycle);
+      }
+      return;
+    }
+    if (seen.has(code)) return;
+
+    seen.add(code);
+    path.push(code);
+    onPath.add(code);
+    for (const next of edges.get(code) ?? []) walk(next);
+    onPath.delete(code);
+    path.pop();
+  };
+
+  for (const code of edges.keys()) walk(code);
+
+  return { links, cycles };
+}
+
 export async function materialOutline(materialId: number) {
   const [header] = await repository.materialHeader(materialId);
   if (!header) {

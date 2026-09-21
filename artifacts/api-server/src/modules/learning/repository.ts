@@ -20,6 +20,7 @@ export type LessonRow = {
   guidedPractice: string | null;
   independentPractice: string | null;
   studentMessage: string | null;
+  teacherNote: string | null;
   estimatedMinutes: number | null;
   materialId: number | null;
   materialTitle: string | null;
@@ -48,7 +49,7 @@ export const todayLesson = (studentId: number, onDate: string) =>
        dl.remember_mn AS remember, dl.worked_example_mn AS "workedExample",
        dl.guided_practice_mn AS "guidedPractice",
        dl.independent_practice_mn AS "independentPractice",
-       dl.student_message_mn AS "studentMessage",
+       dl.student_message_mn AS "studentMessage", cs.note AS "teacherNote",
        dl.estimated_minutes::int AS "estimatedMinutes",
        book.material_id::int AS "materialId", book.material_title AS "materialTitle",
        book.chapter_title AS "chapterTitle",
@@ -134,7 +135,7 @@ export const anyClass = (classId: number) =>
   );
 
 /**
- * Every teaching day in the range, whether or not it has a lesson yet.
+ * Every calendar day and subject in the range, whether or not it has a lesson yet.
  *
  * It used to return only the rows that existed, which meant an empty day was
  * not on the screen and so could not be filled: a teacher wanting Friday's
@@ -142,8 +143,8 @@ export const anyClass = (classId: number) =>
  * joined onto them, so an empty day is a row with a null lesson - something to
  * choose, rather than an absence to wonder about.
  *
- * Weekends are left out. They are not school days, and listing them invites
- * scheduling work nobody will be there to do.
+ * Every calendar day is present, including weekends. Each subject gets an
+ * empty slot even before its first lesson is scheduled.
  *
  * Scoped by subject because a class now studies several: editing the maths
  * timetable must not show, or offer to overwrite, Tuesday's Mongolian.
@@ -172,19 +173,27 @@ export const scheduleForClass = (
   }>(
     // generate_series over an interval yields timestamps, so the cast to date
     // is what keeps this a calendar day rather than "2026-09-10 00:00:00".
-    `SELECT d.day::date::text AS "scheduledOn",
-       cs.subject_id::int AS "subjectId", sub.name_mn AS subject,
+    `WITH visible_subjects AS (
+       SELECT sub.id, sub.name_mn FROM core.subjects sub
+       WHERE ($4::bigint[] IS NOT NULL AND sub.id = ANY($4::bigint[]))
+          OR ($4::bigint[] IS NULL AND sub.id IN (
+            SELECT ct.subject_id FROM core.class_teachers ct
+            WHERE ct.class_id = $1::bigint AND ct.is_active AND ct.subject_id IS NOT NULL
+            UNION
+            SELECT cs.subject_id FROM learning.class_schedule cs WHERE cs.class_id = $1::bigint
+          ))
+     )
+     SELECT d.day::date::text AS "scheduledOn",
+       sub.id::int AS "subjectId", sub.name_mn AS subject,
        dl.id::int AS "lessonId",
        dl.lesson_code AS "lessonCode", dl.lesson_type AS "lessonType",
        sk.name_mn AS "skillName", cs.note
      FROM generate_series($2::date, $3::date, interval '1 day') AS d(day)
+     LEFT JOIN visible_subjects sub ON true
      LEFT JOIN learning.class_schedule cs
-       ON cs.class_id = $1::bigint AND cs.scheduled_on = d.day::date
-      AND ($4::bigint[] IS NULL OR cs.subject_id = ANY($4::bigint[]))
-     LEFT JOIN core.subjects sub ON sub.id = cs.subject_id
+       ON cs.class_id = $1::bigint AND cs.scheduled_on = d.day::date AND cs.subject_id = sub.id
      LEFT JOIN learning.daily_lessons dl ON dl.id = cs.daily_lesson_id
      LEFT JOIN content.skills sk ON sk.id = dl.core_skill_id
-     WHERE extract(isodow FROM d.day) <= 5
      ORDER BY d.day, sub.name_mn NULLS FIRST`,
     [classId, from, to, subjectIds],
   );
@@ -435,19 +444,27 @@ export async function setScheduleDay(row: {
   dailyLessonId: number;
   scheduledOn: string;
   createdBy: number | null;
+  note: string | null;
+  // Whether the caller said anything about the note at all. Swapping Tuesday's
+  // lesson must not silently discard what the teacher wrote for Tuesday, so an
+  // absent field leaves the existing note standing and only an explicit null
+  // clears it.
+  replaceNote: boolean;
 }) {
   await db.execute(sql`
     INSERT INTO learning.class_schedule
-      (class_id, term_id, daily_lesson_id, scheduled_on, subject_id, created_by)
+      (class_id, term_id, daily_lesson_id, scheduled_on, subject_id, created_by, note)
     SELECT ${row.classId}, ${row.termId}, ${row.dailyLessonId}, ${row.scheduledOn}::date,
-      sk.subject_id, ${row.createdBy}
+      sk.subject_id, ${row.createdBy}, ${row.note}
     FROM learning.daily_lessons dl
     JOIN content.skills sk ON sk.id = dl.core_skill_id
     WHERE dl.id = ${row.dailyLessonId}
     ON CONFLICT ON CONSTRAINT class_schedule_class_day_key DO UPDATE SET
       daily_lesson_id = EXCLUDED.daily_lesson_id,
       term_id = EXCLUDED.term_id,
-      created_by = EXCLUDED.created_by`);
+      created_by = EXCLUDED.created_by,
+      note = CASE WHEN ${row.replaceNote} THEN EXCLUDED.note
+                  ELSE learning.class_schedule.note END`);
 }
 
 export const termCovering = (isoDate: string) =>
@@ -647,6 +664,8 @@ export const lessonById = (lessonId: number) =>
        dl.guided_practice_mn AS "guidedPractice",
        dl.independent_practice_mn AS "independentPractice",
        dl.student_message_mn AS "studentMessage",
+       -- Read outside the timetable: there is no class day to carry a note.
+       NULL::text AS "teacherNote",
        dl.estimated_minutes::int AS "estimatedMinutes",
        book.material_id::int AS "materialId", book.material_title AS "materialTitle",
        book.chapter_title AS "chapterTitle",
@@ -743,6 +762,17 @@ export type QuizItemRow = {
  * questions rather than owning them - which is what lets the same question
  * serve the lesson and, later, a diagnostic covering that skill.
  */
+/**
+ * The questions for a lesson: its skill's, narrowed to the part of the book
+ * this day covers.
+ *
+ * The skill is what a question measures, so it is the join that cannot be
+ * dropped. The section is what stops a skill taught over five days from asking
+ * all five days' questions on the first: a lesson that names its section gets
+ * that section's questions plus the ones written for the skill as a whole, and
+ * a lesson that names none gets everything, which is how every imported lesson
+ * behaves until somebody says otherwise.
+ */
 export const quizItemsForLesson = (lessonId: number) =>
   readRows<QuizItemRow>(
     `SELECT i.id::int AS "itemId", i.skill_id::int AS "skillId", i.title_mn AS prompt,
@@ -751,6 +781,9 @@ export const quizItemsForLesson = (lessonId: number) =>
      FROM learning.daily_lessons dl
      JOIN assessment.diagnostic_items i ON i.skill_id = dl.core_skill_id
        AND i.status = 'APPROVED'
+       AND (dl.source_outline_node_id IS NULL
+            OR i.source_outline_node_id IS NULL
+            OR i.source_outline_node_id = dl.source_outline_node_id)
      JOIN assessment.diagnostic_item_options o ON o.diagnostic_item_id = i.id
      WHERE dl.id = $1::bigint
      ORDER BY i.item_order, i.id, o.sequence_no`,
@@ -774,8 +807,9 @@ export const lessonReachableByStudent = async (lessonId: number, studentId: numb
   ).length > 0;
 
 export const lessonHeader = (lessonId: number) =>
-  readRows<{ lessonCode: string; skillName: string }>(
-    `SELECT dl.lesson_code AS "lessonCode", sk.name_mn AS "skillName"
+  readRows<{ lessonCode: string; skillName: string; assessmentKind: string }>(
+    `SELECT dl.lesson_code AS "lessonCode", sk.name_mn AS "skillName",
+       dl.assessment_kind::text AS "assessmentKind"
      FROM learning.daily_lessons dl
      JOIN content.skills sk ON sk.id = dl.core_skill_id
      WHERE dl.id = $1::bigint`,
@@ -1136,3 +1170,71 @@ export const subjectsOfClass = (classId: number) =>
       WHERE ct.class_id = $1::bigint AND ct.is_active AND ct.subject_id IS NOT NULL`,
     [classId],
   ).then((rows) => rows.map((row) => row.subjectId));
+
+/**
+ * This student's sitting of this quiz today, if they have had one.
+ *
+ * A quiz may be taken once a day (FR-C5). The day is the school's, not the
+ * server's: `submitted_at` is a timestamptz, and comparing it against a date
+ * without naming the zone would end one child's day at 08:00 and another's at
+ * midnight depending on where the process happens to run.
+ */
+export const attemptOnDate = (studentId: number, lessonId: number, onDate: string) =>
+  readRows<{ id: number; score: number; maxScore: number; submittedAt: string }>(
+    `SELECT id::int AS id, score::int AS score, max_score::int AS "maxScore",
+       submitted_at AS "submittedAt"
+     FROM learning.quiz_attempts
+     WHERE student_id = $1::bigint AND daily_lesson_id = $2::bigint
+       AND (submitted_at AT TIME ZONE 'Asia/Ulaanbaatar')::date = $3::date
+     ORDER BY submitted_at DESC
+     LIMIT 1`,
+    [studentId, lessonId, onDate],
+  );
+
+/** This student's own plan for a day, if they have written one. */
+export const dayPlan = (studentId: number, onDate: string) =>
+  readRows<{ body: string }>(
+    `SELECT body FROM learning.student_day_plans
+     WHERE student_id = $1::bigint AND plan_on = $2::date`,
+    [studentId, onDate],
+  );
+
+/**
+ * Writes a day's plan, replacing whatever was there.
+ *
+ * An empty plan is an absent row rather than an empty string: a child who
+ * clears the box has no plan that day, and a row saying so would have to be
+ * filtered out of every count later.
+ */
+export async function saveDayPlan(studentId: number, onDate: string, body: string | null) {
+  if (body === null) {
+    await db.execute(sql`
+      DELETE FROM learning.student_day_plans
+      WHERE student_id = ${studentId} AND plan_on = ${onDate}::date`);
+    return;
+  }
+  await db.execute(sql`
+    INSERT INTO learning.student_day_plans (student_id, plan_on, body)
+    VALUES (${studentId}, ${onDate}::date, ${body})
+    ON CONFLICT ON CONSTRAINT student_day_plans_student_day_key DO UPDATE SET
+      body = EXCLUDED.body,
+      updated_at = now()`);
+}
+
+/** The term a date falls in, with the year and name a screen can print. */
+export const termOn = (isoDate: string) =>
+  readRows<{
+    schoolYear: string;
+    termNumber: number;
+    name: string;
+    startsOn: string;
+    endsOn: string;
+  }>(
+    `SELECT school_year AS "schoolYear", term_number::int AS "termNumber",
+       name_mn AS name, starts_on::text AS "startsOn", ends_on::text AS "endsOn"
+     FROM learning.terms
+     WHERE $1::date BETWEEN starts_on AND ends_on
+     ORDER BY term_number
+     LIMIT 1`,
+    [isoDate],
+  );

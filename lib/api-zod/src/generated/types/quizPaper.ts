@@ -5,6 +5,7 @@
  * EJ Learning adaptive learning API
  * OpenAPI spec version: 0.1.0
  */
+import type { QuizPaperKind } from './quizPaperKind';
 import type { QuizQuestion } from './quizQuestion';
 
 export interface QuizPaper {
@@ -12,4 +13,12 @@ export interface QuizPaper {
   lessonCode: string;
   skillName: string;
   questions: QuizQuestion[];
+  /** Which sort of assessment this is - the check at the end of a lesson, a unit test, a monthly one, a diagnostic. Recorded against the lesson that carries the questions; it is not yet an assessment of its own, with an owner and a window. */
+  kind: QuizPaperKind;
+  /** Whether this student has already sat this quiz today. A quiz may be taken once a day, so the paper says so up front rather than letting a child answer everything again and be refused at the end. */
+  takenToday: boolean;
+  /** @nullable */
+  previousScore: number | null;
+  /** @nullable */
+  previousMaxScore: number | null;
 }

@@ -13,6 +13,11 @@ export interface TeacherClassToday {
   gradeLevel: number;
   subjectName: string;
   /**
+     * Null for an administrator's card, which stands for the whole class rather than one subject. Carried so a link from this card can open the timetable or the results on the subject the card is about, instead of dropping the reader on whatever the page picks first.
+     * @nullable
+     */
+  subjectId: number | null;
+  /**
      * The proficiency ladder this subject uses, or null where it uses none.
      * @nullable
      */

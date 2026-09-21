@@ -21,11 +21,15 @@ import {
 import { usersInCore } from "./identity";
 
 /**
- * The three terms of a school year.
+ * The four terms of a school year.
  *
  * A book is divided across them per grade, so the term is what a schedule
  * hangs off. Kept as rows rather than a computed date range because term
  * boundaries move: they are set by the school each year, not by a formula.
+ *
+ * Four, not three: the school year has four terms and the content is what gets
+ * squeezed into three of them. The check used to say three, which would have
+ * refused the fourth term outright.
  */
 export const termsInLearning = learning.table(
   "terms",
@@ -48,7 +52,7 @@ export const termsInLearning = learning.table(
   },
   (table) => [
     unique("terms_year_number_key").on(table.schoolYear, table.termNumber),
-    check("terms_term_number_check", sql`term_number BETWEEN 1 AND 3`),
+    check("terms_term_number_check", sql`term_number BETWEEN 1 AND 4`),
     check("terms_range_check", sql`ends_on >= starts_on`),
   ],
 );
@@ -212,5 +216,55 @@ export const studentAssignmentsInLearning = learning.table(
       foreignColumns: [usersInCore.id],
       name: "student_assignments_assigned_by_fkey",
     }),
+  ],
+);
+
+/**
+ * What a child means to do with their own day.
+ *
+ * Not the school's work: the lessons, the personal assignment and the quiz all
+ * come from somewhere else and are already recorded. This is the line a child
+ * writes for themselves - "read twenty minutes", "finish the model" - and it
+ * is deliberately free text. Tying it to a skill would make it a fifth kind of
+ * assignment and put the child's own plan under the same approval and scoring
+ * machinery as the school's, which is not what was asked for.
+ *
+ * One row per student per day, so "today's plan" has one answer and editing it
+ * rewrites rather than accumulates.
+ */
+export const studentDayPlansInLearning = learning.table(
+  "student_day_plans",
+  {
+    id: bigint({ mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity({
+        name: "learning.student_day_plans_id_seq",
+        startWith: 1,
+        increment: 1,
+        minValue: 1,
+        cache: 1,
+      }),
+    studentId: bigint("student_id", { mode: "number" }).notNull(),
+    planOn: date("plan_on").notNull(),
+    body: text().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("student_day_plans_student_day_key").on(table.studentId, table.planOn),
+    index("idx_student_day_plans_day").using(
+      "btree",
+      table.planOn.asc().nullsLast(),
+    ),
+    foreignKey({
+      columns: [table.studentId],
+      foreignColumns: [studentsInCore.id],
+      name: "student_day_plans_student_id_fkey",
+    }).onDelete("cascade"),
+    check("student_day_plans_body_check", sql`char_length(body) <= 2000`),
   ],
 );

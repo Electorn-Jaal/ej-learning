@@ -378,11 +378,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /student/schedule:
+    get:
+      operationId: getStudentSchedule
+      tags: [student]
+      summary: The signed-in student's class lessons and personal work for one day
+      parameters:
+        - name: date
+          in: query
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+          description: Calendar date in Ulaanbaatar, defaults to today
+      responses:
+        "200":
+          description: The student's own schedule for the selected day
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentToday"
+        "400":
+          description: Invalid calendar date
+        "401":
+          description: Not signed in
+        "403":
+          description: Not a linked student
   /teacher/schedule:
     get:
       operationId: getTeacherSchedule
       tags: [teacher]
-      summary: A class's scheduled lessons over a date range
+      summary: A class's calendar days and subject slots, including blank and weekend rows
       parameters:
         - name: classId
           in: query
@@ -793,7 +818,8 @@ paths:
       summary: Set, replace or clear one day's lesson
       description: >
         The teacher's correction surface. A null lessonId clears the day, which
-        is how a holiday or a school event is recorded.
+        is how a holiday or a school event is recorded. Weekend lessons may only
+        be assigned, changed, or cleared by an administrator.
       requestBody:
         required: true
         content:
@@ -829,6 +855,58 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/AdminMaterial"
+        "403":
+          description: Not an administrator
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /admin/skill-map:
+    get:
+      operationId: getSkillMap
+      tags: [admin]
+      summary: Which topics carry which skills, and what is missing
+      description: >
+        Read-only. Nothing in the product shows this mapping today, yet every
+        lesson reaches its book pages through it and every mastery score is
+        keyed on the skill it names. An import that lands the topics and the
+        skills but drops the links between them leaves a system that can
+        timetable lessons and cannot measure anything - and there is currently
+        no way to see that has happened short of writing SQL.
+      responses:
+        "200":
+          description: The mapping and its gaps
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillMap"
+        "403":
+          description: Not an administrator
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /admin/skill-chain:
+    get:
+      operationId: getSkillChain
+      tags: [admin]
+      summary: Which skill a skill depends on, and whether the chain works
+      description: >
+        Read-only. The remediation walk follows these links to decide what a
+        struggling child should study instead, five levels back at most, and
+        until now nothing in the product showed them. Three things about the
+        chain are invisible and each breaks it silently: a link that is not
+        REQUIRED and APPROVED is never followed, a prerequisite with no
+        approved web-ready lesson ends the walk, and a cycle is only stopped by
+        the depth limit - the database blocks a skill pointing at itself and
+        nothing more.
+      responses:
+        "200":
+          description: The chain, with the links that do nothing marked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SkillChain"
         "403":
           description: Not an administrator
           content:
@@ -1022,6 +1100,78 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /term/current:
+    get:
+      operationId: getCurrentTerm
+      tags: [session]
+      summary: The term today falls in
+      description: >
+        Read from learning.terms rather than worked out from the month: the
+        school sets its own term boundaries each year and they move. Null when
+        today falls outside every recorded term, which is what a holiday
+        between terms looks like, and what an unseeded database looks like too.
+      responses:
+        "200":
+          description: The term, or null
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/Term"
+                  - type: "null"
+  /student/plan:
+    get:
+      operationId: getStudentPlan
+      tags: [student]
+      summary: What this student wrote for themselves for a day
+      description: >
+        The child's own plan, which is not the school's work. Free text and
+        private to them: no teacher endpoint reads this, and none should until
+        somebody decides a teacher ought to see it.
+      parameters:
+        - name: date
+          in: query
+          required: false
+          description: Defaults to today in Ulaanbaatar.
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+      responses:
+        "200":
+          description: The plan, empty when nothing has been written
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentPlan"
+        "400":
+          description: A date that is not a date
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    put:
+      operationId: saveStudentPlan
+      tags: [student]
+      summary: Write or replace a day's plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StudentPlanInput"
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentPlan"
+        "400":
+          description: A bad date, or more text than the column takes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /student/quiz/{lessonId}:
     get:
       operationId: getQuizPaper
@@ -1126,6 +1276,148 @@ components:
         pageOffset:
           type: integer
       required: [materialId, pageOffset]
+    SkillChainLink:
+      type: object
+      properties:
+        dependencyCode:
+          type: string
+        skillCode:
+          type: string
+        skillName:
+          type: string
+        prerequisiteCode:
+          type: string
+        prerequisiteName:
+          type: string
+        subjectName:
+          type: string
+        relationType:
+          description: >
+            REQUIRED or RECOMMENDED. Only REQUIRED is walked; a RECOMMENDED
+            link is a note for whoever plans a year.
+          type: string
+        importance:
+          description: Recorded, but the remediation walk does not read it.
+          type: string
+        status:
+          type: string
+        reason:
+          description: Why this prerequisite. The column is NOT NULL, so there is always one.
+          type: string
+        followed:
+          description: >
+            True when this link is both APPROVED and REQUIRED - that is, when
+            remediation actually walks it. Everything else is documentation.
+          type: boolean
+        prerequisiteHasLesson:
+          description: >
+            Whether the prerequisite has an approved, web-ready lesson. Without
+            one the walk reaches a dead end and keeps looking further back.
+          type: boolean
+      required:
+        - dependencyCode
+        - skillCode
+        - skillName
+        - prerequisiteCode
+        - prerequisiteName
+        - subjectName
+        - relationType
+        - importance
+        - status
+        - reason
+        - followed
+        - prerequisiteHasLesson
+    SkillChain:
+      type: object
+      properties:
+        links:
+          type: array
+          items:
+            $ref: "#/components/schemas/SkillChainLink"
+        cycles:
+          description: >
+            Loops among the followed links, each given as the skill codes
+            around it. The database only forbids a skill pointing at itself, so
+            a two-step loop is possible; the walk survives it on the depth
+            limit alone and returns nonsense.
+          type: array
+          items:
+            type: array
+            items:
+              type: string
+      required: [links, cycles]
+    SkillMapSkill:
+      type: object
+      properties:
+        skillCode:
+          type: string
+        name:
+          type: string
+        status:
+          description: The skill's own review status. Only APPROVED skills reach a student.
+          type: string
+        isPrimary:
+          description: >
+            The one skill a topic is mainly about. It decides which book pages
+            open with the lesson, so a topic carrying two of them is a fault
+            even though the database permits it.
+          type: boolean
+        mapStatus:
+          description: >
+            The link's own review status, separate from the skill's. Anything
+            but APPROVED is invisible to students.
+          type: string
+        lessonCount:
+          type: integer
+      required: [skillCode, name, status, isPrimary, mapStatus, lessonCount]
+    SkillMapNode:
+      type: object
+      properties:
+        contentCode:
+          type: string
+        name:
+          type: string
+        levelType:
+          description: DOMAIN, UNIT, TOPIC, SUBTOPIC or SEGMENT.
+          type: string
+        subjectName:
+          type: string
+        status:
+          type: string
+        skills:
+          type: array
+          items:
+            $ref: "#/components/schemas/SkillMapSkill"
+      required: [contentCode, name, levelType, subjectName, status, skills]
+    SkillMapOrphanSkill:
+      type: object
+      properties:
+        skillCode:
+          type: string
+        name:
+          type: string
+        subjectName:
+          type: string
+        status:
+          type: string
+        lessonCount:
+          description: >
+            Lessons written against a skill no topic carries. They can be
+            taught, but nothing will find them a page in a book.
+          type: integer
+      required: [skillCode, name, subjectName, status, lessonCount]
+    SkillMap:
+      type: object
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/SkillMapNode"
+        unmappedSkills:
+          type: array
+          items:
+            $ref: "#/components/schemas/SkillMapOrphanSkill"
+      required: [nodes, unmappedSkills]
     AdminMaterial:
       type: object
       properties:
@@ -1297,6 +1589,15 @@ components:
         lessonId:
           description: null clears the day.
           type: ["integer", "null"]
+        note:
+          description: >
+            What the teacher wants the class to know about this day - which
+            pages to read, which exercises to do, what to watch out for. The
+            student sees it. Leave the field out to keep whatever note is
+            already there; send null or an empty string to remove it. Clearing
+            the day removes the note with it.
+          type: ["string", "null"]
+          maxLength: 2000
       required: [classId, scheduledOn, lessonId]
     QuizOption:
       type: object
@@ -1318,6 +1619,40 @@ components:
           items:
             $ref: "#/components/schemas/QuizOption"
       required: [itemId, prompt, options]
+    Term:
+      type: object
+      properties:
+        schoolYear:
+          type: string
+        termNumber:
+          type: integer
+        name:
+          type: string
+        startsOn:
+          type: string
+        endsOn:
+          type: string
+      required: [schoolYear, termNumber, name, startsOn, endsOn]
+    StudentPlan:
+      type: object
+      properties:
+        date:
+          type: string
+        body:
+          description: Empty string when the day has no plan; there is no separate null.
+          type: string
+      required: [date, body]
+    StudentPlanInput:
+      type: object
+      properties:
+        date:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+        body:
+          description: Blank or whitespace removes the day's plan.
+          type: string
+          maxLength: 2000
+      required: [date, body]
     QuizPaper:
       type: object
       properties:
@@ -1331,7 +1666,33 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/QuizQuestion"
-      required: [lessonId, lessonCode, skillName, questions]
+        kind:
+          description: >
+            Which sort of assessment this is - the check at the end of a
+            lesson, a unit test, a monthly one, a diagnostic. Recorded against
+            the lesson that carries the questions; it is not yet an assessment
+            of its own, with an owner and a window.
+          type: string
+          enum: [LESSON, UNIT, MONTHLY, DIAGNOSTIC]
+        takenToday:
+          description: >
+            Whether this student has already sat this quiz today. A quiz may be
+            taken once a day, so the paper says so up front rather than letting
+            a child answer everything again and be refused at the end.
+          type: boolean
+        previousScore:
+          type: ["integer", "null"]
+        previousMaxScore:
+          type: ["integer", "null"]
+      required:
+        - lessonId
+        - lessonCode
+        - skillName
+        - questions
+        - kind
+        - takenToday
+        - previousScore
+        - previousMaxScore
     QuizAnswer:
       type: object
       description: What the teacher sees afterwards, with the text copied in so it still reads after an edit.
@@ -1514,6 +1875,13 @@ components:
           type: ["string", "null"]
         studentMessage:
           type: ["string", "null"]
+        teacherNote:
+          description: >
+            The note the teacher left on this day of the timetable, if any. It
+            belongs to the class's day rather than to the lesson, so the same
+            lesson taught to another class on another day carries a different
+            one - and a lesson reached outside the timetable carries none.
+          type: ["string", "null"]
         estimatedMinutes:
           type: ["integer", "null"]
         book:
@@ -1531,6 +1899,7 @@ components:
         - guidedPractice
         - independentPractice
         - studentMessage
+        - teacherNote
         - estimatedMinutes
         - book
     StudentToday:
@@ -2271,6 +2640,13 @@ components:
           type: integer
         subjectName:
           type: string
+        subjectId:
+          description: >
+            Null for an administrator's card, which stands for the whole class
+            rather than one subject. Carried so a link from this card can open
+            the timetable or the results on the subject the card is about,
+            instead of dropping the reader on whatever the page picks first.
+          type: ["integer", "null"]
         levelFramework:
           description: The proficiency ladder this subject uses, or null where it uses none.
           type: ["string", "null"]
@@ -2295,6 +2671,7 @@ components:
         - className
         - gradeLevel
         - subjectName
+        - subjectId
         - levelFramework
         - lessonCode
         - skillName

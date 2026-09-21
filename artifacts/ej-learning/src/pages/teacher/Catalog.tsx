@@ -84,7 +84,6 @@ export default function Catalog() {
     <div className="space-y-6 pb-10">
       <PageHeader
         title="Хичээлийн материал"
-        description="Сурагчид оноогддог материалын бүрэн жагсаалт."
         stats={[
           { label: "Нийт", value: items.length },
           { label: "Хичээл", value: items.filter((i) => i.kind === "lesson").length },

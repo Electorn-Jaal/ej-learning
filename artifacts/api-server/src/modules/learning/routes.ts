@@ -6,6 +6,10 @@ import {
   GetClassSkillsResponse,
   GetItemAnalysisResponse,
   GetQuizPaperResponse,
+  GetCurrentTermResponse,
+  GetStudentPlanResponse,
+  SaveStudentPlanBody,
+  SaveStudentPlanResponse,
   GetStudentTodayResponse,
   GetTeacherDashboardResponse,
   GetTeacherLessonsResponse,
@@ -19,7 +23,7 @@ import {
   SubmitQuizAttemptBody,
   SubmitQuizAttemptResponse,
 } from "@workspace/api-zod";
-import { requireRole } from "../../middlewares/auth";
+import { requireAuth, requireRole } from "../../middlewares/auth";
 import { badRequest, unauthorized } from "../../shared/http-error";
 import {
   assessmentSheet,
@@ -29,7 +33,10 @@ import {
   generateSchedule,
   materialFile,
   quizAttemptsForTeacher,
+  currentTerm,
   quizPaper,
+  saveStudentPlan,
+  studentPlan,
   recordQuizAttemptScored,
   schedulableLessons,
   setScheduleDay,
@@ -67,6 +74,23 @@ router.get(
     }
   },
 );
+
+router.get("/student/schedule", requireRole("STUDENT"), async (req, res, next) => {
+  try {
+    const date = req.query.date;
+    if (date !== undefined && (
+      typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date) ||
+      !Number.isFinite(Date.parse(date + "T00:00:00Z")) ||
+      new Date(date + "T00:00:00Z").toISOString().slice(0, 10) !== date
+    )) {
+      throw badRequest("Огноо буруу байна.", "INVALID_DATE");
+    }
+    // The signed-in student's own enrolment and assignments determine the schedule.
+    res.json(GetStudentTodayResponse.parse(await studentToday(req.user!, date as string | undefined)));
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.get(
   "/teacher/schedule",
@@ -150,6 +174,36 @@ router.put("/teacher/schedule/day", asStaff, async (req, res, next) => {
     }
     await setScheduleDay(req.user!, parsed.data);
     res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Any signed-in account: the term is what the whole school is in, and every
+// screen that names a date sits inside it.
+router.get("/term/current", requireAuth, async (_req, res, next) => {
+  try {
+    res.json(GetCurrentTermResponse.parse(await currentTerm()));
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/student/plan", requireRole("STUDENT"), async (req, res, next) => {
+  try {
+    res.json(GetStudentPlanResponse.parse(await studentPlan(req.user!, req.query.date)));
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.put("/student/plan", requireRole("STUDENT"), async (req, res, next) => {
+  try {
+    const parsed = SaveStudentPlanBody.safeParse(req.body);
+    if (!parsed.success) {
+      throw badRequest("Төлөвлөгөө буруу байна.", "INVALID_PLAN");
+    }
+    res.json(SaveStudentPlanResponse.parse(await saveStudentPlan(req.user!, parsed.data)));
   } catch (error) {
     next(error);
   }

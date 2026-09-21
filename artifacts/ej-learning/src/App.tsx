@@ -12,15 +12,20 @@ import { SessionProvider, hasRole, useSessionQuery } from '@/lib/session';
 import Login from '@/pages/Login';
 import Password from '@/pages/Password';
 import StudentToday from '@/pages/student/Today';
+import StudentSchedule from '@/pages/student/Schedule';
 import StudentSubjects from '@/pages/student/Subjects';
 import StudentProgress from '@/pages/student/Progress';
 import StudentProfile from '@/pages/student/Profile';
 import StudentAssignment from '@/pages/student/Assignment';
+import StudentSubjectView from '@/pages/student/SubjectView';
+import StudentPlan from '@/pages/student/Plan';
 import TeacherDashboard from '@/pages/teacher/Dashboard';
 import TeacherSchedule from '@/pages/teacher/Schedule';
 import TeacherQuizResults from '@/pages/teacher/QuizResults';
+import TeacherAnalytics from '@/pages/teacher/Analytics';
 import TeacherAssessment from '@/pages/teacher/Assessment';
 import AdminBooks from '@/pages/admin/Books';
+import AdminContentLinks from '@/pages/admin/ContentLinks';
 import TeacherIntegrations from '@/pages/teacher/Integrations';
 import TeacherCatalog from '@/pages/teacher/Catalog';
 
@@ -39,10 +44,13 @@ function StudentRoutes() {
   return (
     <Switch>
       <Route path="/" component={StudentToday} />
+      <Route path="/schedule" component={StudentSchedule} />
       <Route path="/subjects" component={StudentSubjects} />
       <Route path="/progress" component={StudentProgress} />
       <Route path="/profile" component={StudentProfile} />
       <Route path="/password" component={Password} />
+      <Route path="/subject/:code/:view" component={StudentSubjectView} />
+      <Route path="/plan" component={StudentPlan} />
       <Route path="/assignment/:id" component={StudentAssignment} />
       <Route component={NotFound} />
     </Switch>
@@ -59,10 +67,12 @@ function StaffRoutes({ admin, takesLessons }: { admin: boolean; takesLessons: bo
   return (
     <Switch>
       {admin ? <Route path="/teacher/books" component={AdminBooks} /> : null}
+      {admin ? <Route path="/teacher/content-links" component={AdminContentLinks} /> : null}
       {admin ? <Route path="/teacher/integrations" component={TeacherIntegrations} /> : null}
       <Route path="/teacher" component={TeacherDashboard} />
       <Route path="/teacher/schedule" component={TeacherSchedule} />
       <Route path="/teacher/results" component={TeacherQuizResults} />
+      <Route path="/teacher/analytics" component={TeacherAnalytics} />
       {takesLessons || admin ? (
         <Route path="/teacher/assessment" component={TeacherAssessment} />
       ) : null}

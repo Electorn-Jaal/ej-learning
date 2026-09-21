@@ -1,0 +1,2 @@
+ALTER TABLE "learning"."terms" DROP CONSTRAINT "terms_term_number_check";--> statement-breakpoint
+ALTER TABLE "learning"."terms" ADD CONSTRAINT "terms_term_number_check" CHECK (term_number BETWEEN 1 AND 4);

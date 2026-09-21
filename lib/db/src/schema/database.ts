@@ -13,6 +13,27 @@ export const dataQualityStatusInContent = content.enum("data_quality_status", ['
 export const dependencyTypeInContent = content.enum("dependency_type", ['REQUIRED', 'RECOMMENDED', 'RELATED'])
 export const importanceLevelInContent = content.enum("importance_level", ['HIGH', 'MEDIUM', 'LOW'])
 export const outlineNodeTypeInContent = content.enum("outline_node_type", ['CHAPTER', 'SECTION', 'SUBSECTION', 'EXAMPLE_SET', 'EXERCISE_SET', 'REVIEW', 'ASSESSMENT', 'OTHER'])
+/**
+ * What kind of assessment a lesson's questions are.
+ *
+ * A school does not only run the check at the end of a lesson: there is the
+ * placement diagnostic, the test at the end of a unit, the monthly one. They
+ * differ in who schedules them and what a score from them means, and until now
+ * the product had one word - "quiz" - for all of it.
+ *
+ * This is the first, smallest step: the kind is recorded against the lesson
+ * that carries the questions, so a screen can at least say which sort of thing
+ * a child is sitting. It is NOT the assessment entity the school still has to
+ * describe - that needs an owner, a window and a scope, none of which exist
+ * here. LESSON is the default and is what every imported lesson is.
+ */
+export const assessmentKindInLearning = learning.enum("assessment_kind", [
+  "LESSON",
+  "UNIT",
+  "MONTHLY",
+  "DIAGNOSTIC",
+]);
+
 export const reviewStatusInContent = content.enum("review_status", ['DRAFT', 'IN_REVIEW', 'APPROVED', 'ARCHIVED'])
 export const sourceRelationTypeInContent = content.enum("source_relation_type", ['PRIMARY', 'CURRICULUM', 'EXPLAINS', 'PRACTICES', 'ASSESSES', 'RELATED'])
 /**
@@ -526,8 +547,20 @@ export const diagnosticItemsInAssessment = assessment.table("diagnostic_items", 
 	maxScore: numeric("max_score", { precision: 8, scale:  2 }).notNull(),
 	rubricMn: text("rubric_mn"),
 	answerSource: answerSourceInAssessment("answer_source").default('UNKNOWN').notNull(),
+	// Which part of the book this question is asked after, when the person who
+	// wrote it said. A skill is taught over four to six lessons, so without
+	// this every one of those days shows every question the skill has - asking
+	// on day one about the part the class reaches on day five. Null means the
+	// question stands for the whole skill and shows on all of its days, which
+	// is what an import that does not say leaves behind.
+	sourceOutlineNodeId: bigint("source_outline_node_id", { mode: "number" }),
 	status: reviewStatusInContent().default('DRAFT').notNull(),
 }, (table) => [
+	foreignKey({
+			columns: [table.sourceOutlineNodeId],
+			foreignColumns: [sourceOutlineNodesInContent.id],
+			name: "diagnostic_items_source_outline_node_id_fkey"
+		}),
 	check("diagnostic_items_level_present_check",
 		sql`grade_level_id IS NOT NULL OR proficiency_level_id IS NOT NULL`),
 	foreignKey({
@@ -658,7 +691,17 @@ export const dailyLessonsInLearning = learning.table("daily_lessons", {
 	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
 	sourceMaterialId: bigint("source_material_id", { mode: "number" }),
 	status: reviewStatusInContent().default('DRAFT').notNull(),
+	assessmentKind: assessmentKindInLearning("assessment_kind").default('LESSON').notNull(),
+	// The part of the book this day covers. Set when the lessons for a skill
+	// are written, not by the school: it is the other end of the question's
+	// own section, and without both ends the narrowing has nothing to compare.
+	sourceOutlineNodeId: bigint("source_outline_node_id", { mode: "number" }),
 }, (table) => [
+	foreignKey({
+			columns: [table.sourceOutlineNodeId],
+			foreignColumns: [sourceOutlineNodesInContent.id],
+			name: "daily_lessons_source_outline_node_id_fkey"
+		}),
 	index("idx_daily_lessons_skill_type").using("btree", table.coreSkillId.asc().nullsLast().op("int8_ops"), table.lessonType.asc().nullsLast().op("int8_ops")),
 	foreignKey({
 			columns: [table.coreSkillId],
