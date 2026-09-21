@@ -1,0 +1,62 @@
+name: Restore TMS HTTPS routing
+on:
+  push:
+    branches: [fix/tms-https-root]
+    paths: [.github/workflows/fix-tms-https.yml, deploy/ingress/tls.conf, deploy/ingress/compose.yml]
+permissions:
+  contents: read
+concurrency:
+  group: ej-public-ingress
+  cancel-in-progress: false
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: appleboy/scp-action@917f8b81dfc1ccd331fef9e2d61bdc6c8be94634
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_SSH_PASSWORD }}
+          port: ${{ vars.SERVER_PORT || '22' }}
+          fingerprint: ${{ secrets.SERVER_FINGERPRINT }}
+          source: deploy/ingress/tls.conf,deploy/ingress/compose.yml
+          target: ej-learning/tms-https-fix/${{ github.sha }}
+      - uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2
+        env:
+          FIX_SHA: ${{ github.sha }}
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_SSH_PASSWORD }}
+          port: ${{ vars.SERVER_PORT || '22' }}
+          fingerprint: ${{ secrets.SERVER_FINGERPRINT }}
+          envs: FIX_SHA
+          script: |
+            set -eu
+            exec 9>"$HOME/ej-learning/.ingress.lock"
+            flock -n 9
+            root="$HOME/ej-learning/ingress"
+            source="$HOME/ej-learning/tms-https-fix/$FIX_SHA/deploy/ingress"
+            backup="$root/backups/tms-https-$FIX_SHA"
+            mkdir -p "$backup"
+            cp "$root/tls.conf" "$root/compose.yml" "$backup/"
+            docker run --rm --network diploma-system_default -v "$source/tls.conf:/etc/nginx/conf.d/default.conf:ro" -v "$root/certificates:/etc/letsencrypt:ro" nginx:1.27-alpine nginx -t
+            rollback() {
+              cat "$backup/tls.conf" > "$root/tls.conf"
+              cat "$backup/compose.yml" > "$root/compose.yml"
+              docker compose -p ej-ingress -f "$root/compose.yml" up -d --no-deps tls
+              docker compose -p ej-ingress -f "$root/compose.yml" exec -T tls nginx -s reload
+            }
+            trap rollback EXIT
+            cat "$source/tls.conf" > "$root/tls.conf"
+            cat "$source/compose.yml" > "$root/compose.yml"
+            docker compose -p ej-ingress -f "$root/compose.yml" up -d --no-deps tls
+            docker compose -p ej-ingress -f "$root/compose.yml" exec -T tls nginx -t
+            docker compose -p ej-ingress -f "$root/compose.yml" exec -T tls nginx -s reload
+            curl -fsS --retry 5 --retry-all-errors https://116.206.83.75/ | grep -q login.xhtml
+            curl -fsS https://116.206.83.75/login.xhtml > /dev/null
+            curl -fsS http://116.206.83.75/ | grep -q login.xhtml
+            curl -fsS https://116.206.83.75/ej/api/healthz
+            trap - EXIT
+            echo 'TMS HTTP and HTTPS pages plus EJ health verified'
