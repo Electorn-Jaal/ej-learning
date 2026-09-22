@@ -10,5 +10,11 @@ import type { MaterialOutlineInputSectionsItem } from './materialOutlineInputSec
 export interface MaterialOutlineInput {
   /** @minimum 0 */
   pageOffset: number;
+  /**
+     * @minimum 1
+     * @maximum 12
+     * @nullable
+     */
+  planningPeriodCount: number | null;
   sections: MaterialOutlineInputSectionsItem[];
 }

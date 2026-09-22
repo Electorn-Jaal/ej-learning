@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react"
 import { useGetTeacherCatalog } from "@workspace/api-client-react"
 import { Search } from "lucide-react"
-import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { PageHeader } from "@/components/ui/page-header"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -15,9 +14,9 @@ import {
 import { cn } from "@/lib/utils"
 
 const KIND_LABEL: Record<string, string> = {
-  lesson: "Хичээл",
-  task: "Даалгавар",
-  check: "Шалгах асуулт",
+  lesson: "Үндсэн хичээл",
+  task: "Дасгал",
+  check: "Асуулт",
 }
 
 const STATUS: Record<string, { label: string; dot: string }> = {
@@ -83,12 +82,13 @@ export default function Catalog() {
   return (
     <div className="space-y-6 pb-10">
       <PageHeader
-        title="Хичээлийн материал"
+        title="Хичээлийн агуулга"
+        description="Номын сэдэвтэй холбогдсон үндсэн хичээл, асуулт, дасгалыг хичээл тус бүрээр харна."
         stats={[
           { label: "Нийт", value: items.length },
-          { label: "Хичээл", value: items.filter((i) => i.kind === "lesson").length },
-          { label: "Даалгавар", value: items.filter((i) => i.kind === "task").length },
-          { label: "Шалгах асуулт", value: items.filter((i) => i.kind === "check").length },
+          { label: "Үндсэн хичээл", value: items.filter((i) => i.kind === "lesson").length },
+          { label: "Дасгал", value: items.filter((i) => i.kind === "task").length },
+          { label: "Асуулт", value: items.filter((i) => i.kind === "check").length },
         ]}
       />
 
@@ -155,11 +155,10 @@ export default function Catalog() {
       </p>
 
       {sections.length === 0 ? (
-        <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            Тохирох материал олдсонгүй.
-          </CardContent>
-        </Card>
+        <p className="py-6 text-sm text-muted-foreground">
+          Агуулга хараахан ороогүй байна. Ном, сэдэв, асуулт, дасгал импортлогдсоны дараа энд
+          хичээл тус бүрээр харагдана.
+        </p>
       ) : (
         <div className="space-y-3">
           {sections.map(([name, entries]) => (

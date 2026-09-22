@@ -28,7 +28,7 @@ import {
   attemptEvidenceInOrder,
   orphanedAttempts,
   recordSkillEvidence,
-} from "../src/modules/learning/mastery";
+} from "../src/modules/mastery/service";
 
 if (!process.argv.includes("--yes")) {
   console.error("Refusing to run without --yes.");

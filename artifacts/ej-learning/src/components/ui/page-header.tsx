@@ -21,12 +21,13 @@ export type Stat = {
  * one competes with the number it is meant to present.
  */
 export function PageHeader({
-  title,
+  title: _title,
   description,
   stats = [],
   actions,
 }: {
-  title: string
+  /** Named for the reader of the call site; the shell renders it. */
+  title?: string
   description?: string
   stats?: Stat[]
   actions?: ReactNode
@@ -34,8 +35,12 @@ export function PageHeader({
   return (
     <header className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
+        {/* No <h1> here: the shell's top bar names the screen, and printing
+            it again at the top of the scroll area was the same words twice
+            and a band of height on every page. `title` is kept so the call
+            sites still read as headers and so the name has one home in the
+            source. */}
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
           {description ? (
             <p className="text-sm text-muted-foreground">{description}</p>
           ) : null}

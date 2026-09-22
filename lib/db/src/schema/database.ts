@@ -43,6 +43,10 @@ export const sourceRelationTypeInContent = content.enum("source_relation_type", 
  * one computed against the real key.
  */
 export const answerSourceInAssessment = assessment.enum("answer_source", ['AUTHORITATIVE', 'RECONSTRUCTED', 'UNKNOWN'])
+// What kind of paper this is. Separate from learning.assessment_kind, which
+// labels a lesson's built-in check and has no term paper in it: these are the
+// things a school timetables and reports on.
+export const examKindInAssessment = assessment.enum("exam_kind", ['QUIZ', 'UNIT', 'TERM', 'YEAR', 'DIAGNOSTIC'])
 export const importStatusInStaging = staging.enum("import_status", ['UPLOADED', 'VALIDATING', 'INVALID', 'READY', 'APPROVED', 'IMPORTED', 'FAILED'])
 
 
@@ -82,6 +86,7 @@ export const sourceMaterialsInContent = content.table("source_materials", {
 	publishedYear: smallint("published_year"),
 	edition: varchar({ length: 100 }),
 	totalPages: integer("total_pages"),
+	planningPeriodCount: smallint("planning_period_count"),
 	status: reviewStatusInContent().default('DRAFT').notNull(),
 	dataQualityStatus: dataQualityStatusInContent("data_quality_status").default('INCOMPLETE').notNull(),
 	notes: text(),
@@ -97,6 +102,7 @@ export const sourceMaterialsInContent = content.table("source_materials", {
 	unique("source_materials_source_code_key").on(table.sourceCode),
 	check("source_materials_published_year_check", sql`(published_year >= 1900) AND (published_year <= 2200)`),
 	check("source_materials_total_pages_check", sql`total_pages > 0`),
+	check("source_materials_planning_period_count_check", sql`planning_period_count IS NULL OR planning_period_count BETWEEN 1 AND 12`),
 ]);
 
 export const sourceOutlineNodesInContent = content.table("source_outline_nodes", {
@@ -113,6 +119,7 @@ export const sourceOutlineNodesInContent = content.table("source_outline_nodes",
 	pageFrom: integer("page_from"),
 	pageTo: integer("page_to"),
 	sequenceNo: integer("sequence_no").notNull(),
+	planningPeriodNo: smallint("planning_period_no"),
 	status: reviewStatusInContent().default('DRAFT').notNull(),
 	dataQualityStatus: dataQualityStatusInContent("data_quality_status").default('INCOMPLETE').notNull(),
 	notes: text(),
@@ -134,6 +141,7 @@ export const sourceOutlineNodesInContent = content.table("source_outline_nodes",
 	check("source_outline_nodes_page_from_check", sql`page_from > 0`),
 	check("source_outline_nodes_page_to_check", sql`page_to > 0`),
 	check("source_outline_nodes_sequence_no_check", sql`sequence_no > 0`),
+	check("source_outline_nodes_planning_period_no_check", sql`planning_period_no IS NULL OR planning_period_no BETWEEN 1 AND 12`),
 	check("source_outline_nodes_check", sql`(parent_id IS NULL) OR (parent_id <> id)`),
 	check("source_outline_nodes_check1", sql`(page_from IS NULL) OR (page_to IS NULL) OR (page_from <= page_to)`),
 ]);
@@ -514,6 +522,16 @@ export const studentsInCore = core.table("students", {
 	// guesswork rather than a lookup.
 	externalCode: varchar("external_code", { length: 200 }),
 	displayName: varchar("display_name", { length: 300 }).notNull(),
+	// The register supplies the name in two parts and the system kept only the
+	// two glued together. Sorting a roll by family name, or addressing a child
+	// by their own name, then means guessing where the space was.
+	familyName: varchar("family_name", { length: 150 }),
+	givenName: varchar("given_name", { length: 150 }),
+	// The registrar's own words, not a boolean. "Тамга дутуу буцаасан" is not
+	// "false"; it is a specific thing somebody has to read back.
+	personalFileMn: varchar("personal_file_mn", { length: 120 }),
+	attendanceMn: varchar("attendance_mn", { length: 60 }),
+	notes: text(),
 	isActive: boolean("is_active").default(true).notNull(),
 	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
 	// Whether this row describes a real person or one invented to make the
@@ -546,6 +564,10 @@ export const diagnosticItemsInAssessment = assessment.table("diagnostic_items", 
 	domainMn: varchar("domain_mn", { length: 200 }),
 	maxScore: numeric("max_score", { precision: 8, scale:  2 }).notNull(),
 	rubricMn: text("rubric_mn"),
+	// What the child is given before the question is asked - the line a teacher
+	// reads aloud for a listening item, or a passage a reading item is about.
+	// Distinct from rubricMn, which is how the answer is judged.
+	stimulusMn: text("stimulus_mn"),
 	answerSource: answerSourceInAssessment("answer_source").default('UNKNOWN').notNull(),
 	// Which part of the book this question is asked after, when the person who
 	// wrote it said. A skill is taught over four to six lessons, so without
@@ -588,10 +610,139 @@ export const diagnosticItemsInAssessment = assessment.table("diagnostic_items", 
 	check("diagnostic_items_max_score_check", sql`max_score > (0)::numeric`),
 ]);
 
+/**
+ * A paper: the named set of questions a class actually sits.
+ *
+ * Without this there was no such thing as "an exam". diagnostic_items carried
+ * only a subject, a grade and an item_order, so the question set was
+ * implicitly every item for that subject and grade - which makes a unit test
+ * and an end-of-term paper indistinguishable, and makes running two different
+ * papers for one class in one term impossible to express.
+ *
+ * class_id is nullable on purpose. A paper written for the whole grade leaves
+ * it null and every class in that grade can sit it; a paper one teacher wrote
+ * for their own class names that class. Grade and proficiency level follow
+ * diagnostic_items: a paper sits on a school year or on a CEFR level, and the
+ * check below demands one of them.
+ *
+ * There is deliberately no term_id. Which term a paper belongs to is decided
+ * by scheduled_on falling inside a learning.terms range, and storing it twice
+ * is storing a disagreement: move the exam a fortnight and a cached term_id
+ * quietly starts lying. The join costs nothing.
+ *
+ * pass_percent rather than a pass score, because the total is the sum of the
+ * paper's items and that changes whenever an item is added or reweighted. A
+ * stored pass score would silently mean something different afterwards.
+ */
+export const examPapersInAssessment = assessment.table("exam_papers", {
+	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
+	id: bigint({ mode: "number" }).primaryKey().generatedAlwaysAsIdentity({ name: "assessment.exam_papers_id_seq", startWith: 1, increment: 1, minValue: 1, cache: 1 }),
+	paperCode: varchar("paper_code", { length: 100 }).notNull(),
+	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
+	subjectId: bigint("subject_id", { mode: "number" }).notNull(),
+	gradeLevelId: smallint("grade_level_id"),
+	proficiencyLevelId: smallint("proficiency_level_id"),
+	// Null means the paper belongs to the grade, not to one class.
+	classId: bigint("class_id", { mode: "number" }),
+	examKind: examKindInAssessment("exam_kind").notNull(),
+	titleMn: varchar("title_mn", { length: 300 }).notNull(),
+	scheduledOn: date("scheduled_on"),
+	passPercent: numeric("pass_percent", { precision: 5, scale: 2 }),
+	instructionsMn: text("instructions_mn"),
+	// Who wrote the paper.
+	//
+	// No foreign key: core.users is declared in identity.ts, which already
+	// imports this file, and pointing back at it would make the two modules
+	// circular - the same reason core.classes.class_teacher_id carries no
+	// constraint. The column is set from the application, which has the user
+	// row in hand when it writes it.
+	createdBy: bigint("created_by", { mode: "number" }),
+	status: reviewStatusInContent().default('DRAFT').notNull(),
+	notes: text(),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	index("idx_exam_papers_subject").using("btree", table.subjectId.asc().nullsLast().op("int8_ops"), table.scheduledOn.asc().nullsLast()),
+	index("idx_exam_papers_class").using("btree", table.classId.asc().nullsLast().op("int8_ops")),
+	foreignKey({
+			columns: [table.subjectId],
+			foreignColumns: [subjectsInCore.id],
+			name: "exam_papers_subject_id_fkey"
+		}),
+	foreignKey({
+			columns: [table.gradeLevelId],
+			foreignColumns: [gradeLevelsInCore.id],
+			name: "exam_papers_grade_level_id_fkey"
+		}),
+	foreignKey({
+			columns: [table.proficiencyLevelId],
+			foreignColumns: [proficiencyLevelsInContent.id],
+			name: "exam_papers_proficiency_level_id_fkey"
+		}),
+	foreignKey({
+			columns: [table.classId],
+			foreignColumns: [classesInCore.id],
+			name: "exam_papers_class_id_fkey"
+		}).onDelete("restrict"),
+	unique("exam_papers_paper_code_key").on(table.paperCode),
+	// A paper says who it is for - except a placement test, which is sat by a
+	// child whose level is exactly what is not yet known. Filling either
+	// column in for one would be inventing the answer the paper exists to
+	// find, so diagnostics may leave both empty and nothing else may.
+	check("exam_papers_level_present_check",
+		sql`exam_kind = 'DIAGNOSTIC' OR grade_level_id IS NOT NULL OR proficiency_level_id IS NOT NULL`),
+	check("exam_papers_pass_percent_check",
+		sql`pass_percent IS NULL OR (pass_percent >= (0)::numeric AND pass_percent <= (100)::numeric)`),
+]);
+
+/**
+ * Which questions a paper is made of, and in what order.
+ *
+ * maxScore overrides the item's own for this paper only: the same question is
+ * worth one mark on a weekly quiz and two on the term paper, and copying the
+ * question to reweight it would split its history in two. Null means take the
+ * item's own score.
+ *
+ * The item's subject must match the paper's, which is a join away and so
+ * cannot be a CHECK; the route that adds an item verifies it.
+ */
+export const examPaperItemsInAssessment = assessment.table("exam_paper_items", {
+	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
+	paperId: bigint("paper_id", { mode: "number" }).notNull(),
+	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
+	diagnosticItemId: bigint("diagnostic_item_id", { mode: "number" }).notNull(),
+	itemOrder: smallint("item_order").notNull(),
+	maxScore: numeric("max_score", { precision: 8, scale: 2 }),
+}, (table) => [
+	index("idx_exam_paper_items_item").using("btree", table.diagnosticItemId.asc().nullsLast().op("int8_ops")),
+	foreignKey({
+			columns: [table.paperId],
+			foreignColumns: [examPapersInAssessment.id],
+			name: "exam_paper_items_paper_id_fkey"
+		}).onDelete("cascade"),
+	// Restrict: a question sitting on a paper is not a safe thing to delete
+	// out from under it while tidying the bank.
+	foreignKey({
+			columns: [table.diagnosticItemId],
+			foreignColumns: [diagnosticItemsInAssessment.id],
+			name: "exam_paper_items_diagnostic_item_id_fkey"
+		}).onDelete("restrict"),
+	primaryKey({ columns: [table.paperId, table.diagnosticItemId], name: "exam_paper_items_pkey"}),
+	unique("exam_paper_items_paper_order_key").on(table.paperId, table.itemOrder),
+	check("exam_paper_items_item_order_check", sql`item_order > 0`),
+	check("exam_paper_items_max_score_check", sql`max_score IS NULL OR max_score > (0)::numeric`),
+]);
+
 export const diagnosticAttemptsInAssessment = assessment.table("diagnostic_attempts", {
 	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
 	id: bigint({ mode: "number" }).primaryKey().generatedAlwaysAsIdentity({ name: "assessment.diagnostic_attempts_id_seq", startWith: 1, increment: 1, minValue: 1, cache: 1 }),
 	attemptCode: varchar("attempt_code", { length: 150 }).notNull(),
+	// Which paper was sat. Nullable because the imported diagnostic history
+	// predates papers entirely - those attempts record a subject and a grade
+	// and nothing that says which question set they came from. A null here
+	// means "unknown paper", not "no paper".
+	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
+	examPaperId: bigint("exam_paper_id", { mode: "number" }),
 	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
 	studentId: bigint("student_id", { mode: "number" }).notNull(),
 	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
@@ -625,6 +776,13 @@ export const diagnosticAttemptsInAssessment = assessment.table("diagnostic_attem
 			columns: [table.sourceMaterialId],
 			foreignColumns: [sourceMaterialsInContent.id],
 			name: "diagnostic_attempts_source_material_id_fkey"
+		}).onDelete("restrict"),
+	// Restrict: a paper children have already sat is history, not a draft to
+	// be deleted. Archive it instead.
+	foreignKey({
+			columns: [table.examPaperId],
+			foreignColumns: [examPapersInAssessment.id],
+			name: "diagnostic_attempts_exam_paper_id_fkey"
 		}).onDelete("restrict"),
 	unique("diagnostic_attempts_attempt_code_key").on(table.attemptCode),
 	check("diagnostic_attempts_score_percent_check", sql`(score_percent >= (0)::numeric) AND (score_percent <= (100)::numeric)`),
@@ -726,6 +884,10 @@ export const webDiagnosticSubmissionsInAssessment = assessment.table("web_diagno
 	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
 	id: bigint({ mode: "number" }).primaryKey().generatedAlwaysAsIdentity({ name: "assessment.web_diagnostic_submissions_id_seq", startWith: 1, increment: 1, minValue: 1, cache: 1 }),
 	submissionCode: uuid("submission_code").notNull(),
+	// The paper being sat online. Nullable for the same reason as on
+	// diagnostic_attempts, and because a placement sitting has no paper.
+	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
+	examPaperId: bigint("exam_paper_id", { mode: "number" }),
 	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
 	studentId: bigint("student_id", { mode: "number" }).notNull(),
 	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
@@ -753,6 +915,11 @@ export const webDiagnosticSubmissionsInAssessment = assessment.table("web_diagno
 			foreignColumns: [gradeLevelsInCore.id],
 			name: "web_diagnostic_submissions_grade_level_id_fkey"
 		}),
+	foreignKey({
+			columns: [table.examPaperId],
+			foreignColumns: [examPapersInAssessment.id],
+			name: "web_diagnostic_submissions_exam_paper_id_fkey"
+		}).onDelete("restrict"),
 	unique("web_diagnostic_submissions_submission_code_key").on(table.submissionCode),
 	check("web_diagnostic_submissions_status_check", sql`(status)::text = ANY ((ARRAY['IN_PROGRESS'::character varying, 'PENDING_REVIEW'::character varying, 'REVIEWED'::character varying, 'CANCELLED'::character varying])::text[])`),
 ]);
@@ -942,3 +1109,68 @@ export const vMongolianGrade9CatalogInLearning = learning.view("v_mongolian_grad
 	lessonCount: integer("lesson_count"),
 	status: reviewStatusInContent(),
 }).as(sql`SELECT sk.skill_code, sk.name_mn AS skill_name, sk.learning_outcome_mn, pre.skill_code AS prerequisite_code, pre.name_mn AS prerequisite_name, count(DISTINCT t.id)::integer AS task_count, count(DISTINCT mc.id)::integer AS mastery_check_count, count(DISTINCT dl.id)::integer AS lesson_count, sk.status FROM content.skills sk JOIN core.subjects su ON su.id = sk.subject_id AND su.code::text = 'MGL'::text JOIN core.grade_levels gl ON gl.id = sk.grade_level_id AND gl.grade_number = 9 LEFT JOIN content.skill_dependencies sd ON sd.skill_id = sk.id LEFT JOIN content.skills pre ON pre.id = sd.prerequisite_skill_id LEFT JOIN learning.tasks t ON t.skill_id = sk.id LEFT JOIN learning.mastery_checks mc ON mc.skill_id = sk.id LEFT JOIN learning.daily_lessons dl ON dl.core_skill_id = sk.id GROUP BY sk.skill_code, sk.name_mn, sk.learning_outcome_mn, pre.skill_code, pre.name_mn, sk.status`);
+
+/**
+ * What a class studies, and out of which book.
+ *
+ * This is the spine of the core curriculum: one row says "6а takes Maths, and
+ * the book everyone in it works from is Математик VI". Every child in the
+ * class shares it regardless of their measured level - the personal work in
+ * learning.student_assignments is the thing that differs, and it is
+ * deliberately a separate table so that neither can quietly become the other.
+ *
+ * It is NOT core.class_teachers. That table records who is answerable for
+ * teaching a subject, which is a staffing fact that changes mid-year; this
+ * records what the class is taught, which does not. The two were conflated
+ * once - `subjects()` derived the curriculum from the teaching assignment, so
+ * a class with no teacher on file had no subjects at all and its students saw
+ * an empty page. A subject survives its teacher leaving.
+ *
+ * source_material_id is nullable on purpose: a class can be known to run a
+ * subject long before anyone has loaded the textbook for it. A null means
+ * "no core book yet", not "no core book" - the screens say so rather than
+ * hiding the subject.
+ *
+ * The book's own subject must match this row's, which is a join away and so
+ * cannot be a CHECK. The importer verifies it before writing.
+ */
+export const classSubjectsInCore = core.table("class_subjects", {
+	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
+	classId: bigint("class_id", { mode: "number" }).notNull(),
+	// You can use { mode: "bigint" } if numbers are exceeding js number limitations
+	subjectId: bigint("subject_id", { mode: "number" }).notNull(),
+	// The class's core textbook. Null until one is chosen.
+	sourceMaterialId: bigint("source_material_id", { mode: "number" }),
+	isActive: boolean("is_active").default(true).notNull(),
+	// Where the row came from. ROSTER rows were read off a document the school
+	// supplied; CURRICULUM rows are the national subject list for the grade,
+	// filled in so the screens are not empty, and are the ones a school is
+	// expected to correct. Telling them apart is the difference between a fact
+	// and a plausible guess, and only one of those should be quietly trusted.
+	origin: varchar({ length: 12 }).default('CURRICULUM').notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+}, (table) => [
+	index("idx_class_subjects_subject").using("btree", table.subjectId.asc().nullsLast().op("int8_ops")),
+	index("idx_class_subjects_material").using("btree", table.sourceMaterialId.asc().nullsLast().op("int8_ops")),
+	foreignKey({
+			columns: [table.classId],
+			foreignColumns: [classesInCore.id],
+			name: "class_subjects_class_id_fkey"
+		}).onDelete("cascade"),
+	foreignKey({
+			columns: [table.subjectId],
+			foreignColumns: [subjectsInCore.id],
+			name: "class_subjects_subject_id_fkey"
+		}),
+	// Restrict, not cascade: unlinking a class from its textbook is a
+	// curriculum decision, not a side effect of tidying the content library.
+	foreignKey({
+			columns: [table.sourceMaterialId],
+			foreignColumns: [sourceMaterialsInContent.id],
+			name: "class_subjects_source_material_id_fkey"
+		}).onDelete("restrict"),
+	primaryKey({ columns: [table.classId, table.subjectId], name: "class_subjects_pkey"}),
+	check("class_subjects_origin_check",
+		sql`(origin)::text = ANY ((ARRAY['ROSTER'::character varying, 'CURRICULUM'::character varying])::text[])`),
+]);

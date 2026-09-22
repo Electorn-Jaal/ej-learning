@@ -173,18 +173,12 @@ export default function Login() {
               </p>
             ) : null}
 
-            {/*
-              * The column's amber rather than the navy: it is the school's
-              * colour, and ink on it reads 9.62:1.
-              *
-              * No outline. Amber is a light colour, so against anything light
-              * the slab itself lands between 1.3:1 and 1.6:1 whatever the page
-              * behind it is - a drawn edge does not fix that, it only looks
-              * drawn. What identifies the button is its size and the ink on it.
-              */}
+            {/* The colour lives in the Button's default variant now - this
+                slab is what every other button in the product copies - so only
+                the size is set here. */}
             <Button
               type="submit"
-              className="h-11 w-full bg-sidebar text-sm text-foreground hover:bg-sidebar/85 md:h-14 md:text-lg"
+              className="h-11 w-full text-sm md:h-14 md:text-lg"
               disabled={isPending}
             >
               {isPending ? 'Нэвтэрч байна…' : 'Нэвтрэх'}

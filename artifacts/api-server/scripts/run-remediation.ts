@@ -13,7 +13,7 @@
  * would be a guess wearing the clothes of a decision.
  */
 import { pool, readRows } from "@workspace/db";
-import { assignRemediation, recommendationsFor, reasonFor } from "../src/modules/learning/remediation";
+import { assignRemediation, recommendationsFor, reasonFor } from "../src/modules/mastery/remediation";
 
 if (!process.argv.includes("--yes")) {
   console.error("Refusing to run without --yes.");

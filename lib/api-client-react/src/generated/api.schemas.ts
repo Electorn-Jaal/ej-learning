@@ -200,6 +200,11 @@ export interface OutlineSection {
   /** @nullable */
   pageTo: number | null;
   sequenceNo: number;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  planningPeriodNo: number | null;
   /** How many lessons point at this section. Above zero means editing it moves real work. */
   usedByLessons: number;
 }
@@ -211,6 +216,13 @@ export interface MaterialOutline {
   pageOffset: number;
   /** @nullable */
   filePages: number | null;
+  /**
+     * Number of planning periods for this material; not globally fixed to three.
+     * @minimum 1
+     * @maximum 12
+     * @nullable
+     */
+  planningPeriodCount: number | null;
   sections: OutlineSection[];
 }
 
@@ -226,11 +238,23 @@ export type MaterialOutlineInputSectionsItem = {
   /** @nullable */
   pageTo: number | null;
   sequenceNo: number;
+  /**
+     * @minimum 1
+     * @maximum 12
+     * @nullable
+     */
+  planningPeriodNo: number | null;
 };
 
 export interface MaterialOutlineInput {
   /** @minimum 0 */
   pageOffset: number;
+  /**
+     * @minimum 1
+     * @maximum 12
+     * @nullable
+     */
+  planningPeriodCount: number | null;
   sections: MaterialOutlineInputSectionsItem[];
 }
 
@@ -462,6 +486,11 @@ export interface SubjectDay {
   lesson: DailyLessonView | null;
   /** Work assigned to this student personally in this subject. Where the class works through one book it is remediation on top; where the subject places students by level it is the whole of the day's work. */
   extra: ExtraWork | null;
+  /**
+     * Which slot in the day the class lesson sits in, matching a row of /school/periods. Null where the school has supplied no timetable, or where the day's only work is the personal kind, which answers to no bell.
+     * @nullable
+     */
+  periodNo: number | null;
 }
 
 export interface StudentToday {
@@ -475,6 +504,58 @@ export interface StudentToday {
   /** One entry per subject the student has work in today. A child studies several subjects a day, so this is a list rather than a single lesson. */
   subjects: SubjectDay[];
   notice: string;
+}
+
+export interface SubjectOutlineSection {
+  nodeId: string;
+  /** @nullable */
+  printedNumber: string | null;
+  title: string;
+  /** @nullable */
+  pageFrom: number | null;
+  /** @nullable */
+  pageTo: number | null;
+  /** @nullable */
+  periodNo: number | null;
+  /** Place in book order, counting from one. */
+  position: number;
+  /** The section the teacher says the class is on right now. */
+  isCurrent: boolean;
+  /** Earlier in the book than the class's current section. */
+  isPast: boolean;
+}
+
+/**
+ * currentPosition is the CLASS's place in the book, not the reader's own progress. Nothing here measures the individual: no skill has been mapped to a section yet, and no child has been assessed against one.
+ */
+export interface SubjectOutline {
+  subjectCode: string;
+  subjectName: string;
+  /** @nullable */
+  bookTitle: string | null;
+  /**
+     * The book's id, for the file endpoint. Null when no book.
+     * @nullable
+     */
+  materialId: string | null;
+  /** Add this to a printed page number to reach the same page in the PDF. Front matter means the two rarely agree. */
+  pageOffset: number;
+  totalSections: number;
+  /** @nullable */
+  currentPosition: number | null;
+  sections: SubjectOutlineSection[];
+}
+
+/**
+ * One slot in the school day, from the bell schedule.
+ */
+export interface SchoolPeriod {
+  periodNo: number;
+  /** @nullable */
+  nameMn: string | null;
+  /** Wall-clock start, HH:MM. */
+  startsAt: string;
+  endsAt: string;
 }
 
 export interface ScheduledDay {
@@ -660,6 +741,14 @@ export interface CurrentUser {
   className: string;
   isDemo: boolean;
   authConfigured: boolean;
+  username: string;
+  /**
+     * The school's own identifier for this student. Null for staff. The national registration number is deliberately not exposed here: the profile page has no use for it and it is the one field on the record that is worth reading over a shoulder.
+     * @nullable
+     */
+  studentCode: string | null;
+  /** @nullable */
+  schoolYear: string | null;
 }
 
 export interface StudentDashboard {
@@ -1097,19 +1186,157 @@ export interface ReviewResult {
   nextAction: NextAction;
 }
 
-export interface CurrentTopicInput {
-  classId: string;
-  subjectCode: string;
-  topic: string;
-  topicCode: string;
+/**
+ * A telephone number the school can reach this child's family on. relationMn is null for the two thirds of numbers that arrive without one, and fullName is almost always null - the admissions sheet records a number and at best a role, never a parent's name.
+ */
+export interface StudentGuardian {
+  /** @nullable */
+  relationMn: string | null;
+  /** @nullable */
+  fullName: string | null;
+  phone: string;
 }
 
-export interface CurrentTopic {
+/**
+ * What the school's register says about this child. Fields the register left blank come back null and the screen omits them rather than printing a dash: which records are missing is the school's own data question, not something to put in front of a child.
+ */
+export interface StudentRecord {
+  studentCode: string;
+  displayName: string;
+  /** @nullable */
+  familyName: string | null;
+  /** @nullable */
+  givenName: string | null;
+  /** @nullable */
+  personalFile: string | null;
+  /** @nullable */
+  attendance: string | null;
+  /** @nullable */
+  notes: string | null;
+  className: string;
+  gradeLevel: number;
+  /** @nullable */
+  schoolYear: string | null;
+  guardians: StudentGuardian[];
+}
+
+/**
+ * One skill's worth of work at a level: the book or task bank, the unit, what the child does, and how a teacher confirms it. sourceLabel is text rather than a link because most of these titles are not in the library yet; materialId is filled in only for the ones that are.
+ */
+export interface PlacementStep {
+  domain: string;
+  sequenceNo: number;
+  sourceLabel: string;
+  /** @nullable */
+  materialId: string | null;
+  /** @nullable */
+  unitFocus: string | null;
+  /** @nullable */
+  pages: string | null;
+  task: string;
+  priority: string;
+  /** @nullable */
+  verification: string | null;
+}
+
+/**
+ * The level a placement test put this child at, and what follows from it. provisional is true while the level rests on the objective half of the paper alone - the writing and speaking tasks are judged by a teacher and most children have not had them marked, so the level is a reading rather than a confirmed result.
+ */
+export interface StudentPlacement {
+  subjectCode: string;
+  subjectName: string;
+  levelCode: string;
+  levelName: string;
+  /** @nullable */
+  score: number | null;
+  /** @nullable */
+  maxScore: number | null;
+  /** @nullable */
+  attemptedOn: string | null;
+  provisional: boolean;
+  /** @nullable */
+  note: string | null;
+  steps: PlacementStep[];
+}
+
+/**
+ * @nullable
+ */
+export type ClassTopicEditBasis = typeof ClassTopicEditBasis[keyof typeof ClassTopicEditBasis] | null;
+
+
+export const ClassTopicEditBasis = {
+  ADMIN: 'ADMIN',
+  ASSIGNED: 'ASSIGNED',
+  SUBJECT: 'SUBJECT',
+} as const;
+
+/**
+ * One class and subject, with the section of its core book the teacher says the class is on. nodeId null means nobody has set it yet, which is not the same as the class being at the start. canEdit separates seeing from changing: a class teacher sees every subject their class runs but may only move the pointer on the ones they teach. editBasis says where that right comes from - ASSIGNED when core.class_teachers names this teacher for this class, SUBJECT when only their registered specialty does, ADMIN otherwise - because a SUBJECT right is shared with every other teacher of that subject and a screen should say so. setByName is whoever last moved the pointer, which is what makes that sharing visible rather than silent.
+ */
+export interface ClassTopic {
+  classId: string;
+  className: string;
+  gradeLevel: number;
+  subjectCode: string;
+  subjectName: string;
+  /** @nullable */
+  materialId: string | null;
+  /** @nullable */
+  bookTitle: string | null;
+  /** @nullable */
+  nodeId: string | null;
+  /** @nullable */
+  printedNumber: string | null;
+  /** @nullable */
+  topicTitle: string | null;
+  /** @nullable */
+  pageFrom: number | null;
+  /** @nullable */
+  pageTo: number | null;
+  /** @nullable */
+  periodNo: number | null;
+  /** @nullable */
+  effectiveOn: string | null;
+  sectionCount: number;
+  canEdit: boolean;
+  /** @nullable */
+  editBasis: ClassTopicEditBasis;
+  /** @nullable */
+  setByName: string | null;
+}
+
+/**
+ * One section of a class's core book, in book order.
+ */
+export interface OutlineChoice {
+  nodeId: string;
+  /** @nullable */
+  printedNumber: string | null;
+  title: string;
+  /** @nullable */
+  pageFrom: number | null;
+  /** @nullable */
+  pageTo: number | null;
+  /** @nullable */
+  periodNo: number | null;
+  sequenceNo: number;
+  isCurrent: boolean;
+}
+
+/**
+ * outlineNodeId null clears the pointer, which is how a teacher undoes a wrong choice rather than being forced to name another one.
+ */
+export interface ClassTopicInput {
   classId: string;
   subjectCode: string;
-  topic: string;
-  topicCode: string;
-  effectiveDate: string;
+  /** @nullable */
+  outlineNodeId: string | null;
+  /**
+     * @maxLength 500
+     * @nullable
+     */
+  note?: string | null;
 }
 
 export type WorkspaceSourceSource = typeof WorkspaceSourceSource[keyof typeof WorkspaceSourceSource];
@@ -1239,12 +1466,60 @@ export interface PreviewStudent {
   gradeLevel: number;
 }
 
+export type SubjectOverviewOrigin = typeof SubjectOverviewOrigin[keyof typeof SubjectOverviewOrigin];
+
+
+export const SubjectOverviewOrigin = {
+  ROSTER: 'ROSTER',
+  CURRICULUM: 'CURRICULUM',
+} as const;
+
+/**
+ * One subject a student studies, with the core textbook their class works from. origin says how the subject got here: ROSTER was read off books the school supplied, CURRICULUM is the national subject list standing in until the school confirms it, and a screen is expected to mark the difference rather than show a placeholder as a record. Two different "where are we" answers come back: the period fields describe what the current term covers in the BOOK, while the topic fields are where the teacher says the CLASS actually is. A class behind its term shows a topic from an earlier period, and that is the truth, not a fault.
+ */
 export interface SubjectOverview {
   code: string;
   name: string;
   assessedSkills: number;
   masteredSkills: number;
   approvedLessons: number;
+  origin: SubjectOverviewOrigin;
+  /** @nullable */
+  materialId: string | null;
+  /** @nullable */
+  sourceCode: string | null;
+  /** @nullable */
+  bookTitle: string | null;
+  /** @nullable */
+  bookPages: number | null;
+  /** @nullable */
+  periodCount: number | null;
+  /** @nullable */
+  currentPeriod: number | null;
+  periodSections: number;
+  /** @nullable */
+  periodPageFrom: number | null;
+  /** @nullable */
+  periodPageTo: number | null;
+  /** @nullable */
+  topicNodeId: string | null;
+  /** @nullable */
+  topicNumber: string | null;
+  /** @nullable */
+  topicTitle: string | null;
+  /** @nullable */
+  topicPageFrom: number | null;
+  /** @nullable */
+  topicPageTo: number | null;
+  /** @nullable */
+  topicSince: string | null;
+  /** How many sections the core book has in total. */
+  bookSections: number;
+  /**
+     * Where the current topic sits in that book, counting from one, or null when no topic is set. The CLASS's position, not the reader's own progress.
+     * @nullable
+     */
+  topicPosition: number | null;
 }
 
 export type CatalogItemKind = typeof CatalogItemKind[keyof typeof CatalogItemKind];
@@ -1353,6 +1628,10 @@ classId: number;
  * Narrow to one subject the teacher holds in this class. Omitted means every subject they hold there, which for a class teacher or a primary-grade teacher is every subject the class runs.
  */
 subjectId?: number;
+};
+
+export type GetStudentSubjectOutlineParams = {
+subject: string;
 };
 
 export type GetStudentPlanParams = {

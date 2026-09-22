@@ -18,6 +18,11 @@ export interface OutlineSection {
   /** @nullable */
   pageTo: number | null;
   sequenceNo: number;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  planningPeriodNo: number | null;
   /** How many lessons point at this section. Above zero means editing it moves real work. */
   usedByLessons: number;
 }

@@ -36,9 +36,10 @@ export const adminMaterials = () =>
   );
 
 export const materialHeader = (materialId: number) =>
-  readRows<{ title: string | null; pageOffset: number; filePages: number | null }>(
+  readRows<{ title: string | null; pageOffset: number; filePages: number | null; planningPeriodCount: number | null }>(
     `SELECT sm.title, COALESCE(v.page_offset, 0)::int AS "pageOffset",
-       sm.total_pages::int AS "filePages"
+       sm.total_pages::int AS "filePages",
+       sm.planning_period_count::int AS "planningPeriodCount"
      FROM content.source_materials sm
      LEFT JOIN LATERAL (
        SELECT sv.page_offset FROM content.source_versions sv
@@ -64,12 +65,14 @@ export const outlineSections = (materialId: number) =>
     pageFrom: number | null;
     pageTo: number | null;
     sequenceNo: number;
+    planningPeriodNo: number | null;
     usedByLessons: number;
   }>(
     `SELECT o.id::int AS id, o.outline_code AS "outlineCode",
        o.printed_number AS "printedNumber", o.title,
        o.page_from::int AS "pageFrom", o.page_to::int AS "pageTo",
        o.sequence_no::int AS "sequenceNo",
+       o.planning_period_no::int AS "planningPeriodNo",
        (SELECT count(DISTINCT dl.id)::int
         FROM content.content_source_alignments a
         JOIN content.content_skill_maps m ON m.content_node_id = a.content_node_id
@@ -107,7 +110,14 @@ export type OutlineInput = {
   pageFrom: number | null;
   pageTo: number | null;
   sequenceNo: number;
+  planningPeriodNo: number | null;
 };
+
+export async function setPlanningPeriodCount(materialId: number, count: number | null) {
+  await db.execute(sql`UPDATE content.source_materials
+    SET planning_period_count = ${count}, updated_at = now()
+    WHERE id = ${materialId}`);
+}
 
 /**
  * Upserts by outline code. Nothing is deleted: a section may already be
@@ -135,6 +145,7 @@ export async function upsertOutline(materialId: number, sections: OutlineInput[]
         pageFrom: section.pageFrom,
         pageTo: section.pageTo,
         sequenceNo: section.sequenceNo,
+        planningPeriodNo: section.planningPeriodNo,
         status: "APPROVED",
         dataQualityStatus: "COMPLETE",
       })
@@ -149,6 +160,7 @@ export async function upsertOutline(materialId: number, sections: OutlineInput[]
           pageFrom: section.pageFrom,
           pageTo: section.pageTo,
           sequenceNo: section.sequenceNo,
+          planningPeriodNo: section.planningPeriodNo,
         },
       });
   }
@@ -335,3 +347,52 @@ export const skillChainLinks = () =>
      JOIN core.subjects sub ON sub.id = s.subject_id
      ORDER BY sub.code, s.skill_code, p.skill_code`,
   );
+
+/** The newest approved version of a material, which is what gets served. */
+export const approvedVersion = (materialId: number) =>
+  readRows<{ storageKey: string | null; mimeType: string | null; filename: string | null }>(
+    `SELECT sv.storage_key AS "storageKey", sv.mime_type AS "mimeType",
+       sv.original_filename AS filename
+     FROM content.source_versions sv
+     JOIN content.source_materials sm ON sm.id = sv.source_material_id
+     WHERE sv.source_material_id = $1::bigint
+       AND sv.status = 'APPROVED' AND sm.status = 'APPROVED'
+     ORDER BY sv.version_no DESC
+     LIMIT 1`,
+    [materialId],
+  );
+
+type CatalogRow = {
+  id: string; kind: 'lesson'|'task'|'check'; code: string; subject: string; skill: string;
+  skillCode: string; gradeLevel: number|null; status: string; skillStatus: string;
+  title: string; body: string|null; example: string|null; practice: string|null;
+  material: string|null; estimatedMinutes: number|null; maxScore: number|null; sourceTitle: string|null;
+};
+// Deliberately excludes answer_guide_mn and diagnostic response data.
+export async function catalog() {
+  const rows = await readRows<CatalogRow>(`
+    WITH items AS (
+      SELECT l.id,'lesson'::text AS kind,l.lesson_code AS code,l.core_skill_id AS skill_id,l.status,
+        COALESCE(l.learning_goal_mn,l.lesson_code) AS title,l.remember_mn AS body,l.worked_example_mn AS example,
+        concat_ws(E'\n\n',l.guided_practice_mn,l.independent_practice_mn) AS practice,
+        NULL::text AS material,l.estimated_minutes,l.source_material_id,NULL::numeric AS max_score
+      FROM learning.daily_lessons l
+      UNION ALL SELECT t.id,'task',t.task_code,t.skill_id,t.status,t.question_mn,t.instruction_mn,NULL,NULL,
+        t.material_mn,t.estimated_minutes,t.source_material_id,t.max_score FROM learning.tasks t
+      UNION ALL SELECT m.id,'check',m.check_code,m.skill_id,m.status,m.question_mn,NULL,NULL,NULL,
+        m.material_mn,NULL,m.source_material_id,m.max_score FROM learning.mastery_checks m
+    ) SELECT i.kind||':'||i.id AS id,i.kind,i.code,sub.name_mn AS subject,s.name_mn AS skill,
+      s.skill_code AS "skillCode",g.grade_number::int AS "gradeLevel",i.status::text,
+      s.status::text AS "skillStatus",i.title,i.body,i.example,i.practice,i.material,
+      i.estimated_minutes::int AS "estimatedMinutes",i.max_score::float8 AS "maxScore",src.title AS "sourceTitle"
+    FROM items i JOIN content.skills s ON s.id=i.skill_id JOIN core.subjects sub ON sub.id=s.subject_id
+    LEFT JOIN core.grade_levels g ON g.id=s.grade_level_id
+    LEFT JOIN content.source_materials src ON src.id=i.source_material_id
+    ORDER BY sub.code,s.skill_code,i.kind,i.code`);
+  return rows.map(({body,example,practice,material,...item}) => ({ ...item,
+    materialBlocks: [
+      {kind:'explanation',title:'Тайлбар',body}, {kind:'example',title:'Жишээ',body:example},
+      {kind:'practice',title:'Дадлага',body:practice}, {kind:'explanation',title:'Эх материал',body:material},
+    ].filter(block => block.body?.trim()).map(block => ({...block,pageLabel:null,available:true})),
+  }));
+}

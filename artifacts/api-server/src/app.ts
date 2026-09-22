@@ -8,6 +8,19 @@ import { logger } from "./lib/logger";
 
 const app: Express = express();
 
+// Production has exactly one trusted reverse proxy (the bundled Nginx). This
+// makes req.ip useful for abuse controls without trusting arbitrary hops.
+app.set("trust proxy", 1);
+
+app.disable("x-powered-by");
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  next();
+});
+
 app.use(
   pinoHttp({
     logger,

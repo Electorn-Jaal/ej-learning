@@ -66,6 +66,26 @@ NUM-TMS-26/
 # from here; see docs/data-requirements.md.
 local-data/
 
+# Workbooks the school sends, wherever they happen to land. They arrive by
+# email and get saved next to the code, and each one carries every child's
+# national registration number alongside their name and class - the one
+# identifier that cannot be reissued after it leaks. A commit is forever even
+# if the next one deletes the file, so they are ignored by name pattern here
+# rather than trusted to be moved into local-data/ first.
+*.xlsx
+*.xls
+
+# Repository documentation workbooks contain schema examples only, not the
+# school-supplied personal data covered by the rules above.
+!docs/*.xlsx
+
+# Teaching material as delivered - the school sends it as one large archive
+# dropped at the root. It is hundreds of megabytes of PDFs and a repository
+# never forgets a blob, so it is ignored where it lands; move it under
+# local-data/ before anything reads it.
+/01_*/
+/01_*.zip
+
 # Database dumps and generated account lists. May hold real student data and
 # plaintext passwords; restore from these, don't commit them.
 backups/

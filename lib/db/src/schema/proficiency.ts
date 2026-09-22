@@ -2,6 +2,7 @@ import {
   bigint,
   boolean,
   check,
+  date,
   foreignKey,
   index,
   numeric,
@@ -136,16 +137,74 @@ export const placementAttemptsInAssessment = assessment.table(
       .default("UNKNOWN")
       .notNull(),
     notes: text(),
+    // Which sitting this was. A child may be placed more than once - four
+    // were in the first CEFR import - and without a date the two levels
+    // cannot be ordered, so neither can be called the current one.
+    attemptedOn: date("attempted_on"),
   },
   (table) => [
     index("idx_placement_attempts_student").using(
       "btree",
       table.studentId.asc().nullsLast().op("int8_ops"),
     ),
+    index("idx_placement_attempts_student_date").using(
+      "btree",
+      table.studentId.asc().nullsLast().op("int8_ops"),
+      table.attemptedOn.desc().nullsLast(),
+    ),
     foreignKey({
       columns: [table.proficiencyLevelId],
       foreignColumns: [proficiencyLevelsInContent.id],
       name: "placement_attempts_level_id_fkey",
+    }),
+  ],
+);
+
+/**
+ * What a child studies next, given the level they placed at.
+ *
+ * The half of a placement test that makes it worth sitting. The score says A2;
+ * this says what A2 means on Monday morning - which book, which unit, what the
+ * task is, and how a teacher confirms it was done.
+ *
+ * Keyed on (level, skill) rather than on a student, because that is what the
+ * school wrote down: a rule, not one plan per child. A child's plan is their
+ * current level read through this table, so moving up a level changes the plan
+ * with nobody rewriting anything, and changing a textbook changes it once.
+ *
+ * sourceMaterialId is nullable and mostly null. The English titles named here
+ * are not in the library yet, so the label carries the plan on paper today and
+ * the foreign key waits for the day those books are uploaded.
+ */
+export const placementPathwaysInContent = content.table(
+  "placement_pathways",
+  {
+    id: bigint({ mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    proficiencyLevelId: smallint("proficiency_level_id").notNull(),
+    domainMn: varchar("domain_mn", { length: 200 }).notNull(),
+    sequenceNo: smallint("sequence_no").notNull(),
+    sourceLabel: varchar("source_label", { length: 300 }).notNull(),
+    sourceMaterialId: bigint("source_material_id", { mode: "number" }),
+    unitFocusMn: varchar("unit_focus_mn", { length: 500 }),
+    pagesMn: varchar("pages_mn", { length: 200 }),
+    taskMn: text("task_mn").notNull(),
+    priority: varchar({ length: 40 }).notNull(),
+    verificationMn: varchar("verification_mn", { length: 120 }),
+  },
+  (table) => [
+    unique("placement_pathways_level_domain_key").on(
+      table.proficiencyLevelId,
+      table.domainMn,
+    ),
+    check("placement_pathways_sequence_check", sql`sequence_no > 0`),
+    check(
+      "placement_pathways_priority_check",
+      sql`priority IN ('FOUNDATION', 'DEVELOP', 'EXTEND', 'HIGH PRIORITY IF GAP')`,
+    ),
+    foreignKey({
+      columns: [table.proficiencyLevelId],
+      foreignColumns: [proficiencyLevelsInContent.id],
+      name: "placement_pathways_level_id_fkey",
     }),
   ],
 );

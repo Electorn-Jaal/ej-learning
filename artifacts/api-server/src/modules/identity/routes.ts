@@ -1,14 +1,20 @@
 import { Router, type IRouter } from "express";
 import {
   ChangePasswordBody,
+  GetCurrentUserResponse,
   GetSessionResponse,
   LoginBody,
   LoginResponse,
 } from "@workspace/api-zod";
-import { badRequest, unauthorized } from "../../shared/http-error";
+import { badRequest, HttpError, unauthorized } from "../../shared/http-error";
 import { MIN_PASSWORD_LENGTH } from "../../shared/password";
 import { requireAuth } from "../../middlewares/auth";
-import { SESSION_COOKIE, changePassword, login, logout } from "./service";
+import {
+  checkLoginLimit,
+  clearLoginFailures,
+  recordLoginFailure,
+} from "../../middlewares/login-rate-limit";
+import { SESSION_COOKIE, changePassword, currentSession, login, logout } from "./service";
 
 const router: IRouter = Router();
 
@@ -25,16 +31,26 @@ const cookieOptions = (expiresAt?: Date) => ({
 });
 
 router.post("/auth/login", async (req, res, next) => {
+  let username = "";
   try {
     const parsed = LoginBody.safeParse(req.body);
     if (!parsed.success) {
       throw badRequest("Нэвтрэх нэр, нууц үгээ оруулна уу.", "MISSING_FIELDS");
     }
 
-    const session = await login(parsed.data.username.trim(), parsed.data.password);
+    username = parsed.data.username.trim();
+    checkLoginLimit(req.ip ?? "unknown", username);
+    const session = await login(username, parsed.data.password);
+    clearLoginFailures(req.ip ?? "unknown", username);
     res.cookie(SESSION_COOKIE, session.token, cookieOptions(session.expiresAt));
     res.json(LoginResponse.parse({ user: session.user }));
   } catch (error) {
+    if (username && error instanceof HttpError && error.code === "INVALID_CREDENTIALS") {
+      recordLoginFailure(req.ip ?? "unknown", username);
+    }
+    if (error instanceof HttpError && error.status === 429 && "retryAfter" in error) {
+      res.setHeader("Retry-After", String(error.retryAfter));
+    }
     next(error);
   }
 });
@@ -89,6 +105,16 @@ router.post("/auth/password", requireAuth, async (req, res, next) => {
 
 router.get("/auth/me", requireAuth, (req, res) => {
   res.json(GetSessionResponse.parse({ user: req.user }));
+});
+
+// The richer sibling of /auth/me: same account, plus the class and year a
+// student's own screens print beside their name.
+router.get("/session/me", async (req, res, next) => {
+  try {
+    res.json(GetCurrentUserResponse.parse(await currentSession(req.user)));
+  } catch (error) {
+    next(error);
+  }
 });
 
 export default router;

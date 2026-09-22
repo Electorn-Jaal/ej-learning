@@ -3,6 +3,7 @@ import { useGetCurrentTerm } from "@workspace/api-client-react"
 import {
   LayoutDashboard, BookOpen, TrendingUp, User, Database, LogOut,
   CalendarDays, Sun, KeyRound, ClipboardCheck, Library, PenLine, Network, BarChart3,
+  BookMarked,
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -25,7 +26,6 @@ const STUDENT_NAV = [
   { href: "/schedule", label: "Хуваарь", icon: CalendarDays },
   { href: "/subjects", label: "Миний хичээлүүд", icon: BookOpen },
   { href: "/progress", label: "Миний ахиц", icon: TrendingUp },
-  { href: "/profile", label: "Миний бүртгэл", icon: User },
 ]
 
 // What every teacher gets. Looking at a class is not the same as taking one
@@ -36,7 +36,8 @@ const TEACHER_NAV = [
   { href: "/teacher/schedule", label: "Хуваарь", icon: CalendarDays },
   { href: "/teacher/results", label: "Шалгалт", icon: ClipboardCheck },
   { href: "/teacher/analytics", label: "Дүн шинжилгээ", icon: BarChart3 },
-  { href: "/teacher/catalog", label: "Хичээлийн материал", icon: BookOpen },
+  { href: "/teacher/class-topics", label: "Ангийн сэдэв", icon: BookMarked },
+  { href: "/teacher/catalog", label: "Хичээлийн агуулга", icon: BookOpen },
 ]
 
 // Screens for entering things. An account that takes no lesson has nothing to
@@ -53,10 +54,51 @@ const TEACHING_ONLY = [
 // Only an administrator configures the books, or looks at an integration that
 // is not connected to anything.
 const ADMIN_ONLY = [
-  { href: "/teacher/books", label: "Ном ба бүтэц", icon: Library },
-  { href: "/teacher/content-links", label: "Агуулгын холбоо", icon: Network },
+  { href: "/teacher/books", label: "Ном ба сэдэв", icon: Library },
+  { href: "/teacher/content-links", label: "Сэдвийн холбоо", icon: Network },
   { href: "/teacher/integrations", label: "Холболтууд", icon: Database },
 ]
+
+/**
+ * Pages the navigation does not name: detail screens reached from a link, and
+ * the account's own pages. Longest prefix wins, so /subjects/x/plan beats the
+ * /subjects nav entry.
+ */
+const EXTRA_TITLES: [string, string][] = [
+  ["/subjects/", "Хувийн төлөвлөгөө"],
+  ["/subject/", "Хичээл"],
+  ["/assignment/", "Хичээл"],
+  ["/password", "Нууц үг солих"],
+  ["/teacher/password", "Нууц үг солих"],
+]
+
+/** What the bar calls the screen the address is on. */
+function pageTitle(location: string, items: { href: string; label: string }[]) {
+  const best = (pairs: [string, string][]) =>
+    pairs
+      .filter(([href]) => location === href || location.startsWith(href))
+      .sort((a, b) => b[0].length - a[0].length)[0]?.[1]
+  const exact = items.find((item) => item.href === location)?.label
+  return (
+    exact ??
+    best(EXTRA_TITLES) ??
+    best(items.filter((i) => i.href !== "/" && i.href !== "/teacher").map((i) => [i.href, i.label])) ??
+    items.find((item) => item.href === location)?.label ??
+    ""
+  )
+}
+
+/**
+ * Today, in Ulaanbaatar, written out.
+ *
+ * The bar says it once for the whole product rather than each page printing
+ * its own line of it. Built here rather than read from a response: it is the
+ * clock, not data, and a page that has not loaded yet still knows the date.
+ */
+const TODAY = new Intl.DateTimeFormat("mn-MN", {
+  dateStyle: "long",
+  timeZone: "Asia/Ulaanbaatar",
+})
 
 const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Админ",
@@ -102,41 +144,48 @@ function AccountMenu({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-sidebar-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <Avatar className="h-8 w-8">
-            <AvatarFallback className="text-xs font-semibold">{initials}</AvatarFallback>
+          <Avatar className="h-7 w-7">
+            <AvatarFallback className="text-[10px] font-semibold">{initials}</AvatarFallback>
           </Avatar>
           <span className="hidden sm:block">
-            <span className="block text-sm font-semibold leading-tight">{name}</span>
-            <span className="block text-xs leading-tight text-muted-foreground">{roleLabel}</span>
+            <span className="block text-xs font-semibold leading-tight">{name}</span>
+            <span className="block text-[11px] leading-tight text-muted-foreground">
+              {roleLabel}
+            </span>
           </span>
         </button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" className="w-52">
-        <DropdownMenuLabel className="font-normal">
-          <span className="block text-sm font-semibold">{name}</span>
-          <span className="block text-xs text-muted-foreground">{roleLabel}</span>
+      {/* The icon size is set from here rather than on each icon: the item
+          carries [&>svg]:size-4 on itself, and that descendant selector
+          outranks a plain size utility sitting on the svg. */}
+      <DropdownMenuContent align="end" className="w-48 [&>*_svg]:size-3.5">
+        <DropdownMenuLabel className="py-1 font-normal">
+          <span className="block text-xs font-semibold leading-tight">{name}</span>
+          <span className="block text-[11px] leading-tight text-muted-foreground">
+            {roleLabel}
+          </span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         {profileHref ? (
-          <DropdownMenuItem asChild>
+          <DropdownMenuItem asChild className="py-1 text-xs">
             <Link href={profileHref}>
-              <User className="h-4 w-4" />
+              <User />
               Миний бүртгэл
             </Link>
           </DropdownMenuItem>
         ) : null}
-        <DropdownMenuItem asChild>
+        <DropdownMenuItem asChild className="py-1 text-xs">
           <Link href={passwordHref}>
-            <KeyRound className="h-4 w-4" />
+            <KeyRound />
             Нууц үг солих
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={onSignOut} disabled={signingOut}>
-          <LogOut className="h-4 w-4" />
+        <DropdownMenuItem onSelect={onSignOut} disabled={signingOut} className="py-1 text-xs">
+          <LogOut />
           {signingOut ? "Гарч байна…" : "Гарах"}
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -166,12 +215,23 @@ export function Shell({ children }: { children: React.ReactNode }) {
       ) ?? "STUDENT"
     ]
 
+  const title = pageTitle(location, navItems)
+
   const isActive = (href: string) =>
     location === href || (href !== "/" && href !== "/teacher" && location.startsWith(href))
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground font-sans">
-      <aside className="hidden w-64 flex-col border-r border-border bg-sidebar md:flex">
+    // A fixed frame, not a page that grows. It used to be min-h-screen while
+    // <main> inside it was h-screen: any column taller than the viewport - an
+    // admin's ten-item sidebar on a short window - pushed this div past 100vh
+    // and the whole browser window scrolled, while the content area stayed
+    // pinned at 100vh with its own scrollbar. Two scrollbars, and the header
+    // sliding away. dvh rather than vh so a phone's collapsing address bar
+    // does not leave a strip of empty page below the frame.
+    <div className="flex h-dvh overflow-hidden bg-background text-foreground font-sans">
+      {/* shrink-0 so a wide table in the content area cannot squeeze the
+          column narrower than its 16rem. */}
+      <aside className="hidden w-64 shrink-0 flex-col border-r border-border bg-sidebar md:flex">
         <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-sidebar-line bg-sidebar-header px-5">
           {/*
             * The school's own badge. It is a circular seal with its name
@@ -199,7 +259,11 @@ export function Shell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </div>
-        <nav className="flex-1 space-y-0.5 py-4 pr-4">
+        {/* min-h-0 so this can actually shrink inside the column, and its own
+            scrollbar for the case it cannot: an admin holds ten entries, and
+            on a short window the list has to scroll here rather than make the
+            sidebar taller than the screen. */}
+        <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto py-4">
           {navItems.map((item) => {
             const Icon = item.icon
             return (
@@ -210,7 +274,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
                   // The active item is marked by a solid rule and weight, not
                   // by a wash of the accent colour under text of that same
                   // colour - that pairing is what makes a page look generated.
-                  "flex items-center gap-3 border-l-2 py-2 pl-3 pr-2 text-sm transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "flex items-center gap-3 border-l-2 py-2 pl-3 pr-4 text-sm transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   // A lighter yellow, not white: the column is meant to be one
                   // colour, and a white row would be a hole in it. That fill is
                   // only 1.36:1 on its own, so the navy rule and the weight are
@@ -240,7 +304,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
         ) : null}
       </aside>
 
-      <main className="flex-1 flex flex-col h-screen overflow-hidden bg-background">
+      {/* min-h-0, not h-screen: the frame above already fixes the height, and
+          this is what lets the content area below scroll instead of growing. */}
+      <main className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden bg-background">
         <div className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-card px-4">
           <div className="flex items-center gap-2 md:hidden">
             <img
@@ -252,17 +318,27 @@ export function Shell({ children }: { children: React.ReactNode }) {
             />
             <span className="text-base font-bold text-foreground">Электрон Жаал</span>
           </div>
-          <div className="hidden text-sm text-muted-foreground md:block">
-            {term ? `${term.schoolYear} · ${term.name}` : ""}
+          <div className="hidden min-w-0 md:block">
+            <h1 className="truncate text-base font-bold leading-tight">{title}</h1>
+            {term ? (
+              <p className="truncate text-xs leading-tight text-muted-foreground">
+                {term.schoolYear} · {term.name}
+              </p>
+            ) : null}
           </div>
-          <AccountMenu
-            name={user.displayName}
-            roleLabel={roleLabel}
-            profileHref={staff ? null : "/profile"}
-            passwordHref={staff ? "/teacher/password" : "/password"}
-            onSignOut={signOut}
-            signingOut={signingOut}
-          />
+          <div className="ml-auto flex items-center gap-3">
+            <span className="hidden text-xs text-muted-foreground lg:block">
+              {TODAY.format(new Date())}
+            </span>
+            <AccountMenu
+              name={user.displayName}
+              roleLabel={roleLabel}
+              profileHref={staff ? null : "/profile"}
+              passwordHref={staff ? "/teacher/password" : "/password"}
+              onSignOut={signOut}
+              signingOut={signingOut}
+            />
+          </div>
         </div>
 
         <nav
@@ -293,8 +369,19 @@ export function Shell({ children }: { children: React.ReactNode }) {
             scroll. Without it a short screen has the full width and a long one
             loses the bar's width, so the centred column below jumps sideways
             on every navigation between the two. */}
-        <div className="flex-1 overflow-auto p-4 md:p-8 lg:p-10 [scrollbar-gutter:stable]">
-          <div className="max-w-4xl mx-auto">{children}</div>
+        {/* overscroll-contain so reaching the end of a long page does not
+            hand the scroll on to the document behind it. */}
+        <div className="flex-1 overflow-auto overscroll-contain p-4 md:p-5 lg:p-6 [scrollbar-gutter:stable]">
+          {/* Left-aligned, and capped well above the old 1152px.
+              Centring put the surplus on both sides, which left a gap by the
+              navigation column wider than the column itself; left-aligning
+              moved all of it to the right, where 472px of nothing looked
+              like an unfinished page. At 1600 the surplus is 16px at 1920
+              and none at all below that, so on every screen this school
+              actually uses the page simply fills its width. The cap remains
+              for the monitors beyond it, where a full-width line of text
+              stops being readable. */}
+          <div className="max-w-[1600px]">{children}</div>
         </div>
       </main>
     </div>

@@ -38,7 +38,8 @@ services:
       DATABASE_URL: ${DATABASE_URL:?Set URL with URL-encoded password}
       EJ_STORAGE_DIR: /app/storage
     volumes:
-      - ${EJ_STORAGE_PATH:?Set absolute storage directory}:/app/storage:ro
+      # Admin textbook uploads write here; only the API receives write access.
+      - ${EJ_STORAGE_PATH:?Set absolute storage directory}:/app/storage
     depends_on:
       db:
         condition: service_healthy

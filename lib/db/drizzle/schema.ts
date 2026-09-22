@@ -49,6 +49,7 @@ export const sourceMaterialsInContent = content.table("source_materials", {
 	publishedYear: smallint("published_year"),
 	edition: varchar({ length: 100 }),
 	totalPages: integer("total_pages"),
+	planningPeriodCount: smallint("planning_period_count"),
 	status: reviewStatusInContent().default('DRAFT').notNull(),
 	dataQualityStatus: dataQualityStatusInContent("data_quality_status").default('INCOMPLETE').notNull(),
 	notes: text(),
@@ -64,6 +65,7 @@ export const sourceMaterialsInContent = content.table("source_materials", {
 	unique("source_materials_source_code_key").on(table.sourceCode),
 	check("source_materials_published_year_check", sql`(published_year >= 1900) AND (published_year <= 2200)`),
 	check("source_materials_total_pages_check", sql`total_pages > 0`),
+	check("source_materials_planning_period_count_check", sql`planning_period_count IS NULL OR planning_period_count BETWEEN 1 AND 12`),
 ]);
 
 export const sourceOutlineNodesInContent = content.table("source_outline_nodes", {
@@ -80,6 +82,7 @@ export const sourceOutlineNodesInContent = content.table("source_outline_nodes",
 	pageFrom: integer("page_from"),
 	pageTo: integer("page_to"),
 	sequenceNo: integer("sequence_no").notNull(),
+	planningPeriodNo: smallint("planning_period_no"),
 	status: reviewStatusInContent().default('DRAFT').notNull(),
 	dataQualityStatus: dataQualityStatusInContent("data_quality_status").default('INCOMPLETE').notNull(),
 	notes: text(),
@@ -101,6 +104,7 @@ export const sourceOutlineNodesInContent = content.table("source_outline_nodes",
 	check("source_outline_nodes_page_from_check", sql`page_from > 0`),
 	check("source_outline_nodes_page_to_check", sql`page_to > 0`),
 	check("source_outline_nodes_sequence_no_check", sql`sequence_no > 0`),
+	check("source_outline_nodes_planning_period_no_check", sql`planning_period_no IS NULL OR planning_period_no BETWEEN 1 AND 12`),
 	check("source_outline_nodes_check", sql`(parent_id IS NULL) OR (parent_id <> id)`),
 	check("source_outline_nodes_check1", sql`(page_from IS NULL) OR (page_to IS NULL) OR (page_from <= page_to)`),
 ]);

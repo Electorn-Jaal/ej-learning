@@ -1,0 +1,11 @@
+-- What the child is given before the question is asked.
+--
+-- A listening item's question ("What colour is the bag?") is useless on its
+-- own: somebody has to say "The bag is blue" first. The placement test was
+-- administered by a teacher reading that line aloud, and the line was sitting
+-- in the source workbook with nowhere in the schema to put it, so twelve of
+-- the sixty questions could be imported but not actually asked again.
+--
+-- Separate from rubric_mn, which is how an answer is judged. This is the
+-- material the answer is about.
+ALTER TABLE "assessment"."diagnostic_items" ADD COLUMN IF NOT EXISTS "stimulus_mn" text;

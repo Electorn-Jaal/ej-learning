@@ -8,7 +8,10 @@ const Card = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      "rounded-xl border bg-card text-card-foreground shadow-sm",
+      // 4px. Twelve read as a consumer app and eight still softened every
+      // edge of a page that is mostly tables; a school register wants a
+      // corner you barely notice.
+      "rounded-sm border bg-card text-card-foreground shadow-sm",
       className
     )}
     {...props}

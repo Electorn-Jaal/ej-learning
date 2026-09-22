@@ -4,8 +4,10 @@ import {
   date,
   foreignKey,
   index,
+  primaryKey,
   smallint,
   text,
+  time,
   timestamp,
   unique,
   varchar,
@@ -15,6 +17,7 @@ import {
   classesInCore,
   dailyLessonsInLearning,
   learning,
+  sourceOutlineNodesInContent,
   studentsInCore,
   subjectsInCore,
 } from "./database";
@@ -58,12 +61,45 @@ export const termsInLearning = learning.table(
 );
 
 /**
+ * The school's bell times: period 1 starts at this hour and runs to that one.
+ *
+ * Kept per school year rather than as a constant, because bell times are the
+ * school's to set and they move - a winter timetable, a shortened day. The
+ * timetable grid draws one row per row of this table, so a period with no
+ * lesson anywhere still appears: an empty slot in the middle of the day is
+ * information, and a grid that omits it silently closes the gap.
+ *
+ * Times only, no date. A period is a shape the day has, not an event.
+ */
+export const classPeriodsInLearning = learning.table(
+  "class_periods",
+  {
+    schoolYear: varchar("school_year", { length: 20 }).notNull(),
+    periodNo: smallint("period_no").notNull(),
+    nameMn: varchar("name_mn", { length: 50 }),
+    startsAt: time("starts_at").notNull(),
+    endsAt: time("ends_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.schoolYear, table.periodNo], name: "class_periods_pkey" }),
+    check("class_periods_period_no_check", sql`period_no BETWEEN 1 AND 12`),
+    check("class_periods_range_check", sql`ends_at > starts_at`),
+  ],
+);
+
+/**
  * What a class studies on a given day.
  *
- * One lesson per class per day, enforced by the unique key: the product gives
- * a student "today's lesson", so two rows for one day would have no defined
- * answer. A day with no row is a day with no lesson, which is what holidays
- * and exam days are.
+ * One lesson per class per subject per day, enforced by the unique key: the
+ * product gives a student "today's lesson", so two rows for one subject in one
+ * day would have no defined answer. A day with no row is a day with no lesson,
+ * which is what holidays and exam days are.
+ *
+ * periodNo says WHEN in the day, and a second unique key stops two subjects
+ * claiming the same slot - a class cannot be in two rooms at once. It is
+ * nullable because the school has not supplied a timetable yet: a row without
+ * it is a lesson known to happen that day at an unknown hour, which is what
+ * every row imported so far would be.
  *
  * createdBy records who put it there - the admin seeding a default plan or the
  * teacher overriding it for their own class. It is the first column in the
@@ -90,6 +126,7 @@ export const classScheduleInLearning = learning.table(
     // lesson per subject per day - cannot be written as a constraint across a
     // join, so the subject is carried here and set from the lesson on write.
     subjectId: bigint("subject_id", { mode: "number" }).notNull(),
+    periodNo: smallint("period_no"),
     note: text(),
     createdBy: bigint("created_by", { mode: "number" }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
@@ -101,6 +138,13 @@ export const classScheduleInLearning = learning.table(
       table.classId,
       table.subjectId,
       table.scheduledOn,
+    ),
+    // One class, one slot. Nulls do not collide in a unique index, so days
+    // with no timetable yet are unaffected.
+    unique("class_schedule_class_slot_key").on(
+      table.classId,
+      table.scheduledOn,
+      table.periodNo,
     ),
     index("idx_class_schedule_day").using(
       "btree",
@@ -266,5 +310,70 @@ export const studentDayPlansInLearning = learning.table(
       name: "student_day_plans_student_id_fkey",
     }).onDelete("cascade"),
     check("student_day_plans_body_check", sql`char_length(body) <= 2000`),
+  ],
+);
+
+/**
+ * Where a class has actually reached in its core textbook.
+ *
+ * The term calendar says which chapters a term is meant to cover; it does not
+ * say which one the class is on, and no amount of arithmetic over dates will
+ * tell you - classes fall behind, skip ahead, and spend a fortnight on one
+ * section. Only the teacher knows, so only the teacher writes this.
+ *
+ * One row per class and subject: a pointer, not a history. It answers "what is
+ * 6a doing in maths right now" for every screen that asks, and a child reading
+ * it is reading what their teacher put there rather than a calculation dressed
+ * up as a fact.
+ *
+ * The node must belong to the book core.class_subjects names for this class
+ * and subject. That is two joins away and so cannot be a CHECK; the route
+ * verifies it before writing and refuses a section from another book.
+ */
+export const classTopicsInLearning = learning.table(
+  "class_topics",
+  {
+    classId: bigint("class_id", { mode: "number" }).notNull(),
+    subjectId: bigint("subject_id", { mode: "number" }).notNull(),
+    sourceOutlineNodeId: bigint("source_outline_node_id", { mode: "number" }).notNull(),
+    // The day the class arrived here, which is not the day the row was
+    // written: a teacher catching up on Friday still marks Monday.
+    effectiveOn: date("effective_on").default(sql`CURRENT_DATE`).notNull(),
+    note: text(),
+    // Who moved the pointer. Null only for rows an import made.
+    setBy: bigint("set_by", { mode: "number" }),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("idx_class_topics_node").using(
+      "btree",
+      table.sourceOutlineNodeId.asc().nullsLast().op("int8_ops"),
+    ),
+    foreignKey({
+      columns: [table.classId],
+      foreignColumns: [classesInCore.id],
+      name: "class_topics_class_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.subjectId],
+      foreignColumns: [subjectsInCore.id],
+      name: "class_topics_subject_id_fkey",
+    }),
+    // Restrict: a section a class is sitting on is not a safe thing to delete
+    // out from under it while reorganising an outline.
+    foreignKey({
+      columns: [table.sourceOutlineNodeId],
+      foreignColumns: [sourceOutlineNodesInContent.id],
+      name: "class_topics_source_outline_node_id_fkey",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [table.setBy],
+      foreignColumns: [usersInCore.id],
+      name: "class_topics_set_by_fkey",
+    }),
+    primaryKey({ columns: [table.classId, table.subjectId], name: "class_topics_pkey" }),
+    check("class_topics_note_check", sql`note IS NULL OR char_length(note) <= 500`),
   ],
 );

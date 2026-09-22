@@ -27,9 +27,9 @@ const DAY_NAME = ['1 дэх', '2 дахь', '3 дахь', '4 дэх', '5 дах�
 
 export const dayName = (day: string) => DAY_NAME[weekIndex(day)]!
 
-/** One subject: a whole week. Every subject at once: three days. */
+/** One subject: a whole week. Every subject at once: the one day. */
 export const WEEK_LENGTH = 7
-export const COMBINED_LENGTH = 3
+export const COMBINED_LENGTH = 1
 
 /**
  * The stretch of days on screen.
@@ -42,19 +42,24 @@ export const COMBINED_LENGTH = 3
  * is the unit a timetable is kept in, so the rows mean the same thing every
  * time - five school days, then the two days off, always at the bottom.
  *
- * Every subject at once cannot afford a week: each day there is one row per
- * subject, so seven days is twenty-one rows and the day you came to look at is
- * lost in them. Three days keeps that page to nine rows, with the chosen day
- * in the middle so yesterday and tomorrow are both in view.
+ * Every subject at once is a single day, because that page is the day's
+ * timetable read down the clock: period one at the top, the last lesson at the
+ * bottom. Two days side by side would be two timetables, and the arrows move a
+ * day at a time, which is how anyone reads a timetable anyway. It was three
+ * days before, which put the chosen day in the middle of a list and made the
+ * clock run backwards twice on the way down the page.
  */
 export function scheduleWindow(selectedDay: string, combined = false) {
   const count = combined ? COMBINED_LENGTH : WEEK_LENGTH
-  const from = combined ? shiftDay(selectedDay, -1) : shiftDay(selectedDay, -weekIndex(selectedDay))
+  const from = combined ? selectedDay : shiftDay(selectedDay, -weekIndex(selectedDay))
   const dates = Array.from({ length: count }, (_, index) => shiftDay(from, index))
   return { from, to: dates[count - 1]!, dates, count }
 }
 
-/** Reserve three subject slots, including unfilled slots, in the combined view. */
-export function subjectSlots<T>(subjects: T[]): (T | null)[] {
-  return [...subjects, ...Array.from({ length: Math.max(0, 3 - subjects.length) }, () => null)]
+/**
+ * Every subject in the response gets a row. The first demo happened to have
+ * three subjects, but that is sample data rather than a timetable limit.
+ */
+export function subjectSlots<T>(subjects: T[]): T[] {
+  return subjects
 }

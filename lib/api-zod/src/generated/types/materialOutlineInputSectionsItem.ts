@@ -18,4 +18,10 @@ export type MaterialOutlineInputSectionsItem = {
   /** @nullable */
   pageTo: number | null;
   sequenceNo: number;
+  /**
+     * @minimum 1
+     * @maximum 12
+     * @nullable
+     */
+  planningPeriodNo: number | null;
 };

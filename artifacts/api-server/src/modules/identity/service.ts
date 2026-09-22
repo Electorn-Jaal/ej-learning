@@ -113,3 +113,30 @@ export function sameSecret(a: string, b: string): boolean {
 }
 
 export { hashPassword };
+
+/**
+ * Who is signed in, with the school context their screens print.
+ *
+ * Distinct from /auth/me, which answers the narrow question the router asks
+ * on every page load. This one carries the class, grade and student code a
+ * profile page shows, so it reads one extra row and only for a student.
+ */
+export async function currentSession(user?: AuthenticatedUser) {
+  if (!user) throw unauthorized("Нэвтэрнэ үү.", "NOT_AUTHENTICATED");
+  const isStudent = user.roles.includes("STUDENT");
+  const [student] = isStudent && user.studentId !== null && user.studentId !== undefined
+    ? await repository.studentContext(user.studentId)
+    : [];
+  return {
+    id: String(user.id),
+    displayName: user.displayName,
+    role: isStudent ? "student" : user.roles.includes("ADMIN") ? "admin" : "teacher",
+    gradeLevel: student?.gradeLevel ?? 0,
+    className: student?.className ?? "",
+    isDemo: false,
+    authConfigured: true,
+    username: user.username,
+    studentCode: student?.code ?? null,
+    schoolYear: student?.schoolYear ?? null,
+  };
+}

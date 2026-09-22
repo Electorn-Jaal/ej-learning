@@ -24,6 +24,7 @@ type Draft = {
   pageFrom: string
   pageTo: string
   sequenceNo: number
+  planningPeriodNo: string
 }
 
 const toDraft = (section: OutlineSection): Draft => ({
@@ -33,6 +34,7 @@ const toDraft = (section: OutlineSection): Draft => ({
   pageFrom: section.pageFrom === null ? "" : String(section.pageFrom),
   pageTo: section.pageTo === null ? "" : String(section.pageTo),
   sequenceNo: section.sequenceNo,
+  planningPeriodNo: section.planningPeriodNo === null ? "" : String(section.planningPeriodNo),
 })
 
 const toNumber = (value: string) => {
@@ -51,6 +53,7 @@ function OutlineEditor({ materialId }: { materialId: number }) {
 
   const [rows, setRows] = useState<Draft[]>([])
   const [offset, setOffset] = useState("0")
+  const [periodCount, setPeriodCount] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
 
@@ -59,6 +62,7 @@ function OutlineEditor({ materialId }: { materialId: number }) {
     if (!data) return
     setRows(data.sections.map(toDraft))
     setOffset(String(data.pageOffset))
+    setPeriodCount(data.planningPeriodCount === null ? "" : String(data.planningPeriodCount))
     setError(null)
     setSaved(false)
   }, [data])
@@ -78,6 +82,7 @@ function OutlineEditor({ materialId }: { materialId: number }) {
         pageFrom: "",
         pageTo: "",
         sequenceNo: Math.max(0, ...prev.map((row) => row.sequenceNo)) + 1,
+        planningPeriodNo: periodCount ? "1" : "",
       },
     ])
 
@@ -88,11 +93,24 @@ function OutlineEditor({ materialId }: { materialId: number }) {
       setError("Код болон гарчиг заавал бөглөнө.")
       return
     }
+    const parsedPeriodCount = toNumber(periodCount)
+    if (parsedPeriodCount !== null && (parsedPeriodCount < 1 || parsedPeriodCount > 12)) {
+      setError("Төлөвлөлтийн үеийн тоо 1–12 байна.")
+      return
+    }
+    if (rows.some((row) => {
+      const period = toNumber(row.planningPeriodNo)
+      return period !== null && (parsedPeriodCount === null || period > parsedPeriodCount)
+    })) {
+      setError("Сэдвийн үе нийт төлөвлөлтийн үеийн хүрээнд байх ёстой.")
+      return
+    }
     mutate(
       {
         materialId,
         data: {
           pageOffset: Number(offset) || 0,
+          planningPeriodCount: parsedPeriodCount,
           sections: rows.map((row) => ({
             outlineCode: row.outlineCode.trim(),
             printedNumber: row.printedNumber.trim() || null,
@@ -100,6 +118,7 @@ function OutlineEditor({ materialId }: { materialId: number }) {
             pageFrom: toNumber(row.pageFrom),
             pageTo: toNumber(row.pageTo),
             sequenceNo: row.sequenceNo,
+            planningPeriodNo: toNumber(row.planningPeriodNo),
           })),
         },
       },
@@ -140,6 +159,19 @@ function OutlineEditor({ materialId }: { materialId: number }) {
               onChange={(event) => setOffset(event.target.value)}
             />
           </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="period-count">Төлөвлөлтийн үе</Label>
+            <Input
+              id="period-count"
+              type="number"
+              min={1}
+              max={12}
+              className="w-32"
+              value={periodCount}
+              onChange={(event) => setPeriodCount(event.target.value)}
+              placeholder="3 эсвэл 4"
+            />
+          </div>
           <p className="pb-2 text-xs text-muted-foreground">
             Файл {data.filePages ?? "?"} хуудастай. Хавтас, гарчиг зэрэг номын
             дугаарлалтад ороогүй хуудсыг тооцно.
@@ -163,6 +195,7 @@ function OutlineEditor({ materialId }: { materialId: number }) {
                 <th className="w-20 py-2 pr-2 font-medium">Эхлэх</th>
                 <th className="w-20 py-2 pr-2 font-medium">Дуусах</th>
                 <th className="w-24 py-2 font-medium">Хичээл</th>
+                <th className="w-20 py-2 pl-2 font-medium">Үе</th>
               </tr>
             </thead>
             <tbody>
@@ -221,6 +254,18 @@ function OutlineEditor({ materialId }: { materialId: number }) {
                     <td className="py-1.5 text-xs text-muted-foreground">
                       {used ? `${used} хичээл` : "—"}
                     </td>
+                    <td className="py-1.5 pl-2">
+                      <Input
+                        type="number"
+                        min={1}
+                        max={toNumber(periodCount) ?? 12}
+                        value={row.planningPeriodNo}
+                        onChange={(event) =>
+                          update(index, { planningPeriodNo: event.target.value })
+                        }
+                        aria-label={`${row.title} төлөвлөлтийн үе`}
+                      />
+                    </td>
                   </tr>
                 )
               })}
@@ -272,8 +317,8 @@ export default function AdminBooks() {
   return (
     <div className="space-y-6 pb-10">
       <PageHeader
-        title="Ном ба бүтэц"
-        description="Сурах бичгийн бүлэг, хуудасны мужийг тохируулна."
+        title="Ном ба сэдэв"
+        description="Хичээл бүрийн ном, номын сэдэв, хуудасны мужийг тохируулна."
         stats={[
           { label: "Материал", value: materials.length },
           { label: "Файлтай", value: withFile.length },

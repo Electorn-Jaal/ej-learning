@@ -9,7 +9,7 @@ import { LessonQuiz } from '@/components/quiz/LessonQuiz'
 
 const TITLE: Record<string, string> = {
   lesson: 'Хичээл',
-  personal: 'Хувийн хичээл',
+  personal: 'Нэмэлт бэлтгэл',
   quiz: 'Шалгалт',
 }
 
@@ -116,7 +116,7 @@ export default function StudentSubjectView() {
               <div className="space-y-4">
                 {day.lesson ? (
                   <h2 className="border-t pt-6 text-base font-semibold">
-                    Хувийн хичээлийн шалгалт
+                    Нэмэлт бэлтгэлийн шалгалт
                   </h2>
                 ) : null}
                 <LessonQuiz lessonId={day.extra.lesson.id} />

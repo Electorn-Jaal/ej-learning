@@ -30,8 +30,8 @@ import type {
   AssignmentSubmissionInput,
   CatalogItem,
   ClassSkills,
-  CurrentTopic,
-  CurrentTopicInput,
+  ClassTopic,
+  ClassTopicInput,
   CurrentUser,
   ExtraWorkInput,
   ExtraWorkResult,
@@ -42,6 +42,7 @@ import type {
   GetItemAnalysisParams,
   GetStudentPlanParams,
   GetStudentScheduleParams,
+  GetStudentSubjectOutlineParams,
   GetTeacherLessonsParams,
   GetTeacherQuizAttemptsParams,
   GetTeacherScheduleParams,
@@ -50,6 +51,7 @@ import type {
   LoginInput,
   MaterialOutline,
   MaterialOutlineInput,
+  OutlineChoice,
   PageOffsetInput,
   PasswordChangeInput,
   PreviewStudent,
@@ -61,14 +63,18 @@ import type {
   ReviewResult,
   SchedulableLesson,
   ScheduleDayInput,
+  SchoolPeriod,
   SessionEnvelope,
   SkillChain,
   SkillMap,
   StudentDashboard,
+  StudentPlacement,
   StudentPlan,
   StudentPlanInput,
   StudentProgress,
+  StudentRecord,
   StudentToday,
+  SubjectOutline,
   SubjectOverview,
   SubmissionResult,
   SubmitAssessmentResult,
@@ -978,6 +984,160 @@ export function useGetStudentProgress<TData = Awaited<ReturnType<typeof getStude
 
 
 
+export const getGetStudentRecordUrl = () => {
+
+
+
+
+  return `/api/student/record`
+}
+
+/**
+ * @summary The signed-in student's own register entry and family contacts
+ */
+export const getStudentRecord = async ( options?: Parameters<typeof customFetch>[1]): Promise<StudentRecord> => {
+
+  return customFetch<StudentRecord>(getGetStudentRecordUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStudentRecordQueryKey = () => {
+    return [
+    `/api/student/record`
+    ] as const;
+    }
+
+
+export const getGetStudentRecordQueryOptions = <TData = Awaited<ReturnType<typeof getStudentRecord>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStudentRecord>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStudentRecordQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStudentRecord>>> = ({ signal }) => getStudentRecord({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStudentRecord>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetStudentRecordQueryResult = NonNullable<Awaited<ReturnType<typeof getStudentRecord>>>
+export type GetStudentRecordQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary The signed-in student's own register entry and family contacts
+ */
+
+export function useGetStudentRecord<TData = Awaited<ReturnType<typeof getStudentRecord>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStudentRecord>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetStudentRecordQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetStudentPlacementsUrl = () => {
+
+
+
+
+  return `/api/student/placements`
+}
+
+/**
+ * @summary Where this student was placed, and the plan that level prescribes
+ */
+export const getStudentPlacements = async ( options?: Parameters<typeof customFetch>[1]): Promise<StudentPlacement[]> => {
+
+  return customFetch<StudentPlacement[]>(getGetStudentPlacementsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStudentPlacementsQueryKey = () => {
+    return [
+    `/api/student/placements`
+    ] as const;
+    }
+
+
+export const getGetStudentPlacementsQueryOptions = <TData = Awaited<ReturnType<typeof getStudentPlacements>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStudentPlacements>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStudentPlacementsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStudentPlacements>>> = ({ signal }) => getStudentPlacements({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStudentPlacements>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetStudentPlacementsQueryResult = NonNullable<Awaited<ReturnType<typeof getStudentPlacements>>>
+export type GetStudentPlacementsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Where this student was placed, and the plan that level prescribes
+ */
+
+export function useGetStudentPlacements<TData = Awaited<ReturnType<typeof getStudentPlacements>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStudentPlacements>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetStudentPlacementsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getGetTeacherDashboardUrl = () => {
 
 
@@ -1298,18 +1458,177 @@ export const useReviewTeacherAttempt = <TError = ErrorType<unknown>,
       return useMutation(getReviewTeacherAttemptMutationOptions(options));
     }
 
-export const getSetTeacherCurrentTopicUrl = () => {
+export const getGetTeacherClassTopicsUrl = () => {
 
 
 
 
-  return `/api/teacher/current-topic`
+  return `/api/teacher/class-topics`
 }
 
 /**
- * @summary Set the current topic for an authorized class
+ * @summary Every class and subject this teacher may see, with the topic each is on
  */
-export const setTeacherCurrentTopic = async (currentTopicInput: CurrentTopicInput, options?: Parameters<typeof customFetch>[1]): Promise<CurrentTopic> => {
+export const getTeacherClassTopics = async ( options?: Parameters<typeof customFetch>[1]): Promise<ClassTopic[]> => {
+
+  return customFetch<ClassTopic[]>(getGetTeacherClassTopicsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTeacherClassTopicsQueryKey = () => {
+    return [
+    `/api/teacher/class-topics`
+    ] as const;
+    }
+
+
+export const getGetTeacherClassTopicsQueryOptions = <TData = Awaited<ReturnType<typeof getTeacherClassTopics>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTeacherClassTopics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTeacherClassTopicsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTeacherClassTopics>>> = ({ signal }) => getTeacherClassTopics({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTeacherClassTopics>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTeacherClassTopicsQueryResult = NonNullable<Awaited<ReturnType<typeof getTeacherClassTopics>>>
+export type GetTeacherClassTopicsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Every class and subject this teacher may see, with the topic each is on
+ */
+
+export function useGetTeacherClassTopics<TData = Awaited<ReturnType<typeof getTeacherClassTopics>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTeacherClassTopics>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTeacherClassTopicsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetTeacherOutlineChoicesUrl = (classId: string,
+    subjectCode: string,) => {
+
+
+
+
+  return `/api/teacher/class-topics/${classId}/${subjectCode}/sections`
+}
+
+/**
+ * @summary The sections of one class's core book, to choose a topic from
+ */
+export const getTeacherOutlineChoices = async (classId: string,
+    subjectCode: string, options?: Parameters<typeof customFetch>[1]): Promise<OutlineChoice[]> => {
+
+  return customFetch<OutlineChoice[]>(getGetTeacherOutlineChoicesUrl(classId,subjectCode),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTeacherOutlineChoicesQueryKey = (classId: string,
+    subjectCode: string,) => {
+    return [
+    `/api/teacher/class-topics/${classId}/${subjectCode}/sections`
+    ] as const;
+    }
+
+
+export const getGetTeacherOutlineChoicesQueryOptions = <TData = Awaited<ReturnType<typeof getTeacherOutlineChoices>>, TError = ErrorType<void>>(classId: string,
+    subjectCode: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTeacherOutlineChoices>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTeacherOutlineChoicesQueryKey(classId,subjectCode);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTeacherOutlineChoices>>> = ({ signal }) => getTeacherOutlineChoices(classId,subjectCode, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: classId !== null && classId !== undefined && subjectCode !== null && subjectCode !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTeacherOutlineChoices>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTeacherOutlineChoicesQueryResult = NonNullable<Awaited<ReturnType<typeof getTeacherOutlineChoices>>>
+export type GetTeacherOutlineChoicesQueryError = ErrorType<void>
+
+
+/**
+ * @summary The sections of one class's core book, to choose a topic from
+ */
+
+export function useGetTeacherOutlineChoices<TData = Awaited<ReturnType<typeof getTeacherOutlineChoices>>, TError = ErrorType<void>>(
+ classId: string,
+    subjectCode: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTeacherOutlineChoices>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTeacherOutlineChoicesQueryOptions(classId,subjectCode,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSetClassTopicUrl = () => {
+
+
+
+
+  return `/api/teacher/class-topic`
+}
+
+/**
+ * @summary Move a class to a section of its core book, or clear the pointer
+ */
+export const setClassTopic = async (classTopicInput: ClassTopicInput, options?: Parameters<typeof customFetch>[1]): Promise<ClassTopic> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -1325,12 +1644,12 @@ export const setTeacherCurrentTopic = async (currentTopicInput: CurrentTopicInpu
     }
     return headers;
   };
-return customFetch<CurrentTopic>(getSetTeacherCurrentTopicUrl(),
+return customFetch<ClassTopic>(getSetClassTopicUrl(),
   {
     ...options,
-    method: 'POST',
+    method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(currentTopicInput)
+    body: JSON.stringify(classTopicInput)
   }
 );}
 
@@ -1338,13 +1657,13 @@ return customFetch<CurrentTopic>(getSetTeacherCurrentTopicUrl(),
 
 
 
-export const getSetTeacherCurrentTopicMutationKey = () => ['setTeacherCurrentTopic'] as const;
+export const getSetClassTopicMutationKey = () => ['setClassTopic'] as const;
 
-export const getSetTeacherCurrentTopicMutationOptions = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setTeacherCurrentTopic>>, TError,SetTeacherCurrentTopicMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof setTeacherCurrentTopic>>, TError,SetTeacherCurrentTopicMutationVariables, TContext> => {
+export const getSetClassTopicMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setClassTopic>>, TError,SetClassTopicMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setClassTopic>>, TError,SetClassTopicMutationVariables, TContext> => {
 
-const mutationKey = getSetTeacherCurrentTopicMutationKey();
+const mutationKey = getSetClassTopicMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -1354,10 +1673,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setTeacherCurrentTopic>>, SetTeacherCurrentTopicMutationVariables> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setClassTopic>>, SetClassTopicMutationVariables> = (props) => {
           const {data} = props ?? {};
 
-          return  setTeacherCurrentTopic(data,requestOptions)
+          return  setClassTopic(data,requestOptions)
         }
 
 
@@ -1367,23 +1686,23 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type SetTeacherCurrentTopicMutationResult = NonNullable<Awaited<ReturnType<typeof setTeacherCurrentTopic>>>
-    export type SetTeacherCurrentTopicMutationBody = BodyType<CurrentTopicInput>
-    export type SetTeacherCurrentTopicMutationError = ErrorType<unknown>
-    export type SetTeacherCurrentTopicMutationVariables = {data: BodyType<CurrentTopicInput>}
+    export type SetClassTopicMutationResult = NonNullable<Awaited<ReturnType<typeof setClassTopic>>>
+    export type SetClassTopicMutationBody = BodyType<ClassTopicInput>
+    export type SetClassTopicMutationError = ErrorType<void>
+    export type SetClassTopicMutationVariables = {data: BodyType<ClassTopicInput>}
 
     /**
- * @summary Set the current topic for an authorized class
+ * @summary Move a class to a section of its core book, or clear the pointer
  */
-export const useSetTeacherCurrentTopic = <TError = ErrorType<unknown>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setTeacherCurrentTopic>>, TError,SetTeacherCurrentTopicMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+export const useSetClassTopic = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setClassTopic>>, TError,SetClassTopicMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof setTeacherCurrentTopic>>,
+        Awaited<ReturnType<typeof setClassTopic>>,
         TError,
-        SetTeacherCurrentTopicMutationVariables,
+        SetClassTopicMutationVariables,
         TContext
       > => {
-      return useMutation(getSetTeacherCurrentTopicMutationOptions(options));
+      return useMutation(getSetClassTopicMutationOptions(options));
     }
 
 export const getGetWorkspaceIntegrationDashboardUrl = () => {
@@ -3718,6 +4037,167 @@ export function useGetCurrentTerm<TData = Awaited<ReturnType<typeof getCurrentTe
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetCurrentTermQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetStudentSubjectOutlineUrl = (params: GetStudentSubjectOutlineParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/student/subject-outline?${stringifiedParams}` : `/api/student/subject-outline`
+}
+
+/**
+ * @summary One subject's whole book, with the class's place in it marked
+ */
+export const getStudentSubjectOutline = async (params: GetStudentSubjectOutlineParams, options?: Parameters<typeof customFetch>[1]): Promise<SubjectOutline> => {
+
+  return customFetch<SubjectOutline>(getGetStudentSubjectOutlineUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStudentSubjectOutlineQueryKey = (params?: GetStudentSubjectOutlineParams,) => {
+    return [
+    `/api/student/subject-outline`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetStudentSubjectOutlineQueryOptions = <TData = Awaited<ReturnType<typeof getStudentSubjectOutline>>, TError = ErrorType<unknown>>(params: GetStudentSubjectOutlineParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStudentSubjectOutline>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStudentSubjectOutlineQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStudentSubjectOutline>>> = ({ signal }) => getStudentSubjectOutline(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStudentSubjectOutline>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetStudentSubjectOutlineQueryResult = NonNullable<Awaited<ReturnType<typeof getStudentSubjectOutline>>>
+export type GetStudentSubjectOutlineQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary One subject's whole book, with the class's place in it marked
+ */
+
+export function useGetStudentSubjectOutline<TData = Awaited<ReturnType<typeof getStudentSubjectOutline>>, TError = ErrorType<unknown>>(
+ params: GetStudentSubjectOutlineParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStudentSubjectOutline>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetStudentSubjectOutlineQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetSchoolPeriodsUrl = () => {
+
+
+
+
+  return `/api/school/periods`
+}
+
+/**
+ * @summary The school's bell times for the current year
+ */
+export const getSchoolPeriods = async ( options?: Parameters<typeof customFetch>[1]): Promise<SchoolPeriod[]> => {
+
+  return customFetch<SchoolPeriod[]>(getGetSchoolPeriodsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSchoolPeriodsQueryKey = () => {
+    return [
+    `/api/school/periods`
+    ] as const;
+    }
+
+
+export const getGetSchoolPeriodsQueryOptions = <TData = Awaited<ReturnType<typeof getSchoolPeriods>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSchoolPeriods>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSchoolPeriodsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSchoolPeriods>>> = ({ signal }) => getSchoolPeriods({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSchoolPeriods>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSchoolPeriodsQueryResult = NonNullable<Awaited<ReturnType<typeof getSchoolPeriods>>>
+export type GetSchoolPeriodsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary The school's bell times for the current year
+ */
+
+export function useGetSchoolPeriods<TData = Awaited<ReturnType<typeof getSchoolPeriods>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSchoolPeriods>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSchoolPeriodsQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

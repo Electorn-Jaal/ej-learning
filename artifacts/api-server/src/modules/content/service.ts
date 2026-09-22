@@ -1,14 +1,14 @@
 import path from "node:path";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { recordChange } from "../../shared/audit";
 import { badRequest } from "../../shared/http-error";
 import * as repository from "./repository";
 
 /**
- * Where uploaded books live. Shared with the read path in the learning module,
- * which resolves every served file against this same root and refuses anything
- * that escapes it.
+ * Where uploaded books live. Both halves of the path resolve against it - the
+ * upload below writes here, materialFile at the foot of this file reads from
+ * here - and anything that escapes it is refused.
  */
 const storageRoot = () =>
   path.resolve(process.env.EJ_STORAGE_DIR ?? path.resolve(process.cwd(), "storage"));
@@ -137,13 +137,14 @@ export async function materialOutline(materialId: number) {
     title: header.title,
     pageOffset: header.pageOffset,
     filePages: header.filePages,
+    planningPeriodCount: header.planningPeriodCount,
     sections: await repository.outlineSections(materialId),
   };
 }
 
 export async function saveOutline(
   materialId: number,
-  input: { pageOffset: number; sections: repository.OutlineInput[] },
+  input: { pageOffset: number; planningPeriodCount: number | null; sections: repository.OutlineInput[] },
 ) {
   const [header] = await repository.materialHeader(materialId);
   if (!header) {
@@ -168,6 +169,16 @@ export async function saveOutline(
       );
     }
     sequences.add(section.sequenceNo);
+
+    if (
+      section.planningPeriodNo !== null &&
+      (input.planningPeriodCount === null || section.planningPeriodNo > input.planningPeriodCount)
+    ) {
+      throw badRequest(
+        `${section.outlineCode}: төлөвлөлтийн үе ${section.planningPeriodNo} нь нийт үеийн тооноос их байна.`,
+        "PLANNING_PERIOD_OUT_OF_RANGE",
+      );
+    }
 
     const { pageFrom, pageTo } = section;
     if (pageFrom !== null && pageFrom < 1) {
@@ -196,6 +207,7 @@ export async function saveOutline(
   }
 
   await repository.setPageOffset(materialId, input.pageOffset);
+  await repository.setPlanningPeriodCount(materialId, input.planningPeriodCount);
   await repository.upsertOutline(materialId, input.sections);
   return materialOutline(materialId);
 }
@@ -324,3 +336,35 @@ export async function updatePageOffset(
   });
   return { materialId, pageOffset };
 }
+
+/**
+ * Resolves a stored file, refusing anything that escapes the storage root.
+ *
+ * storage_key is a database value rather than user input, but a bad import or
+ * a later upload path could put "../" in it, and serving arbitrary files off
+ * the host is not a failure worth risking on trust alone.
+ */
+export async function materialFile(materialId: number) {
+  const [version] = await repository.approvedVersion(materialId);
+  if (!version?.storageKey) return null;
+
+  const root = storageRoot();
+  const resolved = path.resolve(root, version.storageKey);
+  if (resolved !== root && !resolved.startsWith(root + path.sep)) return null;
+
+  try {
+    const info = await stat(resolved);
+    if (!info.isFile()) return null;
+  } catch {
+    return null;
+  }
+
+  return {
+    filePath: resolved,
+    mimeType: version.mimeType ?? "application/octet-stream",
+    filename: version.filename ?? path.basename(resolved),
+  };
+}
+
+/** Every approved lesson, task and check, for staff browsing the library. */
+export const teacherCatalog = () => repository.catalog();
