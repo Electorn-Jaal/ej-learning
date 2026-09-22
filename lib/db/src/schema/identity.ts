@@ -2,9 +2,12 @@ import {
   bigint,
   boolean,
   check,
+  date,
   foreignKey,
   index,
   primaryKey,
+  smallint,
+  text,
   timestamp,
   unique,
   varchar,
@@ -261,5 +264,160 @@ export const classTeachersInCore = core.table(
       foreignColumns: [subjectsInCore.id],
       name: "class_teachers_subject_id_fkey",
     }),
+  ],
+);
+
+/**
+ * What a teacher is qualified to teach - their specialty, not their timetable.
+ *
+ * This is NOT core.class_teachers. That table answers "who is answerable for
+ * 6a's maths"; this one answers "who is a maths teacher at all". The school's
+ * staff register carries the second and not the first, so keeping them apart
+ * is what lets a teacher's screens work at all before the class assignments
+ * arrive: a maths teacher can be shown every class that studies maths, which
+ * is a wider answer than "my classes" but never a wrong one.
+ *
+ * A row per subject rather than a column on core.teachers, because the
+ * register is full of paired specialties - "Багш, монгол хэл, уран зохиолын",
+ * "Багш, хими-биологи", "Багш, англи-орос хэлний". Five of the eighteen
+ * subject teachers hold two. A single column would have to drop one of them,
+ * and dropping уран зохиол would leave nine classes with a book and no
+ * teacher who can see it.
+ *
+ * isPrimary marks the one to show when a screen has room for a single label.
+ * Primary-grade teachers get no rows at all: they cover every subject, so the
+ * honest representation is an absence, and their screens have to wait for
+ * core.class_teachers.
+ */
+export const teacherSubjectsInCore = core.table(
+  "teacher_subjects",
+  {
+    teacherId: bigint("teacher_id", { mode: "number" }).notNull(),
+    subjectId: bigint("subject_id", { mode: "number" }).notNull(),
+    isPrimary: boolean("is_primary").default(false).notNull(),
+    isActive: boolean("is_active").default(true).notNull(),
+    // Where the claim came from, kept verbatim: the register's job-title text
+    // is the only evidence, and a mapping made by reading Mongolian prose is
+    // worth auditing later against what the school actually confirms.
+    sourceTitle: varchar("source_title", { length: 300 }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.teacherId, table.subjectId],
+      name: "teacher_subjects_pkey",
+    }),
+    index("idx_teacher_subjects_subject").using(
+      "btree",
+      table.subjectId.asc().nullsLast().op("int8_ops"),
+    ),
+    foreignKey({
+      columns: [table.teacherId],
+      foreignColumns: [teachersInCore.id],
+      name: "teacher_subjects_teacher_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.subjectId],
+      foreignColumns: [subjectsInCore.id],
+      name: "teacher_subjects_subject_id_fkey",
+    }),
+  ],
+);
+
+/**
+ * Who to ring about this child.
+ *
+ * The admissions sheet carries "88111672-аав, 80111672-ээж" - two numbers and
+ * which parent each belongs to - and the system had nowhere to put either. A
+ * school that cannot reach a parent cannot run a parents' evening.
+ *
+ * relationMn is nullable because two thirds of the numbers arrive without one.
+ * Inventing "Аав" for an unlabelled number would put a name to a person the
+ * sheet never named. fullName is nullable for the same reason: the sheet gives
+ * a number and a role at best, never a parent's name.
+ *
+ * This is the most sensitive table in core. Nothing on a child's own screens
+ * needs another family's numbers, and a teacher needs them only for the
+ * classes they are answerable for - so any listing built on it is scoped the
+ * way core.class_teachers scopes a roll, never by role alone.
+ */
+export const studentGuardiansInCore = core.table(
+  "student_guardians",
+  {
+    id: bigint({ mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    studentId: bigint("student_id", { mode: "number" }).notNull(),
+    relationMn: varchar("relation_mn", { length: 40 }),
+    fullName: varchar("full_name", { length: 300 }),
+    phone: varchar({ length: 40 }).notNull(),
+    sequenceNo: smallint("sequence_no").notNull(),
+    // The cell as it was written, so a re-parse can be checked against it.
+    sourceNote: text("source_note"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("student_guardians_student_phone_key").on(table.studentId, table.phone),
+    check("student_guardians_sequence_check", sql`sequence_no > 0`),
+    index("idx_student_guardians_student").using(
+      "btree",
+      table.studentId.asc().nullsLast().op("int8_ops"),
+    ),
+    foreignKey({
+      columns: [table.studentId],
+      foreignColumns: [studentsInCore.id],
+      name: "student_guardians_student_id_fkey",
+    }).onDelete("cascade"),
+  ],
+);
+
+/**
+ * A child who left, and where they went.
+ *
+ * The register's transfer sheet carries the school they moved to, why, when
+ * the personal file was handed over and to whom, and when the removal was
+ * processed. Without it the system cannot answer "how many left this term" and
+ * last year's roll of 239 does not reconcile with this year's 247.
+ *
+ * leftClassMn is text rather than a class id on purpose. Four of these
+ * children were in 8б, and 8б is not a class this year: a foreign key would
+ * either fail the import or quietly drop the only record of which class they
+ * left.
+ *
+ * The child keeps a core.students row with isActive false rather than being
+ * deleted. A register that forgets who has been through it cannot produce a
+ * leaving certificate, and a child who comes back should come back to their
+ * own record.
+ */
+export const studentTransfersInCore = core.table(
+  "student_transfers",
+  {
+    id: bigint({ mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    studentId: bigint("student_id", { mode: "number" }).notNull(),
+    leftClassMn: varchar("left_class_mn", { length: 40 }),
+    destinationMn: varchar("destination_mn", { length: 300 }),
+    reasonMn: varchar("reason_mn", { length: 200 }),
+    fileHandoverMn: varchar("file_handover_mn", { length: 120 }),
+    removedOn: date("removed_on"),
+    // The removal column holds a date for most rows and the word "Хийсэн" for
+    // the rest. Both are kept: one says when, the other only that it happened.
+    removedNoteMn: varchar("removed_note_mn", { length: 60 }),
+    recordedAt: timestamp("recorded_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("student_transfers_student_key").on(table.studentId),
+    index("idx_student_transfers_removed").using(
+      "btree",
+      table.removedOn.desc().nullsLast(),
+    ),
+    foreignKey({
+      columns: [table.studentId],
+      foreignColumns: [studentsInCore.id],
+      name: "student_transfers_student_id_fkey",
+    }).onDelete("cascade"),
   ],
 );

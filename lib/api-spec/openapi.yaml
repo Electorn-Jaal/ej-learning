@@ -186,6 +186,32 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/StudentProgress"
+  /student/record:
+    get:
+      operationId: getStudentRecord
+      tags: [student]
+      summary: The signed-in student's own register entry and family contacts
+      responses:
+        "200":
+          description: Student record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentRecord"
+  /student/placements:
+    get:
+      operationId: getStudentPlacements
+      tags: [student]
+      summary: Where this student was placed, and the plan that level prescribes
+      responses:
+        "200":
+          description: One entry per subject the student has been placed in
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StudentPlacement"
   /teacher/dashboard:
     get:
       operationId: getTeacherDashboard
@@ -246,24 +272,69 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReviewResult"
-  /teacher/current-topic:
-    post:
-      operationId: setTeacherCurrentTopic
+  /teacher/class-topics:
+    get:
+      operationId: getTeacherClassTopics
       tags: [teacher]
-      summary: Set the current topic for an authorized class
+      summary: Every class and subject this teacher may see, with the topic each is on
+      responses:
+        "200":
+          description: Class topics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClassTopic"
+  /teacher/class-topics/{classId}/{subjectCode}/sections:
+    get:
+      operationId: getTeacherOutlineChoices
+      tags: [teacher]
+      summary: The sections of one class's core book, to choose a topic from
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema: {type: string}
+        - name: subjectCode
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Book sections in book order
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OutlineChoice"
+        "403":
+          description: Not this teacher's class
+  /teacher/class-topic:
+    put:
+      operationId: setClassTopic
+      tags: [teacher]
+      summary: Move a class to a section of its core book, or clear the pointer
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CurrentTopicInput"
+              $ref: "#/components/schemas/ClassTopicInput"
       responses:
         "200":
-          description: Current topic
+          description: The class topic as it now stands
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CurrentTopic"
+                $ref: "#/components/schemas/ClassTopic"
+        "403":
+          description: Not a subject this teacher takes in this class
+        "404":
+          description: This class does not study this subject
+        "409":
+          description: No core book, or the section belongs to another book
   /teacher/integrations/workspace:
     get:
       operationId: getWorkspaceIntegrationDashboard
@@ -1119,6 +1190,40 @@ paths:
                 oneOf:
                   - $ref: "#/components/schemas/Term"
                   - type: "null"
+  /student/subject-outline:
+    get:
+      operationId: getStudentSubjectOutline
+      tags: [student]
+      summary: One subject's whole book, with the class's place in it marked
+      parameters:
+        - name: subject
+          in: query
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: >-
+            Every section in book order, each flagged as done, current or to
+            come. Empty when the class studies no such subject, or its book
+            has no outline imported.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubjectOutline"
+  /school/periods:
+    get:
+      operationId: getSchoolPeriods
+      tags: [student]
+      summary: The school's bell times for the current year
+      responses:
+        "200":
+          description: Periods in order, empty when none are recorded
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SchoolPeriod"
   /student/plan:
     get:
       operationId: getStudentPlan
@@ -1466,6 +1571,9 @@ components:
           type: ["integer", "null"]
         sequenceNo:
           type: integer
+        planningPeriodNo:
+          type: ["integer", "null"]
+          minimum: 1
         usedByLessons:
           description: How many lessons point at this section. Above zero means editing it moves real work.
           type: integer
@@ -1477,6 +1585,7 @@ components:
         - pageFrom
         - pageTo
         - sequenceNo
+        - planningPeriodNo
         - usedByLessons
     MaterialOutline:
       type: object
@@ -1489,17 +1598,26 @@ components:
           type: integer
         filePages:
           type: ["integer", "null"]
+        planningPeriodCount:
+          description: Number of planning periods for this material; not globally fixed to three.
+          type: ["integer", "null"]
+          minimum: 1
+          maximum: 12
         sections:
           type: array
           items:
             $ref: "#/components/schemas/OutlineSection"
-      required: [materialId, title, pageOffset, filePages, sections]
+      required: [materialId, title, pageOffset, filePages, planningPeriodCount, sections]
     MaterialOutlineInput:
       type: object
       properties:
         pageOffset:
           type: integer
           minimum: 0
+        planningPeriodCount:
+          type: ["integer", "null"]
+          minimum: 1
+          maximum: 12
         sections:
           type: array
           items:
@@ -1519,8 +1637,12 @@ components:
                 type: ["integer", "null"]
               sequenceNo:
                 type: integer
-            required: [outlineCode, printedNumber, title, pageFrom, pageTo, sequenceNo]
-      required: [pageOffset, sections]
+              planningPeriodNo:
+                type: ["integer", "null"]
+                minimum: 1
+                maximum: 12
+            required: [outlineCode, printedNumber, title, pageFrom, pageTo, sequenceNo, planningPeriodNo]
+      required: [pageOffset, planningPeriodCount, sections]
     SchedulableLesson:
       type: object
       properties:
@@ -1953,7 +2075,74 @@ components:
           oneOf:
             - $ref: "#/components/schemas/ExtraWork"
             - type: "null"
-      required: [subjectCode, subjectName, lesson, extra]
+        periodNo:
+          description: >
+            Which slot in the day the class lesson sits in, matching a row of
+            /school/periods. Null where the school has supplied no timetable,
+            or where the day's only work is the personal kind, which answers to
+            no bell.
+          type: ["integer", "null"]
+      required: [subjectCode, subjectName, lesson, extra, periodNo]
+    SubjectOutlineSection:
+      type: object
+      properties:
+        nodeId: {type: string}
+        printedNumber: {type: [string, "null"]}
+        title: {type: string}
+        pageFrom: {type: [integer, "null"]}
+        pageTo: {type: [integer, "null"]}
+        periodNo: {type: [integer, "null"]}
+        position:
+          description: Place in book order, counting from one.
+          type: integer
+        isCurrent:
+          description: The section the teacher says the class is on right now.
+          type: boolean
+        isPast:
+          description: Earlier in the book than the class's current section.
+          type: boolean
+      required:
+        [nodeId, printedNumber, title, pageFrom, pageTo, periodNo, position,
+         isCurrent, isPast]
+    SubjectOutline:
+      type: object
+      description: >-
+        currentPosition is the CLASS's place in the book, not the reader's own
+        progress. Nothing here measures the individual: no skill has been
+        mapped to a section yet, and no child has been assessed against one.
+      properties:
+        subjectCode: {type: string}
+        subjectName: {type: string}
+        bookTitle: {type: [string, "null"]}
+        materialId:
+          description: The book's id, for the file endpoint. Null when no book.
+          type: [string, "null"]
+        pageOffset:
+          description: >-
+            Add this to a printed page number to reach the same page in the
+            PDF. Front matter means the two rarely agree.
+          type: integer
+        totalSections: {type: integer}
+        currentPosition: {type: [integer, "null"]}
+        sections:
+          type: array
+          items:
+            $ref: "#/components/schemas/SubjectOutlineSection"
+      required:
+        [subjectCode, subjectName, bookTitle, materialId, pageOffset,
+         totalSections, currentPosition, sections]
+    SchoolPeriod:
+      type: object
+      description: One slot in the school day, from the bell schedule.
+      properties:
+        periodNo: {type: integer}
+        nameMn: {type: [string, "null"]}
+        startsAt:
+          description: Wall-clock start, HH:MM.
+          type: string
+        endsAt:
+          type: string
+      required: [periodNo, nameMn, startsAt, endsAt]
     ScheduledDay:
       type: object
       properties:
@@ -2175,6 +2364,17 @@ components:
           type: boolean
         authConfigured:
           type: boolean
+        username:
+          type: string
+        studentCode:
+          description: >-
+            The school's own identifier for this student. Null for staff. The
+            national registration number is deliberately not exposed here: the
+            profile page has no use for it and it is the one field on the
+            record that is worth reading over a shoulder.
+          type: [string, "null"]
+        schoolYear:
+          type: [string, "null"]
       required:
         - id
         - displayName
@@ -2183,6 +2383,9 @@ components:
         - className
         - isDemo
         - authConfigured
+        - username
+        - studentCode
+        - schoolYear
     StudentDashboard:
       type: object
       properties:
@@ -2795,32 +2998,153 @@ components:
         nextAction:
           $ref: "#/components/schemas/NextAction"
       required: [attemptId, status, score, feedback, nextAction]
-    CurrentTopicInput:
+    StudentGuardian:
       type: object
+      description: >-
+        A telephone number the school can reach this child's family on.
+        relationMn is null for the two thirds of numbers that arrive without
+        one, and fullName is almost always null - the admissions sheet records
+        a number and at best a role, never a parent's name.
       properties:
-        classId:
-          type: string
-        subjectCode:
-          type: string
-        topic:
-          type: string
-        topicCode:
-          type: string
-      required: [classId, subjectCode, topic, topicCode]
-    CurrentTopic:
+        relationMn: {type: [string, "null"]}
+        fullName: {type: [string, "null"]}
+        phone: {type: string}
+      required: [relationMn, fullName, phone]
+    StudentRecord:
       type: object
+      description: >-
+        What the school's register says about this child. Fields the register
+        left blank come back null and the screen omits them rather than
+        printing a dash: which records are missing is the school's own data
+        question, not something to put in front of a child.
       properties:
-        classId:
-          type: string
-        subjectCode:
-          type: string
-        topic:
-          type: string
-        topicCode:
-          type: string
-        effectiveDate:
-          type: string
-      required: [classId, subjectCode, topic, topicCode, effectiveDate]
+        studentCode: {type: string}
+        displayName: {type: string}
+        familyName: {type: [string, "null"]}
+        givenName: {type: [string, "null"]}
+        personalFile: {type: [string, "null"]}
+        attendance: {type: [string, "null"]}
+        notes: {type: [string, "null"]}
+        className: {type: string}
+        gradeLevel: {type: integer}
+        schoolYear: {type: [string, "null"]}
+        guardians:
+          type: array
+          items:
+            $ref: "#/components/schemas/StudentGuardian"
+      required:
+        [studentCode, displayName, familyName, givenName, personalFile,
+         attendance, notes, className, gradeLevel, schoolYear, guardians]
+    PlacementStep:
+      type: object
+      description: >-
+        One skill's worth of work at a level: the book or task bank, the unit,
+        what the child does, and how a teacher confirms it. sourceLabel is text
+        rather than a link because most of these titles are not in the library
+        yet; materialId is filled in only for the ones that are.
+      properties:
+        domain: {type: string}
+        sequenceNo: {type: integer}
+        sourceLabel: {type: string}
+        materialId: {type: [string, "null"]}
+        unitFocus: {type: [string, "null"]}
+        pages: {type: [string, "null"]}
+        task: {type: string}
+        priority: {type: string}
+        verification: {type: [string, "null"]}
+      required:
+        [domain, sequenceNo, sourceLabel, materialId, unitFocus, pages, task,
+         priority, verification]
+    StudentPlacement:
+      type: object
+      description: >-
+        The level a placement test put this child at, and what follows from it.
+        provisional is true while the level rests on the objective half of the
+        paper alone - the writing and speaking tasks are judged by a teacher and
+        most children have not had them marked, so the level is a reading rather
+        than a confirmed result.
+      properties:
+        subjectCode: {type: string}
+        subjectName: {type: string}
+        levelCode: {type: string}
+        levelName: {type: string}
+        score: {type: [number, "null"]}
+        maxScore: {type: [number, "null"]}
+        attemptedOn: {type: [string, "null"]}
+        provisional: {type: boolean}
+        note: {type: [string, "null"]}
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/PlacementStep"
+      required:
+        [subjectCode, subjectName, levelCode, levelName, score, maxScore,
+         attemptedOn, provisional, note, steps]
+    ClassTopic:
+      type: object
+      description: >-
+        One class and subject, with the section of its core book the teacher
+        says the class is on. nodeId null means nobody has set it yet, which is
+        not the same as the class being at the start. canEdit separates seeing
+        from changing: a class teacher sees every subject their class runs but
+        may only move the pointer on the ones they teach. editBasis says where
+        that right comes from - ASSIGNED when core.class_teachers names this
+        teacher for this class, SUBJECT when only their registered specialty
+        does, ADMIN otherwise - because a SUBJECT right is shared with every
+        other teacher of that subject and a screen should say so. setByName is
+        whoever last moved the pointer, which is what makes that sharing
+        visible rather than silent.
+      properties:
+        classId: {type: string}
+        className: {type: string}
+        gradeLevel: {type: integer}
+        subjectCode: {type: string}
+        subjectName: {type: string}
+        materialId: {type: [string, "null"]}
+        bookTitle: {type: [string, "null"]}
+        nodeId: {type: [string, "null"]}
+        printedNumber: {type: [string, "null"]}
+        topicTitle: {type: [string, "null"]}
+        pageFrom: {type: [integer, "null"]}
+        pageTo: {type: [integer, "null"]}
+        periodNo: {type: [integer, "null"]}
+        effectiveOn: {type: [string, "null"]}
+        sectionCount: {type: integer}
+        canEdit: {type: boolean}
+        editBasis:
+          type: [string, "null"]
+          enum: [ADMIN, ASSIGNED, SUBJECT, null]
+        setByName: {type: [string, "null"]}
+      required:
+        [classId, className, gradeLevel, subjectCode, subjectName, materialId,
+         bookTitle, nodeId, printedNumber, topicTitle, pageFrom, pageTo,
+         periodNo, effectiveOn, sectionCount, canEdit, editBasis, setByName]
+    OutlineChoice:
+      type: object
+      description: One section of a class's core book, in book order.
+      properties:
+        nodeId: {type: string}
+        printedNumber: {type: [string, "null"]}
+        title: {type: string}
+        pageFrom: {type: [integer, "null"]}
+        pageTo: {type: [integer, "null"]}
+        periodNo: {type: [integer, "null"]}
+        sequenceNo: {type: integer}
+        isCurrent: {type: boolean}
+      required:
+        [nodeId, printedNumber, title, pageFrom, pageTo, periodNo, sequenceNo,
+         isCurrent]
+    ClassTopicInput:
+      type: object
+      description: >-
+        outlineNodeId null clears the pointer, which is how a teacher undoes a
+        wrong choice rather than being forced to name another one.
+      properties:
+        classId: {type: string}
+        subjectCode: {type: string}
+        outlineNodeId: {type: [string, "null"]}
+        note: {type: [string, "null"], maxLength: 500}
+      required: [classId, subjectCode, outlineNodeId]
     WorkspaceSource:
       type: object
       properties:
@@ -2964,13 +3288,53 @@ components:
       required: [id, code, displayName, className, gradeLevel]
     SubjectOverview:
       type: object
+      description: >-
+        One subject a student studies, with the core textbook their class works
+        from. origin says how the subject got here: ROSTER was read off books
+        the school supplied, CURRICULUM is the national subject list standing in
+        until the school confirms it, and a screen is expected to mark the
+        difference rather than show a placeholder as a record. Two different
+        "where are we" answers come back: the period fields describe what the
+        current term covers in the BOOK, while the topic fields are where the
+        teacher says the CLASS actually is. A class behind its term shows a
+        topic from an earlier period, and that is the truth, not a fault.
       properties:
         code: {type: string}
         name: {type: string}
         assessedSkills: {type: integer}
         masteredSkills: {type: integer}
         approvedLessons: {type: integer}
-      required: [code, name, assessedSkills, masteredSkills, approvedLessons]
+        origin: {type: string, enum: [ROSTER, CURRICULUM]}
+        materialId: {type: [string, "null"]}
+        sourceCode: {type: [string, "null"]}
+        bookTitle: {type: [string, "null"]}
+        bookPages: {type: [integer, "null"]}
+        periodCount: {type: [integer, "null"]}
+        currentPeriod: {type: [integer, "null"]}
+        periodSections: {type: integer}
+        periodPageFrom: {type: [integer, "null"]}
+        periodPageTo: {type: [integer, "null"]}
+        topicNodeId: {type: [string, "null"]}
+        topicNumber: {type: [string, "null"]}
+        topicTitle: {type: [string, "null"]}
+        topicPageFrom: {type: [integer, "null"]}
+        topicPageTo: {type: [integer, "null"]}
+        topicSince: {type: [string, "null"]}
+        bookSections:
+          description: How many sections the core book has in total.
+          type: integer
+        topicPosition:
+          description: >-
+            Where the current topic sits in that book, counting from one, or
+            null when no topic is set. The CLASS's position, not the reader's
+            own progress.
+          type: [integer, "null"]
+      required:
+        [code, name, assessedSkills, masteredSkills, approvedLessons, origin,
+         materialId, sourceCode, bookTitle, bookPages, periodCount,
+         currentPeriod, periodSections, periodPageFrom, periodPageTo,
+         topicNodeId, topicNumber, topicTitle, topicPageFrom, topicPageTo,
+         topicSince, bookSections, topicPosition]
     CatalogItem:
       type: object
       properties:

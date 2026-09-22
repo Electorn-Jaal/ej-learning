@@ -60,6 +60,82 @@ describe("EJ Learning API", { concurrency: false }, () => {
       await harness.sql("DELETE FROM learning.terms WHERE school_year = '2099-2100'");
     });
 
+    it("holds two different papers for one class and subject", async () => {
+      // The thing that had no representation before. Questions carried only a
+      // subject, a grade and an order, so "the unit test" and "the term paper"
+      // were the same implicit set and could not both exist.
+      const [{ id: subjectId }] = await harness.sql(
+        "SELECT id FROM core.subjects WHERE code = 'MATH'",
+      );
+      const [{ id: gradeId }] = await harness.sql(
+        "SELECT id FROM core.grade_levels WHERE grade_number = 9",
+      );
+      const [{ id: classId }] = await harness.sql(
+        "SELECT id FROM core.classes WHERE class_code = 'MOCK-LOCAL-9A'",
+      );
+      const [{ id: itemId }] = await harness.sql(
+        `INSERT INTO assessment.diagnostic_items
+           (item_code, subject_id, grade_level_id, item_order, title_mn, max_score)
+         VALUES ('MOCK-LOCAL-ITEM-1', $1, $2, 1, 'Туршилтын асуулт', 2) RETURNING id`,
+        [subjectId, gradeId],
+      );
+
+      const papers = [];
+      for (const [code, kind, order, score] of [
+        ["MOCK-LOCAL-PAPER-UNIT", "UNIT", 1, null],
+        ["MOCK-LOCAL-PAPER-TERM", "TERM", 1, 4],
+      ]) {
+        const [{ id }] = await harness.sql(
+          `INSERT INTO assessment.exam_papers
+             (paper_code, subject_id, grade_level_id, class_id, exam_kind, title_mn, pass_percent)
+           VALUES ($1, $2, $3, $4, $5, $1, 60) RETURNING id`,
+          [code, subjectId, gradeId, classId, kind],
+        );
+        papers.push(id);
+        await harness.sql(
+          `INSERT INTO assessment.exam_paper_items (paper_id, diagnostic_item_id, item_order, max_score)
+           VALUES ($1, $2, $3, $4)`,
+          [id, itemId, order, score],
+        );
+      }
+      assert.equal(papers.length, 2, "one class and subject carries two papers");
+
+      // The same question on both, worth its own score on one and a
+      // paper-specific score on the other.
+      const scores = await harness.sql(
+        `SELECT COALESCE(pi.max_score, di.max_score)::float8 AS score
+           FROM assessment.exam_paper_items pi
+           JOIN assessment.diagnostic_items di ON di.id = pi.diagnostic_item_id
+          WHERE pi.paper_id = ANY($1::bigint[]) ORDER BY score`,
+        [papers],
+      );
+      assert.deepEqual(scores.map((r) => r.score), [2, 4]);
+
+      // A paper's place in the order is its own; the same slot twice is not.
+      await assert.rejects(
+        () =>
+          harness.sql(
+            `INSERT INTO assessment.exam_paper_items (paper_id, diagnostic_item_id, item_order)
+             VALUES ($1, $2, 1)`,
+            [papers[0], itemId],
+          ),
+        /duplicate key|unique/i,
+        "one question sits on a paper once",
+      );
+
+      // A question that children have answered cannot be deleted from under
+      // the paper that asked it.
+      await assert.rejects(
+        () => harness.sql("DELETE FROM assessment.diagnostic_items WHERE id = $1", [itemId]),
+        /foreign key|violates/i,
+        "a question on a paper is protected from deletion",
+      );
+
+      await harness.sql("DELETE FROM assessment.exam_papers WHERE id = ANY($1::bigint[])", [papers]);
+      // exam_paper_items cascades with its paper, so the question frees up.
+      await harness.sql("DELETE FROM assessment.diagnostic_items WHERE id = $1", [itemId]);
+    });
+
     it("seeds an account per role, and two teachers to tell apart", async () => {
       assert.deepEqual(
         harness.accounts.map((a) => a.username).sort(),
@@ -212,6 +288,10 @@ describe("EJ Learning API", { concurrency: false }, () => {
       const anon = createClient(harness.baseUrl);
       const res = await anon.request("/auth/me");
       assert.equal(res.status, 401);
+      assert.equal(res.headers.get("x-content-type-options"), "nosniff");
+      assert.equal(res.headers.get("x-frame-options"), "DENY");
+      assert.equal(res.headers.get("referrer-policy"), "no-referrer");
+      assert.equal(res.headers.get("x-powered-by"), null);
     });
 
     it("signs each role in and reports its role back", async () => {
@@ -229,6 +309,34 @@ describe("EJ Learning API", { concurrency: false }, () => {
       }
     });
 
+    it("gives a student their own record without their registration number", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(accountsByRole.STUDENT);
+
+      const res = await client.request("/session/me");
+      assert.equal(res.status, 200);
+      assert.equal(res.payload.role, "student");
+      assert.ok(res.payload.studentCode, "the school's own code is the identifier shown");
+      assert.ok(res.payload.username, "the sign-in name is theirs to see");
+      assert.ok(res.payload.schoolYear, "the profile names the year");
+
+      // The national registration number lives on the student row and has no
+      // business on a screen. Asserted on the serialized body so a future
+      // column added to the student query cannot smuggle it out.
+      const [{ external_code: registration }] = await harness.sql(
+        `SELECT s.external_code FROM core.students s
+         JOIN core.users u ON u.student_id = s.id
+         WHERE u.username = $1`,
+        [accountsByRole.STUDENT.username],
+      );
+      if (registration) {
+        assert.ok(
+          !JSON.stringify(res.payload).includes(registration),
+          "the registration number must not reach the client",
+        );
+      }
+    });
+
     it("refuses a wrong password", async () => {
       const client = createClient(harness.baseUrl);
       const res = await client.request("/auth/login", {
@@ -236,6 +344,18 @@ describe("EJ Learning API", { concurrency: false }, () => {
         body: { username: accountsByRole.STUDENT.username, password: "not-the-password" },
       });
       assert.equal(res.status, 401);
+    });
+
+    it("slows repeated password guessing for one account and address", async () => {
+      const client = createClient(harness.baseUrl);
+      const body = { username: "rate-limit-probe", password: "wrong-password" };
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        assert.equal((await client.request("/auth/login", { method: "POST", body })).status, 401);
+      }
+      const blocked = await client.request("/auth/login", { method: "POST", body });
+      assert.equal(blocked.status, 429);
+      assert.equal(blocked.payload.code, "LOGIN_RATE_LIMITED");
+      assert.ok(Number(blocked.headers.get("retry-after")) > 0);
     });
 
     it("ends the session on sign-out", async () => {
@@ -264,6 +384,264 @@ describe("EJ Learning API", { concurrency: false }, () => {
         res.payload.map((row) => row.code).sort(),
         ["MATH", "PHYS"],
       );
+      // Both were read off the fixture's own roster, not filled in from the
+      // national curriculum, and the page is entitled to say which.
+      assert.deepEqual([...new Set(res.payload.map((row) => row.origin))], ["ROSTER"]);
+    });
+
+    it("keeps a class's subjects when nobody is assigned to teach them", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(accountsByRole.STUDENT);
+
+      const [{ id: classId }] = await harness.sql(
+        "SELECT id FROM core.classes WHERE class_code = 'MOCK-LOCAL-9A'",
+      );
+      const removed = await harness.sql(
+        `DELETE FROM core.class_teachers WHERE class_id = $1
+         RETURNING teacher_id, subject_id`,
+        [classId],
+      );
+      assert.ok(removed.length > 0, "expected the fixture to have teaching assignments");
+
+      try {
+        const res = await client.request("/student/subjects");
+        assert.equal(res.status, 200);
+        // What a class studies and who teaches it are different facts. This
+        // page used to derive the first from the second, so a class between
+        // teachers had no subjects at all and its students saw nothing.
+        assert.deepEqual(
+          res.payload.map((row) => row.code).sort(),
+          ["MATH", "PHYS"],
+        );
+      } finally {
+        for (const row of removed) {
+          await harness.sql(
+            "INSERT INTO core.class_teachers (class_id, teacher_id, subject_id) VALUES ($1, $2, $3)",
+            [classId, row.teacher_id, row.subject_id],
+          );
+        }
+      }
+    });
+
+    it("tells a teacher where each of their classes has reached", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(byName["demo-teacher"]);
+
+      const res = await client.request("/teacher/class-topics");
+      assert.equal(res.status, 200);
+
+      const maths = res.payload.find(
+        (row) => row.className === "Туршилтын 9А" && row.subjectCode === "MATH",
+      );
+      assert.ok(maths, "expected the maths class on the board");
+      assert.equal(maths.bookTitle, "Local demo — сургалтын жинхэнэ ном биш");
+      // Nobody has set one yet, which is not the same as being at chapter one.
+      assert.equal(maths.nodeId, null);
+      assert.equal(maths.canEdit, true);
+    });
+
+    it("moves a class onto a section and shows it to the children in it", async () => {
+      const teacher = createClient(harness.baseUrl);
+      await teacher.signIn(byName["demo-teacher"]);
+
+      const [{ id: classId }] = await harness.sql(
+        "SELECT id FROM core.classes WHERE class_code = 'MOCK-LOCAL-9A'",
+      );
+      const sections = await teacher.request(
+        `/teacher/class-topics/${classId}/MATH/sections`,
+      );
+      assert.equal(sections.status, 200);
+      assert.deepEqual(
+        sections.payload.map((row) => row.title),
+        ["Туршилтын хэсэг", "Туршилтын хоёр дахь хэсэг"],
+        "sections come back in book order",
+      );
+
+      const second = sections.payload[1];
+      const set = await teacher.request("/teacher/class-topic", {
+        method: "PUT",
+        body: { classId: String(classId), subjectCode: "MATH", outlineNodeId: second.nodeId },
+      });
+      assert.equal(set.status, 200);
+      assert.equal(set.payload.topicTitle, "Туршилтын хоёр дахь хэсэг");
+
+      // The point of the pointer: a child reads what their teacher set.
+      const student = createClient(harness.baseUrl);
+      await student.signIn(accountsByRole.STUDENT);
+      const mine = await student.request("/student/subjects");
+      assert.equal(mine.status, 200);
+      const maths = mine.payload.find((row) => row.code === "MATH");
+      assert.equal(maths.topicTitle, "Туршилтын хоёр дахь хэсэг");
+      assert.equal(maths.topicPageFrom, 2);
+      assert.equal(maths.topicPageTo, 3);
+
+      // Clearing it puts the class back to "not set", so a wrong choice is
+      // undoable without having to name a different wrong one.
+      const cleared = await teacher.request("/teacher/class-topic", {
+        method: "PUT",
+        body: { classId: String(classId), subjectCode: "MATH", outlineNodeId: null },
+      });
+      assert.equal(cleared.status, 200);
+      assert.equal(cleared.payload.nodeId, null);
+    });
+
+    it("admits a teacher by their registered specialty when no class is assigned", async () => {
+      // The shape the school is actually in: the staff register named every
+      // teacher's subject but nobody said which classes are theirs, so
+      // core.class_teachers is empty for them. Without this path fifteen of
+      // the twenty-four teachers open an empty screen.
+      const [{ id: classId }] = await harness.sql(
+        "SELECT id FROM core.classes WHERE class_code = 'MOCK-LOCAL-9A'",
+      );
+      const [{ id: mathsId }] = await harness.sql(
+        "SELECT id FROM core.subjects WHERE code = 'MATH'",
+      );
+      const [teacherB] = await harness.sql(
+        `SELECT t.id FROM core.teachers t JOIN core.users u ON u.id = t.user_id
+          WHERE u.username = 'demo-teacher-b'`,
+      );
+
+      const client = createClient(harness.baseUrl);
+      await client.signIn(byName["demo-teacher-b"]);
+      const find = (payload) =>
+        payload.find((row) => row.className === "Туршилтын 9А" && row.subjectCode === "MATH");
+
+      const before = await client.request("/teacher/class-topics");
+      assert.equal(before.status, 200);
+      assert.equal(find(before.payload), undefined, "no standing, no row");
+
+      await harness.sql(
+        "INSERT INTO core.teacher_subjects (teacher_id, subject_id) VALUES ($1, $2)",
+        [teacherB.id, mathsId],
+      );
+      try {
+        const after = await client.request("/teacher/class-topics");
+        const row = find(after.payload);
+        assert.ok(row, "the specialty alone should put the class on the board");
+        assert.equal(row.canEdit, true);
+        // Named, not merely allowed: this right is shared with every other
+        // maths teacher, so the screen has to be able to say which it is.
+        assert.equal(row.editBasis, "SUBJECT");
+
+        const sections = await client.request(
+          `/teacher/class-topics/${classId}/MATH/sections`,
+        );
+        assert.equal(sections.status, 200, "the picker follows the board");
+
+        const set = await client.request("/teacher/class-topic", {
+          method: "PUT",
+          body: {
+            classId: String(classId),
+            subjectCode: "MATH",
+            outlineNodeId: sections.payload[0].nodeId,
+          },
+        });
+        assert.equal(set.status, 200);
+        // Who moved it is the whole safeguard against three maths teachers
+        // overwriting each other in silence.
+        assert.equal(set.payload.setByName, "Туршилтын багш Б");
+
+        await client.request("/teacher/class-topic", {
+          method: "PUT",
+          body: { classId: String(classId), subjectCode: "MATH", outlineNodeId: null },
+        });
+      } finally {
+        await harness.sql(
+          "DELETE FROM core.teacher_subjects WHERE teacher_id = $1 AND subject_id = $2",
+          [teacherB.id, mathsId],
+        );
+      }
+    });
+
+    it("refuses a section that belongs to a different book", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(byName["demo-teacher"]);
+
+      const [{ id: classId }] = await harness.sql(
+        "SELECT id FROM core.classes WHERE class_code = 'MOCK-LOCAL-9A'",
+      );
+      const [{ id: foreignNode }] = await harness.sql(
+        "SELECT id FROM content.source_outline_nodes WHERE outline_code = 'MOCK-LOCAL-OUTLINE-B'",
+      );
+
+      // The foreign key is satisfied - the node exists - so only the route's
+      // own check stands between 9A's maths and a page of the physics book.
+      const res = await client.request("/teacher/class-topic", {
+        method: "PUT",
+        body: { classId: String(classId), subjectCode: "MATH", outlineNodeId: String(foreignNode) },
+      });
+      assert.equal(res.status, 409);
+    });
+
+    it("refuses a teacher who does not take that subject in that class", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(byName["demo-teacher-b"]);
+
+      const [{ id: classId }] = await harness.sql(
+        "SELECT id FROM core.classes WHERE class_code = 'MOCK-LOCAL-9A'",
+      );
+      const [{ id: node }] = await harness.sql(
+        "SELECT id FROM content.source_outline_nodes WHERE outline_code = 'MOCK-LOCAL-OUTLINE'",
+      );
+
+      const res = await client.request("/teacher/class-topic", {
+        method: "PUT",
+        body: { classId: String(classId), subjectCode: "MATH", outlineNodeId: String(node) },
+      });
+      assert.equal(res.status, 403);
+    });
+
+    it("gives the bell times, and carries a lesson's slot through to the child", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(accountsByRole.STUDENT);
+
+      const [{ school_year: year }] = await harness.sql(
+        "SELECT school_year FROM learning.terms ORDER BY term_number LIMIT 1",
+      );
+      await harness.sql(
+        `INSERT INTO learning.class_periods (school_year, period_no, name_mn, starts_at, ends_at)
+         VALUES ($1, 1, 'MOCK-LOCAL-PERIOD-1', '08:00', '08:40'),
+                ($1, 2, 'MOCK-LOCAL-PERIOD-2', '08:50', '09:30')
+         ON CONFLICT (school_year, period_no) DO NOTHING`,
+        [year],
+      );
+
+      const periods = await client.request("/school/periods");
+      assert.equal(periods.status, 200);
+      // Times come back as wall clock, not a timestamp: the grid prints them.
+      assert.deepEqual(
+        periods.payload.slice(0, 2).map((row) => [row.periodNo, row.startsAt, row.endsAt]),
+        [[1, "08:00", "08:40"], [2, "08:50", "09:30"]],
+      );
+
+      // A day already on the timetable, given a slot.
+      const [row] = await harness.sql(
+        `SELECT cs.id, cs.scheduled_on::text AS day FROM learning.class_schedule cs
+         JOIN core.student_enrollments e ON e.class_id = cs.class_id
+         JOIN core.users u ON u.student_id = e.student_id
+         WHERE u.username = $1 ORDER BY cs.scheduled_on LIMIT 1`,
+        [accountsByRole.STUDENT.username],
+      );
+      assert.ok(row, "expected the fixture to have scheduled something");
+      await harness.sql("UPDATE learning.class_schedule SET period_no = 2 WHERE id = $1", [row.id]);
+
+      try {
+        const res = await client.request(
+          "/student/schedule?date=" + encodeURIComponent(row.day),
+        );
+        assert.equal(res.status, 200);
+        const placed = res.payload.subjects.filter((entry) => entry.periodNo === 2);
+        assert.equal(placed.length, 1, "the lesson reports the slot it was given");
+
+        // Personal work answers to no bell, so it never claims a slot.
+        for (const entry of res.payload.subjects) {
+          if (!entry.lesson && entry.extra) {
+            assert.equal(entry.periodNo, null, "personal work carries no period");
+          }
+        }
+      } finally {
+        await harness.sql("UPDATE learning.class_schedule SET period_no = NULL WHERE id = $1", [row.id]);
+      }
     });
 
     it("names the subject on every skill in the progress page", async () => {
@@ -1221,6 +1599,80 @@ ${run.output}`);
           assert.ok(res.payload.startsOn <= res.payload.endsOn);
         }
       }
+    });
+  });
+
+  describe("a placement level turns into a plan the child can act on", () => {
+    // The whole argument for sitting the test: a score becomes a level, and
+    // the level names work. If this chain breaks anywhere the placement is
+    // just a number in a table.
+    let levelId;
+    let subjectId;
+    let studentId;
+
+    before(async () => {
+      [{ id: subjectId }] = await harness.sql("SELECT id FROM core.subjects WHERE code = 'MATH'");
+      [{ id: studentId }] = await harness.sql(
+        "SELECT id FROM core.students WHERE student_code = 'MOCK-LOCAL-STUDENT'",
+      );
+      [{ id: levelId }] = await harness.sql(
+        `INSERT INTO content.proficiency_levels (framework, code, name_mn, sequence)
+         VALUES ('TEST-CEFR', 'B1', 'Туршилтын түвшин', 1) RETURNING id`,
+      );
+      await harness.sql(
+        `INSERT INTO content.placement_pathways
+           (proficiency_level_id, domain_mn, sequence_no, source_label, unit_focus_mn,
+            task_mn, priority, verification_mn)
+         VALUES ($1, 'Дүрэм', 1, 'Туршилтын ном', 'Unit 1-3',
+                 'Дүрэм судлах → дасгал → залруулга', 'DEVELOP', 'UNIT VERIFY')`,
+        [levelId],
+      );
+      await harness.sql(
+        `INSERT INTO assessment.placement_attempts
+           (student_id, subject_id, proficiency_level_id, total_score, total_max_score,
+            answer_source, attempted_on)
+         VALUES ($1, $2, $3, 37, 60, 'RECONSTRUCTED', '2026-09-07')`,
+        [studentId, subjectId, levelId],
+      );
+    });
+
+    after(async () => {
+      await harness.sql("DELETE FROM assessment.placement_attempts WHERE student_id = $1", [
+        studentId,
+      ]);
+      await harness.sql("DELETE FROM content.placement_pathways WHERE proficiency_level_id = $1", [
+        levelId,
+      ]);
+      await harness.sql("DELETE FROM content.proficiency_levels WHERE id = $1", [levelId]);
+    });
+
+    it("gives the child their level and the steps it prescribes", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(accountsByRole.STUDENT);
+
+      const res = await client.request("/student/placements");
+      assert.equal(res.status, 200);
+
+      const maths = res.payload.find((row) => row.subjectCode === "MATH");
+      assert.ok(maths, "expected the placed subject");
+      assert.equal(maths.levelCode, "B1");
+      assert.equal(maths.score, 37);
+      assert.equal(maths.attemptedOn, "2026-09-07");
+      // Marked by a reconstructed key, so the level is a reading rather than
+      // a confirmed result and the screen has to be able to say so.
+      assert.equal(maths.provisional, true);
+      assert.deepEqual(
+        maths.steps.map((step) => [step.domain, step.sourceLabel, step.priority]),
+        [["Дүрэм", "Туршилтын ном", "DEVELOP"]],
+        "the level has to carry its own work, not just its name",
+      );
+    });
+
+    it("keeps one child's placement out of another account's reach", async () => {
+      const staff = createClient(harness.baseUrl);
+      await staff.signIn(byName["demo-teacher"]);
+      const res = await staff.request("/student/placements");
+      assert.equal(res.status, 403, "this is the child's own record");
     });
   });
 

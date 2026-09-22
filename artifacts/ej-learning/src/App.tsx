@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
@@ -10,24 +10,30 @@ import type { AuthenticatedUser } from '@workspace/api-client-react';
 import { Shell } from '@/components/layout/Shell';
 import { SessionProvider, hasRole, useSessionQuery } from '@/lib/session';
 import Login from '@/pages/Login';
-import Password from '@/pages/Password';
-import StudentToday from '@/pages/student/Today';
-import StudentSchedule from '@/pages/student/Schedule';
-import StudentSubjects from '@/pages/student/Subjects';
-import StudentProgress from '@/pages/student/Progress';
-import StudentProfile from '@/pages/student/Profile';
-import StudentAssignment from '@/pages/student/Assignment';
-import StudentSubjectView from '@/pages/student/SubjectView';
-import StudentPlan from '@/pages/student/Plan';
-import TeacherDashboard from '@/pages/teacher/Dashboard';
-import TeacherSchedule from '@/pages/teacher/Schedule';
-import TeacherQuizResults from '@/pages/teacher/QuizResults';
-import TeacherAnalytics from '@/pages/teacher/Analytics';
-import TeacherAssessment from '@/pages/teacher/Assessment';
-import AdminBooks from '@/pages/admin/Books';
-import AdminContentLinks from '@/pages/admin/ContentLinks';
-import TeacherIntegrations from '@/pages/teacher/Integrations';
-import TeacherCatalog from '@/pages/teacher/Catalog';
+
+// The shell and sign-in screen are the only eager application code. Each
+// authenticated page becomes its own chunk and is fetched when its route is
+// opened, rather than making every student download the admin and teacher UI.
+const Password = lazy(() => import('@/pages/Password'));
+const StudentToday = lazy(() => import('@/pages/student/Today'));
+const StudentSchedule = lazy(() => import('@/pages/student/Schedule'));
+const StudentSubjects = lazy(() => import('@/pages/student/Subjects'));
+const StudentSubjectDetail = lazy(() => import('@/pages/student/SubjectDetail'));
+const StudentProgress = lazy(() => import('@/pages/student/Progress'));
+const StudentProfile = lazy(() => import('@/pages/student/Profile'));
+const StudentAssignment = lazy(() => import('@/pages/student/Assignment'));
+const StudentSubjectView = lazy(() => import('@/pages/student/SubjectView'));
+const StudentPlan = lazy(() => import('@/pages/student/Plan'));
+const TeacherDashboard = lazy(() => import('@/pages/teacher/Dashboard'));
+const TeacherSchedule = lazy(() => import('@/pages/teacher/Schedule'));
+const TeacherQuizResults = lazy(() => import('@/pages/teacher/QuizResults'));
+const TeacherAnalytics = lazy(() => import('@/pages/teacher/Analytics'));
+const TeacherAssessment = lazy(() => import('@/pages/teacher/Assessment'));
+const AdminBooks = lazy(() => import('@/pages/admin/Books'));
+const AdminContentLinks = lazy(() => import('@/pages/admin/ContentLinks'));
+const TeacherIntegrations = lazy(() => import('@/pages/teacher/Integrations'));
+const TeacherCatalog = lazy(() => import('@/pages/teacher/Catalog'));
+const TeacherClassTopics = lazy(() => import('@/pages/teacher/ClassTopics'));
 
 const queryClient = new QueryClient();
 
@@ -49,8 +55,9 @@ function StudentRoutes() {
       <Route path="/progress" component={StudentProgress} />
       <Route path="/profile" component={StudentProfile} />
       <Route path="/password" component={Password} />
+      <Route path="/subjects/:code/plan" component={StudentPlan} />
+      <Route path="/subjects/:code" component={StudentSubjectDetail} />
       <Route path="/subject/:code/:view" component={StudentSubjectView} />
-      <Route path="/plan" component={StudentPlan} />
       <Route path="/assignment/:id" component={StudentAssignment} />
       <Route component={NotFound} />
     </Switch>
@@ -76,6 +83,7 @@ function StaffRoutes({ admin, takesLessons }: { admin: boolean; takesLessons: bo
       {takesLessons || admin ? (
         <Route path="/teacher/assessment" component={TeacherAssessment} />
       ) : null}
+      <Route path="/teacher/class-topics" component={TeacherClassTopics} />
       <Route path="/teacher/catalog" component={TeacherCatalog} />
       <Route path="/teacher/password" component={Password} />
       <Route component={NotFound} />
@@ -110,7 +118,9 @@ function RoutedErrorBoundary({ children }: { children: ReactNode }) {
 
 function LoadingScreen() {
   return (
-    <div className="flex min-h-screen">
+    // Matches the shell it is standing in for, so the page does not gain a
+    // scrollbar for the moment before the real frame mounts.
+    <div className="flex h-dvh overflow-hidden">
       <div className="hidden w-64 space-y-4 border-r bg-card p-4 md:block">
         <Skeleton className="h-8 w-32" />
         <Skeleton className="h-10 w-full" />
@@ -119,6 +129,16 @@ function LoadingScreen() {
       <div className="flex-1 p-8">
         <Skeleton className="h-full w-full" />
       </div>
+    </div>
+  );
+}
+
+function PageLoading() {
+  return (
+    <div className="space-y-4 p-4 md:p-8" aria-busy="true" aria-label="Хуудсыг ачаалж байна">
+      <Skeleton className="h-9 w-48" />
+      <Skeleton className="h-32 w-full" />
+      <Skeleton className="h-64 w-full" />
     </div>
   );
 }
@@ -137,7 +157,9 @@ function Gate() {
     <SessionProvider user={data.user}>
       <Shell>
         <RoutedErrorBoundary>
-          <RoleRoutes user={data.user} />
+          <Suspense fallback={<PageLoading />}>
+            <RoleRoutes user={data.user} />
+          </Suspense>
         </RoutedErrorBoundary>
       </Shell>
     </SessionProvider>

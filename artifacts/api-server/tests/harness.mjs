@@ -192,14 +192,14 @@ export function createClient(baseUrl) {
       });
       const setCookie = res.headers.getSetCookie?.() ?? [];
       if (setCookie.length) cookie = setCookie.map((c) => c.split(";")[0]).join("; ");
-      if (raw) return { status: res.status, buffer: Buffer.from(await res.arrayBuffer()) };
+      if (raw) return { status: res.status, headers: res.headers, buffer: Buffer.from(await res.arrayBuffer()) };
       let payload = null;
       try {
         payload = await res.json();
       } catch {
         payload = null;
       }
-      return { status: res.status, payload };
+      return { status: res.status, headers: res.headers, payload };
     },
     async signIn(account) {
       const res = await this.request("/auth/login", {

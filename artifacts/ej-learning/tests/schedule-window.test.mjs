@@ -36,20 +36,23 @@ test('one subject: every day of a week lands on the same page', () => {
   }
 })
 
-test('every subject at once: three days, the chosen one in the middle', () => {
-  // Three subjects a day would make a week twenty-one rows deep, so this view
-  // trades the week for a page you can still find the day in.
+test('every subject at once: the chosen day alone, and every subject on it', () => {
+  // The timetable page is one day read down the clock, so the window is that
+  // day and nothing either side of it. Every subject the API returns is still
+  // present - the page is bounded by the day, never by a subject count.
   const page = scheduleWindow('2026-09-18', true)
-  assert.equal(page.dates.length, 3)
-  assert.equal(page.dates[1], '2026-09-18')
-  assert.equal(page.from, '2026-09-17')
-  assert.equal(page.to, '2026-09-19')
+  assert.equal(page.dates.length, 1)
+  assert.equal(page.dates[0], '2026-09-18')
+  assert.equal(page.from, '2026-09-18')
+  assert.equal(page.to, '2026-09-18')
 
+  const subjects = ['math', 'english', 'mongolian', 'physics', 'chemistry']
   const rows = page.dates.flatMap((date) =>
-    subjectSlots(['math', 'english']).map((subject) => ({ date, subject })),
+    subjectSlots(subjects).map((subject) => ({ date, subject })),
   )
-  assert.equal(rows.length, 9)
-  assert.deepEqual(subjectSlots(['math', 'english']), ['math', 'english', null])
+  // One day, so the row count is the subject count: no cap, no multiplier.
+  assert.equal(rows.length, 5)
+  assert.deepEqual(subjectSlots(subjects), subjects)
 })
 
 test('page navigation has no overlaps or missing dates across a year boundary', () => {

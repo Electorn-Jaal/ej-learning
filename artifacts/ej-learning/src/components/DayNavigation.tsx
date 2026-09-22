@@ -11,7 +11,7 @@ export function DayNavigation({ day, onChange, pageSize, from, to }: {
   to: string
 }) {
   return (
-    <nav aria-label="Хуваарийн хуудас" className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
+    <nav aria-label="Хуваарийн хуудас" className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-2">
       <Button variant="outline" size="sm" onClick={() => onChange(shiftDay(day, -pageSize))}><ChevronLeft className="h-4 w-4" />Өмнөх</Button>
       <span className="text-xs tabular-nums text-muted-foreground">{from} — {to}</span>
       <Button variant="outline" size="sm" onClick={() => onChange(shiftDay(day, pageSize))}>Дараах<ChevronRight className="h-4 w-4" /></Button>

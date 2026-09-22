@@ -5,8 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./schema": "./src/schema/index.ts",
-    "./legacy": "./src/schema/legacy.ts"
+    "./schema": "./src/schema/index.ts"
   },
   "scripts": {
     "check": "node --env-file-if-exists=../../.env scripts/check.mjs",

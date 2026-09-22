@@ -57,8 +57,26 @@ export const GetStudentSubjectsResponseItem = zod.object({
   "name": zod.string(),
   "assessedSkills": zod.number().int(),
   "masteredSkills": zod.number().int(),
-  "approvedLessons": zod.number().int()
-})
+  "approvedLessons": zod.number().int(),
+  "origin": zod.enum(['ROSTER', 'CURRICULUM']),
+  "materialId": zod.string().nullable(),
+  "sourceCode": zod.string().nullable(),
+  "bookTitle": zod.string().nullable(),
+  "bookPages": zod.number().int().nullable(),
+  "periodCount": zod.number().int().nullable(),
+  "currentPeriod": zod.number().int().nullable(),
+  "periodSections": zod.number().int(),
+  "periodPageFrom": zod.number().int().nullable(),
+  "periodPageTo": zod.number().int().nullable(),
+  "topicNodeId": zod.string().nullable(),
+  "topicNumber": zod.string().nullable(),
+  "topicTitle": zod.string().nullable(),
+  "topicPageFrom": zod.number().int().nullable(),
+  "topicPageTo": zod.number().int().nullable(),
+  "topicSince": zod.string().nullable(),
+  "bookSections": zod.number().int().describe('How many sections the core book has in total.'),
+  "topicPosition": zod.number().int().nullable().describe('Where the current topic sits in that book, counting from one, or null when no topic is set. The CLASS\'s position, not the reader\'s own progress.')
+}).describe('One subject a student studies, with the core textbook their class works from. origin says how the subject got here: ROSTER was read off books the school supplied, CURRICULUM is the national subject list standing in until the school confirms it, and a screen is expected to mark the difference rather than show a placeholder as a record. Two different "where are we" answers come back: the period fields describe what the current term covers in the BOOK, while the topic fields are where the teacher says the CLASS actually is. A class behind its term shows a topic from an earlier period, and that is the truth, not a fault.')
 export const GetStudentSubjectsResponse = zod.array(GetStudentSubjectsResponseItem)
 
 
@@ -81,7 +99,10 @@ export const GetCurrentUserResponse = zod.object({
   "gradeLevel": zod.number().int(),
   "className": zod.string(),
   "isDemo": zod.boolean(),
-  "authConfigured": zod.boolean()
+  "authConfigured": zod.boolean(),
+  "username": zod.string(),
+  "studentCode": zod.string().nullable().describe('The school\'s own identifier for this student. Null for staff. The national registration number is deliberately not exposed here: the profile page has no use for it and it is the one field on the record that is worth reading over a shoulder.'),
+  "schoolYear": zod.string().nullable()
 })
 
 
@@ -262,6 +283,56 @@ export const GetStudentProgressResponse = zod.object({
 
 
 /**
+ * @summary The signed-in student's own register entry and family contacts
+ */
+export const GetStudentRecordResponse = zod.object({
+  "studentCode": zod.string(),
+  "displayName": zod.string(),
+  "familyName": zod.string().nullable(),
+  "givenName": zod.string().nullable(),
+  "personalFile": zod.string().nullable(),
+  "attendance": zod.string().nullable(),
+  "notes": zod.string().nullable(),
+  "className": zod.string(),
+  "gradeLevel": zod.number().int(),
+  "schoolYear": zod.string().nullable(),
+  "guardians": zod.array(zod.object({
+  "relationMn": zod.string().nullable(),
+  "fullName": zod.string().nullable(),
+  "phone": zod.string()
+}).describe('A telephone number the school can reach this child\'s family on. relationMn is null for the two thirds of numbers that arrive without one, and fullName is almost always null - the admissions sheet records a number and at best a role, never a parent\'s name.'))
+}).describe('What the school\'s register says about this child. Fields the register left blank come back null and the screen omits them rather than printing a dash: which records are missing is the school\'s own data question, not something to put in front of a child.')
+
+
+/**
+ * @summary Where this student was placed, and the plan that level prescribes
+ */
+export const GetStudentPlacementsResponseItem = zod.object({
+  "subjectCode": zod.string(),
+  "subjectName": zod.string(),
+  "levelCode": zod.string(),
+  "levelName": zod.string(),
+  "score": zod.number().nullable(),
+  "maxScore": zod.number().nullable(),
+  "attemptedOn": zod.string().nullable(),
+  "provisional": zod.boolean(),
+  "note": zod.string().nullable(),
+  "steps": zod.array(zod.object({
+  "domain": zod.string(),
+  "sequenceNo": zod.number().int(),
+  "sourceLabel": zod.string(),
+  "materialId": zod.string().nullable(),
+  "unitFocus": zod.string().nullable(),
+  "pages": zod.string().nullable(),
+  "task": zod.string(),
+  "priority": zod.string(),
+  "verification": zod.string().nullable()
+}).describe('One skill\'s worth of work at a level: the book or task bank, the unit, what the child does, and how a teacher confirms it. sourceLabel is text rather than a link because most of these titles are not in the library yet; materialId is filled in only for the ones that are.'))
+}).describe('The level a placement test put this child at, and what follows from it. provisional is true while the level rests on the objective half of the paper alone - the writing and speaking tasks are judged by a teacher and most children have not had them marked, so the level is a reading rather than a confirmed result.')
+export const GetStudentPlacementsResponse = zod.array(GetStudentPlacementsResponseItem)
+
+
+/**
  * @summary Get teacher dashboard summary
  */
 export const GetTeacherDashboardResponse = zod.object({
@@ -362,22 +433,86 @@ export const ReviewTeacherAttemptResponse = zod.object({
 
 
 /**
- * @summary Set the current topic for an authorized class
+ * @summary Every class and subject this teacher may see, with the topic each is on
  */
-export const SetTeacherCurrentTopicBody = zod.object({
+export const GetTeacherClassTopicsResponseItem = zod.object({
   "classId": zod.string(),
+  "className": zod.string(),
+  "gradeLevel": zod.number().int(),
   "subjectCode": zod.string(),
-  "topic": zod.string(),
-  "topicCode": zod.string()
+  "subjectName": zod.string(),
+  "materialId": zod.string().nullable(),
+  "bookTitle": zod.string().nullable(),
+  "nodeId": zod.string().nullable(),
+  "printedNumber": zod.string().nullable(),
+  "topicTitle": zod.string().nullable(),
+  "pageFrom": zod.number().int().nullable(),
+  "pageTo": zod.number().int().nullable(),
+  "periodNo": zod.number().int().nullable(),
+  "effectiveOn": zod.string().nullable(),
+  "sectionCount": zod.number().int(),
+  "canEdit": zod.boolean(),
+  "editBasis": zod.union([zod.literal('ADMIN'),zod.literal('ASSIGNED'),zod.literal('SUBJECT'),zod.literal(null)]).nullable(),
+  "setByName": zod.string().nullable()
+}).describe('One class and subject, with the section of its core book the teacher says the class is on. nodeId null means nobody has set it yet, which is not the same as the class being at the start. canEdit separates seeing from changing: a class teacher sees every subject their class runs but may only move the pointer on the ones they teach. editBasis says where that right comes from - ASSIGNED when core.class_teachers names this teacher for this class, SUBJECT when only their registered specialty does, ADMIN otherwise - because a SUBJECT right is shared with every other teacher of that subject and a screen should say so. setByName is whoever last moved the pointer, which is what makes that sharing visible rather than silent.')
+export const GetTeacherClassTopicsResponse = zod.array(GetTeacherClassTopicsResponseItem)
+
+
+/**
+ * @summary The sections of one class's core book, to choose a topic from
+ */
+export const GetTeacherOutlineChoicesParams = zod.object({
+  "classId": zod.coerce.string(),
+  "subjectCode": zod.coerce.string()
 })
 
-export const SetTeacherCurrentTopicResponse = zod.object({
+export const GetTeacherOutlineChoicesResponseItem = zod.object({
+  "nodeId": zod.string(),
+  "printedNumber": zod.string().nullable(),
+  "title": zod.string(),
+  "pageFrom": zod.number().int().nullable(),
+  "pageTo": zod.number().int().nullable(),
+  "periodNo": zod.number().int().nullable(),
+  "sequenceNo": zod.number().int(),
+  "isCurrent": zod.boolean()
+}).describe('One section of a class\'s core book, in book order.')
+export const GetTeacherOutlineChoicesResponse = zod.array(GetTeacherOutlineChoicesResponseItem)
+
+
+/**
+ * @summary Move a class to a section of its core book, or clear the pointer
+ */
+export const setClassTopicBodyNoteMax = 500;
+
+
+
+export const SetClassTopicBody = zod.object({
   "classId": zod.string(),
   "subjectCode": zod.string(),
-  "topic": zod.string(),
-  "topicCode": zod.string(),
-  "effectiveDate": zod.string()
-})
+  "outlineNodeId": zod.string().nullable(),
+  "note": zod.string().max(setClassTopicBodyNoteMax).nullish()
+}).describe('outlineNodeId null clears the pointer, which is how a teacher undoes a wrong choice rather than being forced to name another one.')
+
+export const SetClassTopicResponse = zod.object({
+  "classId": zod.string(),
+  "className": zod.string(),
+  "gradeLevel": zod.number().int(),
+  "subjectCode": zod.string(),
+  "subjectName": zod.string(),
+  "materialId": zod.string().nullable(),
+  "bookTitle": zod.string().nullable(),
+  "nodeId": zod.string().nullable(),
+  "printedNumber": zod.string().nullable(),
+  "topicTitle": zod.string().nullable(),
+  "pageFrom": zod.number().int().nullable(),
+  "pageTo": zod.number().int().nullable(),
+  "periodNo": zod.number().int().nullable(),
+  "effectiveOn": zod.string().nullable(),
+  "sectionCount": zod.number().int(),
+  "canEdit": zod.boolean(),
+  "editBasis": zod.union([zod.literal('ADMIN'),zod.literal('ASSIGNED'),zod.literal('SUBJECT'),zod.literal(null)]).nullable(),
+  "setByName": zod.string().nullable()
+}).describe('One class and subject, with the section of its core book the teacher says the class is on. nodeId null means nobody has set it yet, which is not the same as the class being at the start. canEdit separates seeing from changing: a class teacher sees every subject their class runs but may only move the pointer on the ones they teach. editBasis says where that right comes from - ASSIGNED when core.class_teachers names this teacher for this class, SUBJECT when only their registered specialty does, ADMIN otherwise - because a SUBJECT right is shared with every other teacher of that subject and a screen should say so. setByName is whoever last moved the pointer, which is what makes that sharing visible rather than silent.')
 
 
 /**
@@ -601,7 +736,8 @@ export const GetStudentTodayResponse = zod.object({
 }),
   "source": zod.enum(['AUTO', 'TEACHER']),
   "reason": zod.string().nullable()
-}),zod.null()]).describe('Work assigned to this student personally in this subject. Where the class works through one book it is remediation on top; where the subject places students by level it is the whole of the day\'s work.\n')
+}),zod.null()]).describe('Work assigned to this student personally in this subject. Where the class works through one book it is remediation on top; where the subject places students by level it is the whole of the day\'s work.\n'),
+  "periodNo": zod.number().int().nullable().describe('Which slot in the day the class lesson sits in, matching a row of /school/periods. Null where the school has supplied no timetable, or where the day\'s only work is the personal kind, which answers to no bell.\n')
 })).describe('One entry per subject the student has work in today. A child studies several subjects a day, so this is a list rather than a single lesson.\n'),
   "notice": zod.string()
 })
@@ -676,7 +812,8 @@ export const GetStudentScheduleResponse = zod.object({
 }),
   "source": zod.enum(['AUTO', 'TEACHER']),
   "reason": zod.string().nullable()
-}),zod.null()]).describe('Work assigned to this student personally in this subject. Where the class works through one book it is remediation on top; where the subject places students by level it is the whole of the day\'s work.\n')
+}),zod.null()]).describe('Work assigned to this student personally in this subject. Where the class works through one book it is remediation on top; where the subject places students by level it is the whole of the day\'s work.\n'),
+  "periodNo": zod.number().int().nullable().describe('Which slot in the day the class lesson sits in, matching a row of /school/periods. Null where the school has supplied no timetable, or where the day\'s only work is the personal kind, which answers to no bell.\n')
 })).describe('One entry per subject the student has work in today. A child studies several subjects a day, so this is a list rather than a single lesson.\n'),
   "notice": zod.string()
 })
@@ -1111,11 +1248,17 @@ export const GetMaterialOutlineParams = zod.object({
   "materialId": zod.coerce.number().int()
 })
 
+export const getMaterialOutlineResponsePlanningPeriodCountMax = 12;
+
+
+
+
 export const GetMaterialOutlineResponse = zod.object({
   "materialId": zod.number().int(),
   "title": zod.string().nullable(),
   "pageOffset": zod.number().int(),
   "filePages": zod.number().int().nullable(),
+  "planningPeriodCount": zod.number().int().min(1).max(getMaterialOutlineResponsePlanningPeriodCountMax).nullable().describe('Number of planning periods for this material; not globally fixed to three.'),
   "sections": zod.array(zod.object({
   "id": zod.number().int().nullable(),
   "outlineCode": zod.string(),
@@ -1124,6 +1267,7 @@ export const GetMaterialOutlineResponse = zod.object({
   "pageFrom": zod.number().int().nullable(),
   "pageTo": zod.number().int().nullable(),
   "sequenceNo": zod.number().int(),
+  "planningPeriodNo": zod.number().int().min(1).nullable(),
   "usedByLessons": zod.number().int().describe('How many lessons point at this section. Above zero means editing it moves real work.')
 }))
 })
@@ -1139,27 +1283,39 @@ export const SaveMaterialOutlineParams = zod.object({
 
 export const saveMaterialOutlineBodyPageOffsetMin = 0;
 
+export const saveMaterialOutlineBodyPlanningPeriodCountMax = 12;
 
+
+
+export const saveMaterialOutlineBodySectionsItemPlanningPeriodNoMax = 12;
 
 
 
 export const SaveMaterialOutlineBody = zod.object({
   "pageOffset": zod.number().int().min(saveMaterialOutlineBodyPageOffsetMin),
+  "planningPeriodCount": zod.number().int().min(1).max(saveMaterialOutlineBodyPlanningPeriodCountMax).nullable(),
   "sections": zod.array(zod.object({
   "outlineCode": zod.string().min(1),
   "printedNumber": zod.string().nullable(),
   "title": zod.string().min(1),
   "pageFrom": zod.number().int().nullable(),
   "pageTo": zod.number().int().nullable(),
-  "sequenceNo": zod.number().int()
+  "sequenceNo": zod.number().int(),
+  "planningPeriodNo": zod.number().int().min(1).max(saveMaterialOutlineBodySectionsItemPlanningPeriodNoMax).nullable()
 }))
 })
+
+export const saveMaterialOutlineResponsePlanningPeriodCountMax = 12;
+
+
+
 
 export const SaveMaterialOutlineResponse = zod.object({
   "materialId": zod.number().int(),
   "title": zod.string().nullable(),
   "pageOffset": zod.number().int(),
   "filePages": zod.number().int().nullable(),
+  "planningPeriodCount": zod.number().int().min(1).max(saveMaterialOutlineResponsePlanningPeriodCountMax).nullable().describe('Number of planning periods for this material; not globally fixed to three.'),
   "sections": zod.array(zod.object({
   "id": zod.number().int().nullable(),
   "outlineCode": zod.string(),
@@ -1168,6 +1324,7 @@ export const SaveMaterialOutlineResponse = zod.object({
   "pageFrom": zod.number().int().nullable(),
   "pageTo": zod.number().int().nullable(),
   "sequenceNo": zod.number().int(),
+  "planningPeriodNo": zod.number().int().min(1).nullable(),
   "usedByLessons": zod.number().int().describe('How many lessons point at this section. Above zero means editing it moves real work.')
 }))
 })
@@ -1206,6 +1363,47 @@ export const GetCurrentTermResponse = zod.union([zod.object({
   "startsOn": zod.string(),
   "endsOn": zod.string()
 }),zod.null()])
+
+
+/**
+ * @summary One subject's whole book, with the class's place in it marked
+ */
+export const GetStudentSubjectOutlineQueryParams = zod.object({
+  "subject": zod.coerce.string()
+})
+
+export const GetStudentSubjectOutlineResponse = zod.object({
+  "subjectCode": zod.string(),
+  "subjectName": zod.string(),
+  "bookTitle": zod.string().nullable(),
+  "materialId": zod.string().nullable().describe('The book\'s id, for the file endpoint. Null when no book.'),
+  "pageOffset": zod.number().int().describe('Add this to a printed page number to reach the same page in the PDF. Front matter means the two rarely agree.'),
+  "totalSections": zod.number().int(),
+  "currentPosition": zod.number().int().nullable(),
+  "sections": zod.array(zod.object({
+  "nodeId": zod.string(),
+  "printedNumber": zod.string().nullable(),
+  "title": zod.string(),
+  "pageFrom": zod.number().int().nullable(),
+  "pageTo": zod.number().int().nullable(),
+  "periodNo": zod.number().int().nullable(),
+  "position": zod.number().int().describe('Place in book order, counting from one.'),
+  "isCurrent": zod.boolean().describe('The section the teacher says the class is on right now.'),
+  "isPast": zod.boolean().describe('Earlier in the book than the class\'s current section.')
+}))
+}).describe('currentPosition is the CLASS\'s place in the book, not the reader\'s own progress. Nothing here measures the individual: no skill has been mapped to a section yet, and no child has been assessed against one.')
+
+
+/**
+ * @summary The school's bell times for the current year
+ */
+export const GetSchoolPeriodsResponseItem = zod.object({
+  "periodNo": zod.number().int(),
+  "nameMn": zod.string().nullable(),
+  "startsAt": zod.string().describe('Wall-clock start, HH:MM.'),
+  "endsAt": zod.string()
+}).describe('One slot in the school day, from the bell schedule.')
+export const GetSchoolPeriodsResponse = zod.array(GetSchoolPeriodsResponseItem)
 
 
 /**

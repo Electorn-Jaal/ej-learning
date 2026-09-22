@@ -10,7 +10,7 @@ import {
   type ScheduledDay,
   type SchedulableLesson,
 } from '@workspace/api-client-react'
-import { Sparkles, X } from 'lucide-react'
+import { CalendarRange, List, Sparkles, X } from 'lucide-react'
 import { DatePicker } from '@/components/DatePicker'
 import { DayNavigation } from '@/components/DayNavigation'
 import { Badge } from '@/components/ui/badge'
@@ -125,7 +125,7 @@ function ScheduleRow({ day, firstOfDay, combined, classId, admin, canEdit, lesso
   )
 }
 
-function ScheduleTable({ classId, subjectId, canEdit, admin, date, onDateChange, subjects }: {
+function ScheduleTable({ classId, subjectId, canEdit, admin, date, onDateChange, subjects, view }: {
   classId: number
   subjectId: number | null
   canEdit: boolean
@@ -133,10 +133,11 @@ function ScheduleTable({ classId, subjectId, canEdit, admin, date, onDateChange,
   date: string
   onDateChange: (day: string) => void
   subjects: { subjectId: number; subject: string | null }[]
+  view: 'list' | 'week'
 }) {
   const queryClient = useQueryClient()
   const combined = subjectId === null
-  const window = scheduleWindow(date, combined)
+  const window = scheduleWindow(date, view === 'week' ? false : combined)
   const params = { classId, ...subjectParam(subjectId), from: window.from, to: window.to }
   const { data, isLoading, isError, error } = useGetTeacherSchedule(params)
   const lessonParams = { classId, ...subjectParam(subjectId) }
@@ -168,25 +169,81 @@ function ScheduleTable({ classId, subjectId, canEdit, admin, date, onDateChange,
         <Badge variant="outline">{data.gradeLevel}-р анги</Badge>
       </CardHeader>
       <CardContent className="p-0">
-        {!combined && canEdit ? <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
+        {view === 'list' && !combined && canEdit ? <div className="flex flex-wrap items-center gap-2 px-4 pb-3">
           <Button variant="outline" size="sm" disabled={generating} onClick={() => generate({ data: { classId, ...subjectParam(subjectId) } }, {
             onSuccess: (result) => { setNotice(result.notice); void refresh() },
           })}><Sparkles className="h-4 w-4" />{generating ? 'Үүсгэж байна…' : 'Хоосон өдрүүдийг бөглөх'}</Button>
         </div> : null}
         {notice ? <p role="status" className="px-4 pb-3 text-sm text-muted-foreground">{notice}</p> : null}
         {saveError || generateError ? <p role="alert" className="px-4 pb-3 text-sm text-destructive">{saveError?.data?.error ?? generateError?.data?.error ?? 'Хадгалж чадсангүй.'}</p> : null}
-        <ul className="divide-y border-t">
-          {rows.map((day, index) => <ScheduleRow key={day.scheduledOn + ':' + (day.subjectId ?? 'empty-' + index)}
-            day={day} firstOfDay={index === 0 || rows[index - 1]!.scheduledOn !== day.scheduledOn}
-            combined={combined} classId={classId} admin={admin} canEdit={canEdit}
-            lessons={lessons ?? []} saving={saving} onChange={(row, lessonId) => {
-              setDay({ data: { classId, scheduledOn: row.scheduledOn, lessonId, ...subjectParam(row.subjectId) } }, { onSuccess: refresh })
-            }} onNote={(row, note) => {
-              // The lesson is sent unchanged: the endpoint sets the day, and
-              // leaving it out would clear the lesson this note is about.
-              setDay({ data: { classId, scheduledOn: row.scheduledOn, lessonId: row.lessonId, note, ...subjectParam(row.subjectId) } }, { onSuccess: refresh })
-            }} />)}
-        </ul>
+        {view === 'week' ? (
+          <div className="overflow-x-auto border-t">
+            <div
+              className="grid min-w-[72rem] gap-px bg-border"
+              style={{ gridTemplateColumns: `10rem repeat(${window.dates.length}, minmax(8.5rem, 1fr))` }}
+              role="table"
+              aria-label="Багшийн 7 хоногийн хуваарь"
+            >
+              <div className="bg-card p-3 text-xs font-semibold text-muted-foreground">Хичээл</div>
+              {window.dates.map((scheduledOn) => {
+                const dateValue = new Date(scheduledOn + 'T00:00:00Z')
+                const today = scheduledOn === schoolToday()
+                return (
+                  <div key={scheduledOn} className={cn('bg-card p-3 text-center', today && 'bg-primary/10')}>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{dayName(scheduledOn)}</p>
+                    <p className="mt-1 text-sm font-medium">{DAY.format(dateValue)}</p>
+                    {today ? <p className="text-xs font-medium text-primary">Өнөөдөр</p> : null}
+                  </div>
+                )
+              })}
+
+              {(combined ? subjects : subjects.filter((entry) => entry.subjectId === subjectId)).flatMap((slot) => [
+                <div key={`${slot.subjectId}:label`} className="bg-card p-3">
+                  <p className="text-sm font-semibold">{slot.subject}</p>
+                </div>,
+                ...window.dates.map((scheduledOn) => {
+                  const entry = data.days.find((row) => row.scheduledOn === scheduledOn && row.subjectId === slot.subjectId)
+                  const weekend = isWeekend(scheduledOn)
+                  const today = scheduledOn === schoolToday()
+                  return (
+                    <div
+                      key={`${slot.subjectId}:${scheduledOn}`}
+                      className={cn(
+                        'min-h-24 border-l-2 border-transparent bg-card p-3',
+                        weekend && 'bg-muted/40',
+                        today && 'border-l-primary bg-primary/5',
+                        entry?.lessonId !== null && entry !== undefined && !weekend && 'border-l-primary',
+                      )}
+                    >
+                      {entry?.lessonId !== null && entry !== undefined ? (
+                        <div className="space-y-1">
+                          <p className="text-sm font-semibold leading-snug">{entry.skillName}</p>
+                          {entry.note ? <p className="text-xs text-muted-foreground">{entry.note}</p> : null}
+                          {weekend ? <p className="text-xs font-medium text-primary">Нөхөх хичээл</p> : null}
+                        </div>
+                      ) : (
+                        <span className="text-sm text-muted-foreground/50">—</span>
+                      )}
+                    </div>
+                  )
+                }),
+              ])}
+            </div>
+          </div>
+        ) : (
+          <ul className="divide-y border-t">
+            {rows.map((day, index) => <ScheduleRow key={day.scheduledOn + ':' + (day.subjectId ?? 'empty-' + index)}
+              day={day} firstOfDay={index === 0 || rows[index - 1]!.scheduledOn !== day.scheduledOn}
+              combined={combined} classId={classId} admin={admin} canEdit={canEdit}
+              lessons={lessons ?? []} saving={saving} onChange={(row, lessonId) => {
+                setDay({ data: { classId, scheduledOn: row.scheduledOn, lessonId, ...subjectParam(row.subjectId) } }, { onSuccess: refresh })
+              }} onNote={(row, note) => {
+                // The lesson is sent unchanged: the endpoint sets the day, and
+                // leaving it out would clear the lesson this note is about.
+                setDay({ data: { classId, scheduledOn: row.scheduledOn, lessonId: row.lessonId, note, ...subjectParam(row.subjectId) } }, { onSuccess: refresh })
+              }} />)}
+          </ul>
+        )}
         <DayNavigation day={date} onChange={onDateChange} pageSize={window.count} from={window.from} to={window.to} />
       </CardContent>
     </Card>
@@ -200,6 +257,7 @@ export default function TeacherSchedule() {
   const [date, setDate] = useState(schoolToday)
   const [selectedClass, setSelectedClass] = useState<string | null>(null)
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null)
+  const [view, setView] = useState<'list' | 'week'>('list')
   const linked = useLinkedSelection()
 
   if (isLoading) return <Skeleton className="h-64 w-full" />
@@ -219,7 +277,16 @@ export default function TeacherSchedule() {
 
   return (
     <div className="space-y-5">
-      <header><h1 className="text-2xl font-bold">Хичээлийн хуваарь</h1></header>
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex rounded-md border border-border bg-card p-1" role="group" aria-label="Хуваарийн харагдац">
+          <Button type="button" size="sm" variant={view === 'list' ? 'default' : 'ghost'} aria-pressed={view === 'list'} onClick={() => setView('list')}>
+            <List className="h-4 w-4" />Жагсаалт
+          </Button>
+          <Button type="button" size="sm" variant={view === 'week' ? 'default' : 'ghost'} aria-pressed={view === 'week'} onClick={() => setView('week')}>
+            <CalendarRange className="h-4 w-4" />7 хоног
+          </Button>
+        </div>
+      </header>
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="space-y-2">
           <label htmlFor="schedule-class" className="block text-sm font-medium">Анги</label>
@@ -240,7 +307,7 @@ export default function TeacherSchedule() {
         <div className="space-y-2"><p className="text-sm font-medium">Өдөр</p><DatePicker value={date} onChange={setDate} /></div>
       </div>
       <ScheduleTable key={key + window.from} classId={classId} subjectId={subjectId} canEdit={canEdit}
-        admin={admin} date={date} onDateChange={setDate} subjects={subjects} />
+        admin={admin} date={date} onDateChange={setDate} subjects={subjects} view={view} />
     </div>
   )
 }

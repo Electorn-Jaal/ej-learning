@@ -1,7 +1,12 @@
 import { useState, type ReactNode } from "react"
-import { useGetTeacherDashboard, type TeacherClassToday } from "@workspace/api-client-react"
-import { BookOpen, ChevronDown, ChevronUp } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { Link } from "wouter"
+import {
+  useGetTeacherClassTopics,
+  useGetTeacherDashboard,
+  type TeacherClassToday,
+} from "@workspace/api-client-react"
+import { ArrowRight, BookOpen, ChevronDown, ChevronUp } from "lucide-react"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
@@ -210,6 +215,65 @@ function ClassRow({
   )
 }
 
+/**
+ * What this screen says when no class has been assigned to this teacher.
+ *
+ * Which is nearly all of them: the school's staff register named everyone's
+ * specialty but never said who takes which class, so core.class_teachers is
+ * empty and this board - which is about today's children - has nothing to
+ * show. The screen used to answer that with three grey boxes numbered one to
+ * three, which is a picture of a process rather than a thing to do.
+ *
+ * What it can say instead is true and immediately useful: your specialty IS
+ * recorded, here is how many classes study it, and here is the one screen
+ * that already works for you. The subject names are read off the class-topics
+ * board rather than fetched separately, so the click that follows this panel
+ * is served from cache.
+ */
+function NoClassesYet() {
+  const { data } = useGetTeacherClassTopics()
+  const subjects = [...new Set((data ?? []).map((row) => row.subjectName))]
+
+  return (
+    <Card>
+      <CardContent className="space-y-4 p-4">
+        <div>
+          <h2 className="font-semibold">Танд хариуцсан анги бүртгэгдээгүй байна</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Энэ самбар өнөөдрийн хичээл, сурагчдын тухай тул анги томилогдсоны дараа
+            ажиллана. Сурагчийн нэр, дүн зэрэг хувийн мэдээллийг зөвхөн тухайн ангийг
+            хариуцсан багш харна.
+          </p>
+        </div>
+
+        {subjects.length > 0 ? (
+          <div className="space-y-2 border-t pt-3">
+            <p className="text-sm">
+              Харин таны мэргэжил бүртгэгдсэн байна —{" "}
+              <span className="font-semibold">{subjects.join(", ")}</span>. Тэр хичээлийг
+              үздэг {data?.length ?? 0} ангийн ном, сэдвийг одооноос харж, «одоо хаана
+              явааг» нь заах боломжтой.
+            </p>
+            <Link
+              href="/teacher/class-topics"
+              className={cn(buttonVariants({ size: "sm" }), "gap-1.5")}
+            >
+              Ангийн сэдэв рүү очих
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        ) : (
+          <p className="border-t pt-3 text-sm text-muted-foreground">
+            Бүртгэлд таны заадаг хичээл тэмдэглэгдээгүй байна. Бага ангийн багш нар бүх
+            хичээл заадаг тул мэргэжлээр ялгах боломжгүй — энэ тохиолдолд анги
+            хариуцуулах мэдээллийг хүлээх шаардлагатай.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
 export default function TeacherDashboard() {
   const { data, isLoading, isError } = useGetTeacherDashboard()
   // One card opens at a time: this is a list to scan, not a set of panels to
@@ -236,18 +300,13 @@ export default function TeacherDashboard() {
     <div className="space-y-6">
       <header className="space-y-1">
         <p className="text-sm text-muted-foreground">{data.dateLabel}</p>
-        <h1 className="text-2xl font-bold">Өнөөдрийн хичээл</h1>
         <p className="text-sm text-muted-foreground">
           {data.teacherName} · {data.classes.length} анги
         </p>
       </header>
 
       {data.classes.length === 0 ? (
-        <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            Танд оногдсон анги алга. Админаас анги холбуулна уу.
-          </CardContent>
-        </Card>
+        <NoClassesYet />
       ) : (
         <ul className="divide-y rounded-md border border-border bg-card">
           {data.classes.map((klass) => {

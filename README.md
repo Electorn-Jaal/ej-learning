@@ -22,7 +22,6 @@
 |---|---|
 | artifacts/ej-learning | React + Vite интерфэйс |
 | artifacts/api-server | Node.js + Express API; identity, content, learning модулиуд |
-| artifacts/mockup-sandbox | Загварын туршилтын орчин; бүтээгдэхүүний хэсэг биш |
 | lib/db | PostgreSQL, Drizzle schema ба migration |
 | lib/api-spec | OpenAPI гэрээ, codegen |
 | lib/api-client-react, lib/api-zod | Үүсгэсэн клиент ба баталгаажуулах схем |

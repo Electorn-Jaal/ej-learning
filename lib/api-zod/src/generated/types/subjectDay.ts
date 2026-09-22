@@ -15,4 +15,9 @@ export interface SubjectDay {
   lesson: DailyLessonView | null;
   /** Work assigned to this student personally in this subject. Where the class works through one book it is remediation on top; where the subject places students by level it is the whole of the day's work. */
   extra: ExtraWork | null;
+  /**
+     * Which slot in the day the class lesson sits in, matching a row of /school/periods. Null where the school has supplied no timetable, or where the day's only work is the personal kind, which answers to no bell.
+     * @nullable
+     */
+  periodNo: number | null;
 }

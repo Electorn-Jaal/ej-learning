@@ -4,6 +4,7 @@ import {
   GetMaterialOutlineResponse,
   GetSkillChainResponse,
   GetSkillMapResponse,
+  GetTeacherCatalogResponse,
   SaveMaterialOutlineBody,
   SaveMaterialOutlineResponse,
   SetMaterialPageOffsetBody,
@@ -11,13 +12,15 @@ import {
   UploadMaterialFileResponse,
 } from "@workspace/api-zod";
 import { requireRole } from "../../middlewares/auth";
-import { badRequest } from "../../shared/http-error";
+import { badRequest, unauthorized } from "../../shared/http-error";
 import {
   listMaterials,
+  materialFile,
   materialOutline,
   saveOutline,
   skillChain,
   skillMap,
+  teacherCatalog,
   storeMaterialFile,
   updatePageOffset,
 } from "./service";
@@ -126,6 +129,51 @@ router.put("/admin/materials/:materialId/page-offset", asAdmin, async (req, res,
       req.user!.username,
     );
     res.json(SetMaterialPageOffsetResponse.parse(updated));
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Any signed-in account may read an approved book. Which lesson points at it
+// is what differs per student, not the book itself.
+router.get("/content/materials/:materialId/file", async (req, res, next) => {
+  try {
+    if (!req.user) throw unauthorized("Нэвтэрнэ үү.", "NOT_AUTHENTICATED");
+
+    const materialId = Number(req.params.materialId);
+    if (!Number.isInteger(materialId) || materialId <= 0) {
+      throw badRequest("Материалын дугаар буруу байна.", "INVALID_MATERIAL_ID");
+    }
+
+    const file = await materialFile(materialId);
+    if (!file) {
+      res.status(404).json({
+        error: "Баталгаажсан файл олдсонгүй.",
+        code: "FILE_NOT_FOUND",
+      });
+      return;
+    }
+
+    res.type(file.mimeType);
+    // inline: the viewer opens it in place, and a #page=N fragment lands the
+    // student on the pages their lesson covers.
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
+    );
+    res.sendFile(file.filePath, (error) => {
+      if (error) next(error);
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// The whole approved library, for staff browsing what exists. Not scoped by
+// class: a teacher choosing material looks past their own timetable.
+router.get("/teacher/catalog", requireRole("TEACHER", "ADMIN"), async (_req, res, next) => {
+  try {
+    res.json(GetTeacherCatalogResponse.parse(await teacherCatalog()));
   } catch (error) {
     next(error);
   }

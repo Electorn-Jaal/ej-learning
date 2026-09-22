@@ -127,6 +127,90 @@
       "when": 1789964523561,
       "tag": "0017_modern_junta",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1790035200000,
+      "tag": "0018_flexible_book_periods",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790078400000,
+      "tag": "0019_class_core_subjects",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790082000000,
+      "tag": "0020_class_topic_pointer",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1790085600000,
+      "tag": "0021_exam_papers",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1790089200000,
+      "tag": "0022_class_periods",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1790092800000,
+      "tag": "0023_teacher_subjects",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790096400000,
+      "tag": "0024_placement_paper_scope",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1790100000000,
+      "tag": "0025_placement_attempt_date",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1790103600000,
+      "tag": "0026_diagnostic_stimulus",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1790107200000,
+      "tag": "0027_placement_pathways",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1790110800000,
+      "tag": "0028_student_record",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1790114400000,
+      "tag": "0029_student_transfers",
+      "breakpoints": true
     }
   ]
 }

@@ -14,5 +14,12 @@ export interface MaterialOutline {
   pageOffset: number;
   /** @nullable */
   filePages: number | null;
+  /**
+     * Number of planning periods for this material; not globally fixed to three.
+     * @minimum 1
+     * @maximum 12
+     * @nullable
+     */
+  planningPeriodCount: number | null;
   sections: OutlineSection[];
 }

@@ -5,11 +5,52 @@
  * EJ Learning adaptive learning API
  * OpenAPI spec version: 0.1.0
  */
+import type { SubjectOverviewOrigin } from './subjectOverviewOrigin';
 
+/**
+ * One subject a student studies, with the core textbook their class works from. origin says how the subject got here: ROSTER was read off books the school supplied, CURRICULUM is the national subject list standing in until the school confirms it, and a screen is expected to mark the difference rather than show a placeholder as a record. Two different "where are we" answers come back: the period fields describe what the current term covers in the BOOK, while the topic fields are where the teacher says the CLASS actually is. A class behind its term shows a topic from an earlier period, and that is the truth, not a fault.
+ */
 export interface SubjectOverview {
   code: string;
   name: string;
   assessedSkills: number;
   masteredSkills: number;
   approvedLessons: number;
+  origin: SubjectOverviewOrigin;
+  /** @nullable */
+  materialId: string | null;
+  /** @nullable */
+  sourceCode: string | null;
+  /** @nullable */
+  bookTitle: string | null;
+  /** @nullable */
+  bookPages: number | null;
+  /** @nullable */
+  periodCount: number | null;
+  /** @nullable */
+  currentPeriod: number | null;
+  periodSections: number;
+  /** @nullable */
+  periodPageFrom: number | null;
+  /** @nullable */
+  periodPageTo: number | null;
+  /** @nullable */
+  topicNodeId: string | null;
+  /** @nullable */
+  topicNumber: string | null;
+  /** @nullable */
+  topicTitle: string | null;
+  /** @nullable */
+  topicPageFrom: number | null;
+  /** @nullable */
+  topicPageTo: number | null;
+  /** @nullable */
+  topicSince: string | null;
+  /** How many sections the core book has in total. */
+  bookSections: number;
+  /**
+     * Where the current topic sits in that book, counting from one, or null when no topic is set. The CLASS's position, not the reader's own progress.
+     * @nullable
+     */
+  topicPosition: number | null;
 }

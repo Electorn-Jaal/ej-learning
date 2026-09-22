@@ -15,4 +15,12 @@ export interface CurrentUser {
   className: string;
   isDemo: boolean;
   authConfigured: boolean;
+  username: string;
+  /**
+     * The school's own identifier for this student. Null for staff. The national registration number is deliberately not exposed here: the profile page has no use for it and it is the one field on the record that is worth reading over a shoulder.
+     * @nullable
+     */
+  studentCode: string | null;
+  /** @nullable */
+  schoolYear: string | null;
 }

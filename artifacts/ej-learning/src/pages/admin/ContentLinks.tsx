@@ -189,11 +189,7 @@ function TopicSkillTab({ data }: { data: SkillMap }) {
       </p>
 
       {sections.length === 0 ? (
-        <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            Тохирох сэдэв олдсонгүй.
-          </CardContent>
-        </Card>
+        <p className="py-6 text-sm text-muted-foreground">Тохирох сэдэв олдсонгүй.</p>
       ) : (
         <div className="space-y-8">
           {sections.map(([subjectName, entries]) => (
@@ -392,13 +388,11 @@ function ChainTab({ data }: { data: SkillChain }) {
       </p>
 
       {sections.length === 0 ? (
-        <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            {links.length === 0
-              ? "Урьдач нөхцөлийн холбоос алга. Нөхөх сургалт ямар ч сурагчийг хөдөлгөхгүй."
-              : "Тохирох холбоос олдсонгүй."}
-          </CardContent>
-        </Card>
+        <p className="py-6 text-sm text-muted-foreground">
+          {links.length === 0
+            ? "Урьдач нөхцөлийн холбоос алга. Нөхөх сургалт ямар ч сурагчийг хөдөлгөхгүй."
+            : "Тохирох холбоос олдсонгүй."}
+        </p>
       ) : (
         <div className="space-y-8">
           {sections.map(([subjectName, entries]) => (
@@ -520,7 +514,7 @@ export default function AdminContentLinks() {
   return (
     <div className="space-y-6 pb-10">
       <PageHeader
-        title="Агуулгын холбоо"
+        title="Сэдвийн холбоо"
         description="Сэдэв, чадвар, урьдач нөхцөл хоорондоо яаж холбогдсоныг харуулна. Энэ хуудас юу ч өөрчилдөггүй."
         stats={stats}
       />

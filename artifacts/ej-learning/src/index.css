@@ -65,7 +65,11 @@
 
   --border: 36 14% 86%;
   --input: 36 14% 86%;
-  --ring: 210 90% 25%;
+  /* The focus ring joins the yellow family, but not at the column's own
+     amber: that lands 1.49:1 on this background and a focus indicator
+     has to clear 3:1 to be an indicator at all. The warm brown does,
+     at 3.25:1. */
+  --ring: 32 45% 48%;
 
   /* The navy off the school's badge - hsl(210, 96%, 24-30%) there, a quarter
      of the mark - kept a shade softer than the print original. Still
@@ -81,8 +85,13 @@
   --muted: 38 20% 93%;
   --muted-foreground: 215 12% 42%;
 
-  --accent: 210 90% 25%;
-  --accent-foreground: 40 30% 98%;
+  /* Every hover and highlight in the Radix components - menus, selects,
+     the command palette, the calendar - reads this one pair, and it was
+     navy. It is the navigation column's own amber now, the full strength
+     one, so a highlighted menu row and the column match exactly. Ink on it
+     reads 9.62:1. */
+  --accent: 38 95% 68%;
+  --accent-foreground: 215 28% 15%;
 
   /* Muted forest, not signal green */
   --success: 152 38% 30%;
@@ -158,7 +167,9 @@
 
   --border: 30 6% 21%;
   --input: 30 6% 21%;
-  --ring: 210 45% 62%;
+  /* Brighter here: the muted browns sit at 2.76:1 on the dark ground,
+     under the floor. This one is 8.67:1. */
+  --ring: 38 80% 60%;
 
   /* Lifted for contrast on a dark ground; the ink blue above is unreadable here */
   --primary: 210 45% 62%;
@@ -170,8 +181,8 @@
   --muted: 30 6% 18%;
   --muted-foreground: 36 10% 62%;
 
-  --accent: 210 45% 62%;
-  --accent-foreground: 215 30% 12%;
+  --accent: 38 34% 23%;
+  --accent-foreground: 38 20% 92%;
 
   --success: 152 32% 52%;
   --success-foreground: 215 30% 12%;
@@ -206,6 +217,14 @@
   }
   body {
     @apply font-sans antialiased bg-background text-foreground;
+  }
+  /* The shell is a fixed frame the size of the viewport, so the document has
+     nothing to scroll. Without this the browser still offers the rubber-band
+     pull on a touchpad - the page slides a few pixels and springs back, which
+     reads as a layout that is not nailed down. */
+  html,
+  body {
+    overscroll-behavior: none;
   }
 }
 

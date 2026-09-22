@@ -28,8 +28,8 @@ import { randomBytes } from "node:crypto";
 import { db, pool, readRows } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { hashPassword } from "../src/shared/password";
-import { recordSkillEvidence, recordTeacherMastery } from "../src/modules/learning/mastery";
-import { assignRemediation, recommendationsFor } from "../src/modules/learning/remediation";
+import { recordSkillEvidence, recordTeacherMastery } from "../src/modules/mastery/service";
+import { assignRemediation, recommendationsFor } from "../src/modules/mastery/remediation";
 
 if (!process.argv.includes("--yes")) {
   console.error("Refusing to run without --yes.");
@@ -475,6 +475,18 @@ try {
   const classSubjects: { klass: string; subject: string }[] = [];
   for (const plan of teacherPlan) for (const hold of plan.holds) classSubjects.push(hold);
 
+  // What each class studies, which is not the same fact as who teaches it.
+  // The demo happens to derive one from the other because every demo subject
+  // has a teacher, but the curriculum is what the student screens read, and a
+  // class keeps its subjects when a teacher is removed. ON CONFLICT because
+  // two teachers can share a class and subject between them.
+  for (const { klass, subject } of classSubjects) {
+    await db.execute(sql`
+      INSERT INTO core.class_subjects (class_id, subject_id, origin)
+      VALUES (${classIds.get(klass)!}, ${subjectIds.get(subject)!}, 'ROSTER')
+      ON CONFLICT (class_id, subject_id) DO NOTHING`);
+  }
+
   for (const { klass, subject } of classSubjects) {
     const subjectSkills = SKILLS.filter((s) => s.subject === subject);
     let lessonCursor = 0;
@@ -614,6 +626,10 @@ try {
       `SELECT count(*)::int AS n FROM core.class_teachers ct
        JOIN core.classes c ON c.id = ct.class_id WHERE c.class_code LIKE 'DEMO-%'`,
       (n) => n === classSubjects.length),
+    await check("class -> subject it studies",
+      `SELECT count(*)::int AS n FROM core.class_subjects cs
+       JOIN core.classes c ON c.id = cs.class_id WHERE c.class_code LIKE 'DEMO-%'`,
+      (n) => n === new Set(classSubjects.map((cs) => `${cs.klass}/${cs.subject}`)).size),
     await check("two classes have a class teacher",
       `SELECT count(*)::int AS n FROM core.classes
        WHERE class_code LIKE 'DEMO-%' AND class_teacher_id IS NOT NULL`,

@@ -94,7 +94,6 @@ export default function StudentProgress() {
   return (
     <div className="space-y-8 pb-10">
       <header className="space-y-1">
-        <h1 className="text-2xl font-bold">Миний ахиц</h1>
         <p className="text-muted-foreground">
           {measured.length === 0
             ? "Хараахан үнэлэгдсэн чадвар алга. Сорил бөглөсний дараа энд харагдана."

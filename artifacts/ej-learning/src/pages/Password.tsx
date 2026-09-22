@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useChangePassword } from '@workspace/api-client-react'
+import { BackLink } from '@/components/BackLink'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -48,13 +49,7 @@ export default function Password() {
 
   return (
     <div className="space-y-6">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-bold">Нууц үг солих</h1>
-        <p className="text-sm text-muted-foreground">
-          Солих үед бусад төхөөрөмж дээрх нэвтрэлт тань хаагдана. Энэ цонх
-          нээлттэй хэвээр үлдэнэ.
-        </p>
-      </header>
+      <BackLink />
 
       <Card className="max-w-md">
         <CardHeader>

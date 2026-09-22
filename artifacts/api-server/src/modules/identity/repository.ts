@@ -2,6 +2,7 @@ import { and, eq, gt, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
 import {
   classTeachersInCore,
   db,
+  readRows,
   sessionsInCore,
   teachersInCore,
   userRolesInCore,
@@ -189,3 +190,26 @@ export async function deleteDeadSessions() {
       or(lt(sessionsInCore.expiresAt, now), isNotNull(sessionsInCore.revokedAt)),
     );
 }
+
+/**
+ * The school context of one student, for the session read.
+ *
+ * Narrower than the student listings on purpose: "who am I" needs the class,
+ * the grade and the year printed beside a name, and nothing else. The
+ * national registration number is not selected anywhere near a session
+ * response.
+ */
+export const studentContext = (studentId: number) =>
+  readRows<{ code: string; className: string; gradeLevel: number; schoolYear: string | null }>(
+    `SELECT s.student_code AS code,
+       COALESCE(string_agg(DISTINCT c.name_mn, ', ' ORDER BY c.name_mn), '') AS "className",
+       COALESCE(max(g.grade_number), 0)::int AS "gradeLevel",
+       max(c.school_year) AS "schoolYear"
+     FROM core.students s
+     LEFT JOIN core.student_enrollments e ON e.student_id = s.id AND e.is_active
+     LEFT JOIN core.classes c ON c.id = e.class_id AND c.is_active
+     LEFT JOIN core.grade_levels g ON g.id = c.grade_level_id
+     WHERE s.is_active AND s.id = $1::bigint
+     GROUP BY s.id`,
+    [studentId],
+  );

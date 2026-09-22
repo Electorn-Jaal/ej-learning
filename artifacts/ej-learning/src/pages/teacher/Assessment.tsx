@@ -218,7 +218,6 @@ export default function TeacherAssessment() {
   return (
     <div className="space-y-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-bold">Дэвтрийн үнэлгээ оруулах</h1>
         <p className="text-sm text-muted-foreground">
           Сурагчид дэвтэр дээрээ гүйцэтгэсэн ажлыг шалгаад түвшинг нь энд тэмдэглэнэ.
           Хувь заавал биш — зөвхөн түвшин өгч болно.
@@ -273,12 +272,10 @@ export default function TeacherAssessment() {
 
       {sheet && !isLoading ? (
         sheet.skills.length === 0 ? (
-          <Card>
-            <CardContent className="py-10 text-center text-sm text-muted-foreground">
-              {sheet.className} ангид үнэлэх чадвар олдсонгүй. Админаас хичээлийн
-              агуулгыг холбуулна уу.
-            </CardContent>
-          </Card>
+          <p className="py-6 text-sm text-muted-foreground">
+            {sheet.className} ангид үнэлэх чадвар олдсонгүй. Админаас хичээлийн агуулгыг
+            холбуулна уу.
+          </p>
         ) : (
           <Card>
             <CardHeader>
