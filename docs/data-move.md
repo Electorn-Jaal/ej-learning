@@ -121,13 +121,26 @@ storage=$(docker inspect ej-learning-api-1   --format '{{range .Mounts}}{{if eq 
 echo "$storage"
 
 sudo tar -xzf ~/storage-2026-09-23.tar.gz -C "$storage"
-sudo chown -R 1000:1000 "$storage"
+
+# Readable by anyone, owned by the deploy user. Do NOT chown this to 1000.
+sudo chown -R "$(id -un):$(id -gn)" "$storage"
+sudo find "$storage" -type d -exec chmod 755 {} +
+sudo find "$storage" -type f -exec chmod 644 {} +
 ls -lh "$storage/content" | head
 ```
 
-The API mounts it read-only as container user 1000, which is why the owner is
-set by number: the host may have no user with that id, and the name it shows
-afterwards is not meaningful.
+The API mounts this read-only and runs as container user 1000, which is a
+different user from the one that deploys. It has to **read** the files, not own
+them, and world-readable files inside traversable directories are enough.
+
+Giving the directory to uid 1000 breaks the next deployment: `release.sh` runs
+`chmod 755` on it, and the deploy account no longer owns it -
+
+```
+chmod: changing permissions of '/home/.../ej-learning/storage': Operation not permitted
+```
+
+which stops the deploy before anything else happens.
 
 ## 7. Start the application and prove the move
 
