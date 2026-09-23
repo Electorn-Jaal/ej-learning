@@ -112,13 +112,22 @@ Make sure you know its password before running this.
 
 ## 6. Put the books where the database expects them
 
+The path is whatever `EJ_STORAGE_PATH` in `server.env` says, and it is not
+necessarily the one in `deploy/.env.example`. Ask the container that is
+already mounting it rather than assuming:
+
 ```sh
-sudo tar -xzf ~/storage-2026-09-23.tar.gz -C /srv/ej-learning/storage
-sudo chown -R 1000:1000 /srv/ej-learning/storage
+storage=$(docker inspect ej-learning-api-1   --format '{{range .Mounts}}{{if eq .Destination "/app/storage"}}{{.Source}}{{end}}{{end}}')
+echo "$storage"
+
+sudo tar -xzf ~/storage-2026-09-23.tar.gz -C "$storage"
+sudo chown -R 1000:1000 "$storage"
+ls -lh "$storage/content" | head
 ```
 
-The API mounts this read-only as container user 1000. Check
-`EJ_STORAGE_PATH` in `server.env` if the path differs.
+The API mounts it read-only as container user 1000, which is why the owner is
+set by number: the host may have no user with that id, and the name it shows
+afterwards is not meaningful.
 
 ## 7. Start the application and prove the move
 
@@ -131,6 +140,10 @@ Then run **Actions → Server database census (read only)** and compare it with
 `census-before.json`. Every table must carry the same number of rows. A
 restore that "succeeded" while silently dropping a table is invisible until a
 teacher opens a screen with nothing behind it.
+
+This was done on 2026-09-23 and every line matched: 1440 study plan weeks,
+552 timetable slots, 292 students, 283 users, 247 enrolments, 99 book
+sections, 66 placements, 29 scheduled days.
 
 By hand, in the browser:
 
