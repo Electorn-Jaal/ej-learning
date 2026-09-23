@@ -693,6 +693,37 @@ describe("EJ Learning API", { concurrency: false }, () => {
   });
 
   describe("what each role may reach", () => {
+    it("opens a subject's book: every section, and where the class has got to", async () => {
+      // This endpoint returned 500 for every child in every subject, because
+      // the query behind it put ORDER BY and LIMIT inside a UNION arm without
+      // brackets and Postgres refused the whole statement. Eighty-six tests
+      // passed while it was broken, because none of them asked for it. This
+      // one does.
+      const client = createClient(harness.baseUrl);
+      await client.signIn(accountsByRole.STUDENT);
+
+      const res = await client.request("/student/subject-outline?subject=MATH");
+      assert.equal(res.status, 200, JSON.stringify(res.payload));
+      assert.equal(res.payload.subjectName.length > 0, true);
+      assert.ok(Array.isArray(res.payload.sections));
+
+      // At most one section is the class's current place, and if a section is
+      // marked past then the current one comes after it.
+      const current = res.payload.sections.filter((row) => row.isCurrent);
+      assert.ok(current.length <= 1, `${current.length} sections claim to be current`);
+      if (current.length === 1) {
+        const past = res.payload.sections.filter((row) => row.isPast);
+        for (const row of past) {
+          assert.ok(row.position < current[0].position, "a past section sits after the current one");
+        }
+      }
+
+      // A subject the class does not take is not somebody else's book.
+      const absent = await client.request("/student/subject-outline?subject=NO-SUCH-SUBJECT");
+      assert.ok(absent.status === 200 || absent.status === 404, `unexpected ${absent.status}`);
+      if (absent.status === 200) assert.deepEqual(absent.payload.sections, []);
+    });
+
     it("lists every subject the student's class is taught", async () => {
       const client = createClient(harness.baseUrl);
       await client.signIn(accountsByRole.STUDENT);
