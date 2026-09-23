@@ -95,5 +95,32 @@ jobs:
             $compose exec -T db psql -U ej_owner -d ej_learning -tAc \
               'SELECT count(*) FROM drizzle.__drizzle_migrations'
 
+            printf '\nLatest migrations\n'
+            $compose exec -T db psql -U ej_owner -d ej_learning -c \
+              "SELECT id, to_timestamp(created_at/1000)::date AS dated
+                 FROM drizzle.__drizzle_migrations ORDER BY id DESC LIMIT 5"
+
+            # Counted with SQL rather than with lib/db/scripts/census.mjs. The
+            # script lives in the tools image, and the image on this host was
+            # built from an older commit that does not carry it - so counting
+            # through it would mean deploying first, which is the decision this
+            # census exists to inform. psql is in the database image and needs
+            # nothing built.
             printf '\nRow counts\n'
-            $compose --profile ops run --rm --no-deps tools node lib/db/scripts/census.mjs
+            $compose exec -T db psql -U ej_owner -d ej_learning -c \
+              "SELECT n.nspname || '.' || c.relname AS \"table\",
+                      (xpath('/row/c/text()',
+                        query_to_xml(format('SELECT count(*) AS c FROM %I.%I',
+                          n.nspname, c.relname), false, true, '')))[1]::text::bigint AS rows
+                 FROM pg_class c
+                 JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE c.relkind = 'r'
+                  AND n.nspname IN ('core','content','learning','assessment','staging','audit')
+                ORDER BY rows DESC, 1"
+
+            printf '\nWhere the people came from\n'
+            $compose exec -T db psql -U ej_owner -d ej_learning -c \
+              "SELECT 'students' AS who, data_origin::text AS origin, count(*) FROM core.students GROUP BY 2
+               UNION ALL SELECT 'teachers', data_origin::text, count(*) FROM core.teachers GROUP BY 2
+               UNION ALL SELECT 'classes', data_origin::text, count(*) FROM core.classes GROUP BY 2
+               ORDER BY 1, 2"
