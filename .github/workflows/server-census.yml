@@ -61,6 +61,25 @@ jobs:
             test -n "$release_dir" || { echo 'No release directory found.'; exit 1; }
             printf '\nRelease\n%s\n' "$release_dir"
 
+            # compose.yml interpolates the image name, and the deploy passes
+            # the registry prefix and the tag in the environment rather than in
+            # server.env - so reading server.env alone leaves them unset and
+            # Compose refuses to parse the file at all. release.sh records the
+            # prefix on the host, and the release directory is named after the
+            # tag that was deployed.
+            EJ_IMAGE_PREFIX=$(cat "$deploy_root/image-prefix" 2>/dev/null || true)
+            EJ_VERSION=$(basename "$release_dir")
+            if [ -z "$EJ_IMAGE_PREFIX" ]; then
+              # Failing that, whatever the running container was started from.
+              image=$(docker inspect ej-learning-api-1 --format '{{.Config.Image}}' 2>/dev/null || true)
+              test -n "$image" || { echo 'Cannot determine the image prefix.'; exit 1; }
+              EJ_VERSION=${image##*:}
+              without_tag=${image%:*}
+              EJ_IMAGE_PREFIX=${without_tag%-api}
+            fi
+            export EJ_IMAGE_PREFIX EJ_VERSION
+            printf 'Image %s-tools:%s\n' "$EJ_IMAGE_PREFIX" "$EJ_VERSION"
+
             compose="docker compose --project-name ej-learning --env-file $deploy_root/server.env -f ${release_dir}deploy/compose.yml"
             if [ -f "${release_dir}deploy/compose.gateway.yml" ]; then
               compose="$compose -f ${release_dir}deploy/compose.gateway.yml"
