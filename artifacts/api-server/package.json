@@ -40,7 +40,8 @@
     "merge-teacher-records": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/merge-teacher-records.ts",
     "import-timetable-slots": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/import-timetable-slots.ts",
     "schedule-book-lessons": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/schedule-book-lessons.ts",
-    "clear-placeholder-lessons": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/clear-placeholder-lessons.ts"
+    "clear-placeholder-lessons": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/clear-placeholder-lessons.ts",
+    "reset-roster-passwords": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/reset-roster-passwords.ts"
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",
