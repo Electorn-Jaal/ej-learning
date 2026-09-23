@@ -167,7 +167,7 @@ export default function Login() {
             {error ? (
               <p
                 role="alert"
-                className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive md:px-4 md:py-2.5 md:text-base"
+                className="rounded-[2px] border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive md:px-4 md:py-2.5 md:text-base"
               >
                 {error}
               </p>

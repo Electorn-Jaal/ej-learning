@@ -4,11 +4,14 @@ import {
   GenerateScheduleResponse,
   GetTeacherLessonsResponse,
   GetTeacherScheduleResponse,
+  GetTeacherWeekResponse,
   SetScheduleDayBody,
+  GetTimetableStudentsResponse,
+  SetTimetableStudentsBody,
 } from "@workspace/api-zod";
 import { requireRole } from "../../middlewares/auth";
 import { badRequest } from "../../shared/http-error";
-import { generateSchedule, schedulableLessons, setScheduleDay, teacherSchedule } from "./service";
+import { generateSchedule, schedulableLessons, setScheduleDay, teacherSchedule, teacherWeek, timetableStudents, setTimetableStudents } from "./service";
 
 const router: IRouter = Router();
 const asStaff = requireRole("TEACHER", "ADMIN");
@@ -75,6 +78,32 @@ router.put("/teacher/schedule/day", asStaff, async (req, res, next) => {
     if (!parsed.success) throw badRequest("Өдрийн мэдээлэл буруу байна.", "INVALID_INPUT");
     await setScheduleDay(req.user!, parsed.data);
     res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/teacher/timetable/:slotId/students", asStaff, async (req, res, next) => {
+  try {
+    const id = readSubjectId(req.params.slotId);
+    if (id === null) throw badRequest("Цагаа сонгоно уу.", "INVALID_INPUT");
+    res.json(GetTimetableStudentsResponse.parse(await timetableStudents(req.user!, id)));
+  } catch (error) { next(error); }
+});
+
+router.put("/teacher/timetable/:slotId/students", asStaff, async (req, res, next) => {
+  try {
+    const id = readSubjectId(req.params.slotId);
+    const body = SetTimetableStudentsBody.safeParse(req.body);
+    if (id === null || !body.success) throw badRequest("Сурагчдаа сонгоно уу.", "INVALID_INPUT");
+    await setTimetableStudents(req.user!, id, body.data.studentIds);
+    res.status(204).end();
+  } catch (error) { next(error); }
+});
+
+router.get('/teacher/my-week', asStaff, async (req, res, next) => {
+  try {
+    res.json(GetTeacherWeekResponse.parse(await teacherWeek(req.user!)));
   } catch (error) {
     next(error);
   }

@@ -1,9 +1,12 @@
 import {
   bigint,
+  boolean,
   check,
   date,
   foreignKey,
   index,
+  integer,
+  numeric,
   primaryKey,
   smallint,
   text,
@@ -119,7 +122,10 @@ export const classScheduleInLearning = learning.table(
       }),
     classId: bigint("class_id", { mode: "number" }).notNull(),
     termId: smallint("term_id").notNull(),
-    dailyLessonId: bigint("daily_lesson_id", { mode: "number" }).notNull(),
+    // Nullable: a timetable slot exists before anyone has prepared what
+    // goes in it. The slot is the container and the lesson is its content,
+    // and the school has a full timetable with almost no lesson content.
+    dailyLessonId: bigint("daily_lesson_id", { mode: "number" }),
     scheduledOn: date("scheduled_on").notNull(),
     // A school day is not one lesson. Which subject a row belongs to is
     // derivable from the lesson's skill, but the rule worth enforcing - one
@@ -127,6 +133,13 @@ export const classScheduleInLearning = learning.table(
     // join, so the subject is carried here and set from the lesson on write.
     subjectId: bigint("subject_id", { mode: "number" }).notNull(),
     periodNo: smallint("period_no"),
+    timetableSlotId: bigint("timetable_slot_id", { mode: "number" }),
+    // The pages this class actually covered, when they are not the book's own.
+    // Null means the printed range the alignment carries, which is what nearly
+    // every row says; a teacher who went further sets it here rather than
+    // moving the pages for every school that shares the book.
+    pageFrom: integer("page_from"),
+    pageTo: integer("page_to"),
     note: text(),
     createdBy: bigint("created_by", { mode: "number" }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
@@ -135,17 +148,19 @@ export const classScheduleInLearning = learning.table(
   },
   (table) => [
     unique("class_schedule_class_day_key").on(
-      table.classId,
-      table.subjectId,
-      table.scheduledOn,
+      table.classId, table.subjectId, table.scheduledOn, table.timetableSlotId,
+    ).nullsNotDistinct(),
+    check("class_schedule_page_from_check", sql`${table.pageFrom} > 0`),
+    check("class_schedule_page_to_check", sql`${table.pageTo} > 0`),
+    check(
+      "class_schedule_page_range_check",
+      sql`${table.pageFrom} IS NULL OR ${table.pageTo} IS NULL OR ${table.pageTo} >= ${table.pageFrom}`,
     ),
-    // One class, one slot. Nulls do not collide in a unique index, so days
-    // with no timetable yet are unaffected.
-    unique("class_schedule_class_slot_key").on(
-      table.classId,
-      table.scheduledOn,
-      table.periodNo,
-    ),
+    foreignKey({
+      columns: [table.timetableSlotId],
+      foreignColumns: [timetableSlotsInLearning.id],
+      name: "class_schedule_timetable_slot_id_fkey",
+    }).onDelete("cascade"),
     index("idx_class_schedule_day").using(
       "btree",
       table.scheduledOn.asc().nullsLast(),
@@ -377,3 +392,187 @@ export const classTopicsInLearning = learning.table(
     check("class_topics_note_check", sql`note IS NULL OR char_length(note) <= 500`),
   ],
 );
+
+/**
+ * One week of a child's placement plan, per skill.
+ *
+ * content.placement_pathways holds the RULE - what A2 means in general. This
+ * holds what the school generated from that rule for a named child: four
+ * weeks, six skills a week, each with its own book, unit, task and mastery
+ * target.
+ *
+ * subjectId is carried even though every row today is English, because the
+ * shape is not English-specific: a maths placement would produce the same
+ * table, and a plan keyed only on a student would silently merge the two.
+ */
+export const studyPlanWeeksInLearning = learning.table(
+  "study_plan_weeks",
+  {
+    id: bigint({ mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    studentId: bigint("student_id", { mode: "number" }).notNull(),
+    subjectId: bigint("subject_id", { mode: "number" }).notNull(),
+    weekNo: smallint("week_no").notNull(),
+    domainMn: varchar("domain_mn", { length: 200 }).notNull(),
+    levelCode: varchar("level_code", { length: 20 }),
+    priority: varchar({ length: 40 }),
+    sourceLabel: varchar("source_label", { length: 300 }),
+    unitFocusMn: varchar("unit_focus_mn", { length: 500 }),
+    pagesMn: varchar("pages_mn", { length: 200 }),
+    taskMn: text("task_mn"),
+    masteryTargetMn: varchar("mastery_target_mn", { length: 60 }),
+    teacherCheckMn: varchar("teacher_check_mn", { length: 120 }),
+    status: varchar({ length: 40 }).notNull(),
+  },
+  (table) => [
+    unique("study_plan_weeks_key").on(
+      table.studentId, table.subjectId, table.weekNo, table.domainMn,
+    ),
+    check("study_plan_weeks_week_check", sql`week_no > 0`),
+    foreignKey({
+      columns: [table.studentId],
+      foreignColumns: [studentsInCore.id],
+      name: "study_plan_weeks_student_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.subjectId],
+      foreignColumns: [subjectsInCore.id],
+      name: "study_plan_weeks_subject_id_fkey",
+    }),
+  ],
+);
+
+/**
+ * One day of that plan, and how it went.
+ *
+ * score and status are where the loop closes: a teacher marks a day, the
+ * status becomes MASTERED, DEVELOPING or NEEDS SUPPORT, and what the child
+ * does next follows from it. Both are nullable and almost entirely empty
+ * today - four scores out of 1880 - which is the honest state. The plan is
+ * written; the term has not been taught.
+ *
+ * weekdayNo is 1 for Monday. The workbook schedules five weekdays and nothing
+ * at the weekend, but the check allows 7 so a school that teaches Saturday
+ * does not need a migration.
+ */
+export const studyPlanDaysInLearning = learning.table(
+  "study_plan_days",
+  {
+    id: bigint({ mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    studentId: bigint("student_id", { mode: "number" }).notNull(),
+    subjectId: bigint("subject_id", { mode: "number" }).notNull(),
+    weekNo: smallint("week_no").notNull(),
+    weekdayNo: smallint("weekday_no").notNull(),
+    focusMn: varchar("focus_mn", { length: 200 }),
+    levelCode: varchar("level_code", { length: 20 }),
+    sourceLabel: text("source_label"),
+    unitFocusMn: text("unit_focus_mn"),
+    pagesMn: text("pages_mn"),
+    taskMn: text("task_mn"),
+    teacherCheckMn: varchar("teacher_check_mn", { length: 120 }),
+    targetMn: varchar("target_mn", { length: 60 }),
+    score: numeric("score", { precision: 5, scale: 2 }),
+    status: varchar({ length: 40 }).notNull(),
+  },
+  (table) => [
+    unique("study_plan_days_key").on(
+      table.studentId, table.subjectId, table.weekNo, table.weekdayNo,
+    ),
+    check("study_plan_days_week_check", sql`week_no > 0`),
+    check("study_plan_days_weekday_check", sql`weekday_no BETWEEN 1 AND 7`),
+    check("study_plan_days_score_check", sql`score IS NULL OR (score >= 0 AND score <= 100)`),
+    index("idx_study_plan_days_student_week").using(
+      "btree",
+      table.studentId.asc().nullsLast().op("int8_ops"),
+      table.weekNo.asc().nullsLast(),
+      table.weekdayNo.asc().nullsLast(),
+    ),
+    foreignKey({
+      columns: [table.studentId],
+      foreignColumns: [studentsInCore.id],
+      name: "study_plan_days_student_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.subjectId],
+      foreignColumns: [subjectsInCore.id],
+      name: "study_plan_days_subject_id_fkey",
+    }),
+  ],
+);
+
+/**
+ * The school's weekly timetable: which lesson a class has in which period.
+ *
+ * A repeating pattern rather than a row per date. The school publishes one
+ * grid headed "from 21 September" and it holds until it is replaced, so
+ * expanding it into some seven thousand dated rows per term would store the
+ * same fact hundreds of times and make correcting it a migration.
+ *
+ * More than one lesson may occupy one class's period, and that is not a
+ * double booking: 12a splits between social science and chemistry, the middle
+ * years split between physical education and jiu-jitsu, and 6a splits into two
+ * halves for design and IT. The key therefore includes the subject and the
+ * teacher, and groupLabel carries the school's own name for the half ("6а-1")
+ * where it wrote one.
+ *
+ * teacherId is nullable so a slot can be recorded before it is known who will
+ * take it - a timetable published with a vacancy is still a timetable.
+ */
+export const timetableSlotsInLearning = learning.table(
+  "timetable_slots",
+  {
+    id: bigint({ mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    classId: bigint("class_id", { mode: "number" }).notNull(),
+    subjectId: bigint("subject_id", { mode: "number" }).notNull(),
+    teacherId: bigint("teacher_id", { mode: "number" }),
+    // 1 is Monday. Five days are taught; the check allows seven so a Saturday
+    // programme needs no migration.
+    weekdayNo: smallint("weekday_no").notNull(),
+    periodNo: smallint("period_no").notNull(),
+    groupLabel: varchar("group_label", { length: 40 }),
+    audienceAssigned: boolean("audience_assigned").default(false).notNull(),
+    validFrom: date("valid_from").notNull(),
+    validTo: date("valid_to"),
+    sourceNote: varchar("source_note", { length: 200 }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("timetable_slots_key")
+      .on(table.classId, table.weekdayNo, table.periodNo, table.subjectId,
+          table.teacherId, table.validFrom)
+      .nullsNotDistinct(),
+    check("timetable_slots_weekday_check", sql`weekday_no BETWEEN 1 AND 7`),
+    check("timetable_slots_period_check", sql`period_no > 0`),
+    check("timetable_slots_range_check", sql`valid_to IS NULL OR valid_to >= valid_from`),
+    index("idx_timetable_slots_class_day").using(
+      "btree",
+      table.classId.asc().nullsLast().op("int8_ops"),
+      table.weekdayNo.asc().nullsLast(),
+      table.periodNo.asc().nullsLast(),
+    ),
+    index("idx_timetable_slots_teacher").using(
+      "btree",
+      table.teacherId.asc().nullsLast().op("int8_ops"),
+      table.weekdayNo.asc().nullsLast(),
+      table.periodNo.asc().nullsLast(),
+    ),
+    foreignKey({
+      columns: [table.classId],
+      foreignColumns: [classesInCore.id],
+      name: "timetable_slots_class_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.subjectId],
+      foreignColumns: [subjectsInCore.id],
+      name: "timetable_slots_subject_id_fkey",
+    }),
+  ],
+);
+
+export const timetableSlotStudentsInLearning = learning.table("timetable_slot_students", {
+  timetableSlotId: bigint("timetable_slot_id", { mode: "number" }).notNull()
+    .references(() => timetableSlotsInLearning.id, { onDelete: "cascade" }),
+  studentId: bigint("student_id", { mode: "number" }).notNull()
+    .references(() => studentsInCore.id, { onDelete: "cascade" }),
+}, (table) => [primaryKey({ columns: [table.timetableSlotId, table.studentId] })]);

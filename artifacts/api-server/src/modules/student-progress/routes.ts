@@ -1,7 +1,7 @@
 import { Router, type IRouter } from 'express';
 import {
   GetStudentAssignmentResponse, GetStudentDashboardResponse,
-  GetStudentPlacementsResponse, GetStudentRecordResponse, GetStudentProgressResponse, GetStudentSubjectsResponse,
+  GetStudentPlacementsResponse, GetStudentRecordResponse, GetStudentStudyPlanResponse, GetStudentProgressResponse, GetStudentSubjectsResponse,
 } from '@workspace/api-zod';
 import { requireRole } from '../../middlewares/auth';
 import * as service from './service';
@@ -54,6 +54,14 @@ router.get('/student/placements', asStudent, async (req, res, next) => {
 router.get('/student/record', asStudent, async (req, res, next) => {
   try {
     res.json(GetStudentRecordResponse.parse(await service.studentRecord(req.user!)));
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/student/study-plan', asStudent, async (req, res, next) => {
+  try {
+    res.json(GetStudentStudyPlanResponse.parse(await service.studentStudyPlan(req.user!)));
   } catch (error) {
     next(error);
   }

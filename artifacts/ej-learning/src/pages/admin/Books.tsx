@@ -329,7 +329,7 @@ export default function AdminBooks() {
         ]}
       />
 
-      <ul className="divide-y rounded-md border border-border bg-card">
+      <ul className="divide-y rounded-[2px] border border-border bg-card">
         {materials.map((material) => (
           <li key={material.id}>
             <button

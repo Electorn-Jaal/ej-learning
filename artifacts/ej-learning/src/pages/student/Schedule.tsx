@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import {
   useGetSchoolPeriods,
-  useGetStudentSubjectOutline,
   useStudentScheduleDays,
   type SchoolPeriod,
   type StudentToday,
@@ -16,31 +15,47 @@ import { cn } from '@/lib/utils'
 
 const DAY = new Intl.DateTimeFormat('mn-MN', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 
-/**
- * Five school days share the width; the two days off take a fixed sliver.
- *
- * They are empty almost every week - a makeup lesson is the exception - and
- * giving them an equal seventh of the table was taking a fifth of the space
- * the real days needed to print a subject without truncating it.
- */
+/** The clock down the side, then one equal column per school day. */
 const columnsFor = (dates: string[]) =>
-  `3.75rem ${dates.map((date) => (isWeekend(date) ? '3.25rem' : 'minmax(0, 1fr)')).join(' ')}`
-
-/** The days off carry their date alone; only school days are numbered. */
-const headingName = (date: string) => (isWeekend(date) ? '' : dayName(date))
+  `3.75rem repeat(${dates.length}, minmax(0, 1fr))`
 
 /** What a cell shows, and what opening it asks about. */
-type Slot = { subjectCode: string; subjectName: string; title: string | null; personal: boolean }
+type Slot = {
+  subjectCode: string
+  subjectName: string
+  teacher: string | null
+  topic: string | null
+  personal: boolean
+  groupLabel: string | null
+  book: NonNullable<SubjectDay["lesson"]>["book"]
+  selectionPending: boolean
+}
 
+/**
+ * A cell from a timetable slot.
+ *
+ * A period with no prepared lesson is still a period. This used to return
+ * nothing without lesson content, which was fine while the only timetable was
+ * seeded demonstration data and wrong the moment a real one arrived: the whole
+ * grid would have drawn empty. The subject and the teacher are what the school
+ * published; the topic appears when somebody writes it.
+ */
 function slotOf(entry: SubjectDay | undefined): Slot | null {
   if (!entry) return null
   const lesson = entry.lesson ?? entry.extra?.lesson ?? null
-  if (!lesson) return null
   return {
     subjectCode: entry.subjectCode,
     subjectName: entry.subjectName,
-    title: lesson.skillName,
-    personal: !entry.lesson,
+    // The two are kept apart rather than one falling back to the other. The
+    // grid carries the teacher, the card carries the topic, and a cell that
+    // printed whichever it had left a child unable to tell which they were
+    // reading.
+    teacher: entry.teacherName ?? null,
+    topic: lesson?.skillName ?? null,
+    personal: !entry.lesson && Boolean(entry.extra),
+    groupLabel: entry.groupLabel ?? null,
+    book: lesson?.book ?? null,
+    selectionPending: entry.selectionPending ?? false,
   }
 }
 
@@ -51,7 +66,7 @@ function slotOf(entry: SubjectDay | undefined): Slot | null {
  */
 function unplaced(days: { data?: StudentToday }[]) {
   return days.map((day) =>
-    (day.data?.subjects ?? [])
+    (day.data?.slots ?? [])
       .filter((entry) => entry.periodNo === null && (entry.lesson || entry.extra))
       .map(slotOf)
       .filter((slot): slot is Slot => slot !== null),
@@ -81,7 +96,9 @@ function SlotCell({ slot }: { slot: Slot }) {
             // No radius and no cell padding: the subject's colour is a rule
             // down the edge of its slot, and a rounded, inset bar reads as a
             // chip floating in the cell rather than as the slot being marked.
-            'flex h-full w-full min-w-0 flex-col justify-center gap-0.5 overflow-hidden',
+            // h-full only while a cell holds one lesson; a split cell stacks
+            // two and each has to give the other room.
+            'flex w-full min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-hidden',
             'border-l-[3px] px-2 py-1 text-left transition-colors',
             // The pale amber, and only three quarters of it. The menu
             // uses the full strength; a grid of forty cells cannot.
@@ -89,12 +106,20 @@ function SlotCell({ slot }: { slot: Slot }) {
             slot.personal ? 'border-pending' : 'border-primary',
           )}
         >
-          <span className="block truncate text-[13px] font-semibold leading-snug">
-            {slot.subjectName}
+          <span className="flex min-w-0 items-baseline gap-1">
+            <span className="min-w-0 truncate text-[13px] font-semibold leading-snug">
+              {slot.subjectName}
+            </span>
+            {/* Which half of a split class, in the school's own words. */}
+            {slot.groupLabel ? (
+              <span className="shrink-0 text-[9px] uppercase tracking-wide text-muted-foreground">
+                {slot.groupLabel}
+              </span>
+            ) : null}
           </span>
-          {slot.title ? (
+          {slot.teacher ? (
             <span className="block truncate text-[11px] leading-tight text-muted-foreground">
-              {slot.title}
+              {slot.teacher}
             </span>
           ) : null}
           {slot.personal ? (
@@ -106,10 +131,15 @@ function SlotCell({ slot }: { slot: Slot }) {
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           {slot.subjectName}
         </p>
-        {/* The whole reason the card exists: the name the cell had to clip. */}
+        {/* The whole reason the card exists. The grid has room for the
+            subject and the teacher and no more, so the topic - the one thing
+            that changes from week to week - waits here until it is asked
+            for. */}
         <p className="mt-1 text-sm font-semibold leading-snug">
-          {slot.title ?? 'Сэдэв заагаагүй'}
+          {slot.topic ?? 'Сэдэв заагаагүй'}
         </p>
+        {slot.groupLabel ? <p className="mt-1 text-xs">{slot.groupLabel}</p> : null}
+        {slot.selectionPending ? <p className="mt-1 text-xs text-muted-foreground">Бүлгийн хуваарилалт тодруулаагүй</p> : null}
         {slot.personal ? (
           <p className="mt-1 text-xs text-pending">Зөвхөн танд өгсөн хувийн ажил</p>
         ) : null}
@@ -127,16 +157,14 @@ function SlotCell({ slot }: { slot: Slot }) {
  * card.
  */
 function SlotPages({ slot }: { slot: Slot }) {
-  const { data, isLoading } = useGetStudentSubjectOutline({ subject: slot.subjectCode })
-  if (isLoading) return <Skeleton className="mt-2 h-4 w-24" />
-  const here = data?.sections.find((section) => section.title === slot.title)
-  if (!here?.pageFrom || !here.pageTo) return null
-  return (
-    <p className="mt-2 text-xs text-muted-foreground">
-      {data?.bookTitle ? `${data.bookTitle} · ` : ''}
-      {here.pageFrom}–{here.pageTo}-р хуудас
-    </p>
-  )
+  const book = slot.book
+  if (!book || book.pageFrom === null) return null
+  const base = import.meta.env.BASE_URL.replace(/\/$/, '')
+  const text = `${book.title ?? ''} · ${book.pageFrom}${book.pageTo !== null && book.pageTo !== book.pageFrom ? `–${book.pageTo}` : ''}-р хуудас`
+  return book.fileUrl ? (
+    <a className="mt-2 block text-xs text-primary underline" target="_blank" rel="noreferrer"
+      href={`${base}${book.fileUrl}${book.filePage !== null ? `#page=${book.filePage}` : ''}`}>{text}</a>
+  ) : <p className="mt-2 text-xs text-muted-foreground">{text}</p>
 }
 
 /**
@@ -151,9 +179,14 @@ function SlotPages({ slot }: { slot: Slot }) {
 export default function StudentSchedule() {
   const [day, setDay] = useState(schoolToday)
   const window = scheduleWindow(day)
+  // Saturday and Sunday are off the child's timetable. They held a lesson
+  // only where somebody scheduled a makeup one, which is the teacher's
+  // business; the two columns were empty every other week and took width the
+  // five real days needed. The arrows below still move a whole week.
+  const dates = window.dates.filter((date) => !isWeekend(date))
 
   const periodsQuery = useGetSchoolPeriods()
-  const days = useStudentScheduleDays(window.dates)
+  const days = useStudentScheduleDays(dates)
 
   const loading = periodsQuery.isLoading || days.some((result) => result.isLoading)
   const failed = periodsQuery.isError || days.some((result) => result.isError)
@@ -164,14 +197,28 @@ export default function StudentSchedule() {
   const leftovers = unplaced(days)
   const className = days[0]?.data?.className ?? ''
 
-  const cellFor = (dayIndex: number, periodNo: number) =>
-    slotOf((days[dayIndex]?.data?.subjects ?? []).find((entry) => entry.periodNo === periodNo))
+  // Every lesson in the period, not the first. A split class has two, and
+  // showing one told half the class the wrong room.
+  const cellsFor = (dayIndex: number, periodNo: number) =>
+    (days[dayIndex]?.data?.slots ?? [])
+      .filter((entry) => entry.periodNo === periodNo)
+      .map(slotOf)
+      .filter((slot): slot is Slot => slot !== null)
+
+  // A period nobody in the school has a lesson in still needs its row - the
+  // bell rings - but it does not need a lesson's worth of height.
+  const emptyPeriods = new Set(
+    periods
+      .filter((period: SchoolPeriod) =>
+        dates.every((_, index) => cellsFor(index, period.periodNo).length === 0))
+      .map((period: SchoolPeriod) => period.periodNo),
+  )
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-1">
       {/* The shell's bar names the page. What is left is the class and one
           line saying what tapping a lesson does. */}
-      <header className="flex flex-wrap items-baseline gap-x-2 text-xs text-muted-foreground">
+      <header className="flex flex-wrap items-baseline gap-x-2 text-[11px] text-muted-foreground">
         {className ? <span className="font-medium text-foreground">{className}</span> : null}
         <span>· Хичээл дээр дарвал сэдвийн бүтэн нэр харагдана</span>
       </header>
@@ -186,28 +233,37 @@ export default function StudentSchedule() {
             <div className="overflow-x-auto">
               <div
                 className="grid min-w-[46rem] gap-px bg-border"
-                style={{ gridTemplateColumns: columnsFor(window.dates) }}
+                style={{ gridTemplateColumns: columnsFor(dates) }}
                 role="table"
                 aria-label="Долоо хоногийн хуваарь"
               >
                 <div className="bg-card" />
-                {window.dates.map((date) => {
+                {/* Today is the deep blue, not the pale amber it was. Amber
+                    is what this product marks the thing under the cursor
+                    with, so today wore the hover colour and read as nothing
+                    at all. Blue is used nowhere else in the grid, so the
+                    column is unmistakable, and the white on it reads 9.9:1. */}
+                {dates.map((date) => {
                   const today = date === schoolToday()
                   return (
                     <div
                       key={date}
-                      className={cn('bg-card px-1 py-1 text-center leading-tight', today && 'bg-primary/10')}
+                      className={cn(
+                        'bg-card px-1 py-1 text-center leading-tight',
+                        today && 'bg-primary text-primary-foreground',
+                      )}
                       title={today ? 'Өнөөдөр' : undefined}
                     >
-                      <p className={cn('truncate text-xs font-semibold', today && 'text-primary')}>
-                        {headingName(date) ? (
-                          <>
-                            <span className="uppercase tracking-wide text-muted-foreground">
-                              {headingName(date)}
-                            </span>
-                            {' · '}
-                          </>
-                        ) : null}
+                      <p className="truncate text-xs font-semibold">
+                        <span
+                          className={cn(
+                            'uppercase tracking-wide',
+                            today ? 'text-primary-foreground/80' : 'text-muted-foreground',
+                          )}
+                        >
+                          {dayName(date)}
+                        </span>
+                        {' · '}
                         {DAY.format(new Date(date + 'T00:00:00Z'))}
                       </p>
                     </div>
@@ -222,22 +278,33 @@ export default function StudentSchedule() {
                     <span className="text-[13px] font-semibold tabular-nums">{period.startsAt}</span>
                     <span className="text-[10px] tabular-nums text-muted-foreground">{period.endsAt}</span>
                   </div>,
-                  ...window.dates.map((date, index) => {
-                    const slot = cellFor(index, period.periodNo)
+                  ...dates.map((date, index) => {
+                    const slots = cellsFor(index, period.periodNo)
                     const today = date === schoolToday()
                     return (
                       <div
                         key={`${period.periodNo}:${date}`}
                         className={cn(
-                          'min-h-[4.25rem] bg-card',
-                          isWeekend(date) && 'bg-muted/40',
-                          today && 'bg-primary/5',
+                          'flex flex-col bg-card',
+                          // An empty row across the whole week collapses to a
+                          // rule with a time on it, which is what an empty
+                          // period is. Giving it a lesson's height was what
+                          // pushed the week off the screen.
+                          emptyPeriods.has(period.periodNo) ? 'min-h-[1.5rem]' : 'min-h-[3.5rem]',
+                          // The faintest wash of the header's blue, so the
+                          // column reads as one and the amber hover still
+                          // shows through it.
+                          today && 'bg-primary/[0.06]',
                         )}
                       >
-                        {slot ? (
-                          <SlotCell slot={slot} />
+                        {slots.length ? (
+                          slots.map((slot, n) => (
+                            <SlotCell key={`${slot.subjectCode}:${n}`} slot={slot} />
+                          ))
                         ) : (
-                          <span className="flex h-full items-center px-2 text-sm text-muted-foreground/40">—</span>
+                          <span className="flex h-full items-center px-2 text-xs text-muted-foreground/40">
+                            {emptyPeriods.has(period.periodNo) ? '' : '—'}
+                          </span>
                         )}
                       </div>
                     )
@@ -253,7 +320,7 @@ export default function StudentSchedule() {
                 Цаг заагаагүй
               </p>
               <div className="mt-2 space-y-3">
-                {window.dates.map((date, index) =>
+                {dates.map((date, index) =>
                   leftovers[index]?.length ? (
                     <div key={date}>
                       <p className="mb-1 text-xs text-muted-foreground">
@@ -261,7 +328,7 @@ export default function StudentSchedule() {
                       </p>
                       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                         {leftovers[index]!.map((slot, slotIndex) => (
-                          <div key={`${date}:${slotIndex}`} className="rounded-md border p-1">
+                          <div key={`${date}:${slotIndex}`} className="rounded-[2px] border p-1">
                             <SlotCell slot={slot} />
                           </div>
                         ))}

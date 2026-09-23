@@ -23,6 +23,35 @@ tags:
   - name: teacher
     description: Teacher classroom and review workflow
 paths:
+  /teacher/timetable/{slotId}/students:
+    parameters:
+      - in: path
+        name: slotId
+        required: true
+        schema: {type: integer, minimum: 1}
+    get:
+      operationId: getTimetableStudents
+      tags: [teacher]
+      responses:
+        "200":
+          description: Class roster and membership of this timetable slot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimetableStudents'
+    put:
+      operationId: setTimetableStudents
+      tags: [teacher]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TimetableStudentsInput'
+      responses:
+        "204":
+          description: Membership saved
+
   /preview/students:
     get:
       operationId: getPreviewStudents
@@ -198,6 +227,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/StudentRecord"
+  /student/study-plan:
+    get:
+      operationId: getStudentStudyPlan
+      tags: [student]
+      summary: The student's own generated study plan, week by week
+      responses:
+        "200":
+          description: One entry per subject and week
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StudyPlanWeek"
   /student/placements:
     get:
       operationId: getStudentPlacements
@@ -212,6 +255,69 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/StudentPlacement"
+  /teacher/productive/classes:
+    get:
+      operationId: getMarkableClasses
+      tags: [teacher]
+      summary: Classes whose writing and speaking tasks this teacher may judge
+      responses:
+        "200":
+          description: Classes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MarkableClass"
+  /teacher/productive/classes/{classId}:
+    get:
+      operationId: getProductiveMarkSheet
+      tags: [teacher]
+      summary: One class's children with the tasks their own level asks of them
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Mark sheet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductiveMarkSheet"
+  /teacher/productive/rating:
+    put:
+      operationId: saveProductiveRating
+      tags: [teacher]
+      summary: Record one judgement, and re-derive whether the level is confirmed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductiveRatingInput"
+      responses:
+        "200":
+          description: The refreshed mark sheet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductiveMarkSheet"
+  /teacher/my-week:
+    get:
+      operationId: getTeacherWeek
+      tags: [teacher]
+      summary: The signed-in teacher's own week, every class they take
+      responses:
+        "200":
+          description: One entry per timetable slot
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TeacherWeekSlot"
   /teacher/dashboard:
     get:
       operationId: getTeacherDashboard
@@ -668,6 +774,85 @@ paths:
                 $ref: "#/components/schemas/TeacherQuizAttempts"
         "403":
           description: Not a teacher of that class
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /teacher/class-day:
+    get:
+      operationId: getClassDay
+      tags: [teacher]
+      summary: One class on one day - what is set, and who has done it
+      description: >
+        The two halves of a teacher's morning in one answer. The lessons are
+        the same content the class is served, rather than a teacher's-eye
+        summary that can drift from it, and the students are the whole
+        register: a child who answered nothing is present with no attempts,
+        because who has not done the work is the question worth asking.
+      parameters:
+        - name: classId
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: subjectId
+          in: query
+          required: false
+          description: One subject the teacher holds here; omitted means all of them.
+          schema:
+            type: integer
+        - name: on
+          in: query
+          required: false
+          description: A school date. Omitted means today in Ulaanbaatar.
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: The day
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClassDay"
+        "403":
+          description: Not a teacher of that class
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /teacher/quiz-paper:
+    get:
+      operationId: getTeacherQuizPaper
+      tags: [teacher]
+      summary: The questions behind a lesson's quiz, with the key
+      description: >
+        What the class is actually asked, for the person who has to judge
+        whether the asking is any good. The student's copy of this leaves the
+        answers on the server; the teacher's carries them, because a question
+        cannot be reviewed without knowing which option is meant to be right.
+        Scoped through the class, which is what establishes that this member of
+        staff teaches the subject the questions belong to.
+      parameters:
+        - name: classId
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: lessonId
+          in: query
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: The paper
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeacherQuizPaper"
+        "403":
+          description: Not a teacher of that class or that subject
           content:
             application/json:
               schema:
@@ -1320,6 +1505,29 @@ components:
       schema:
         type: string
   schemas:
+    TimetableStudentsInput:
+      type: object
+      properties:
+        studentIds:
+          type: array
+          uniqueItems: true
+          items: {type: integer, minimum: 1}
+      required: [studentIds]
+    TimetableStudents:
+      type: object
+      properties:
+        assigned: {type: boolean}
+        students:
+          type: array
+          items:
+            type: object
+            properties:
+              id: {type: integer}
+              name: {type: string}
+              selected: {type: boolean}
+            required: [id, name, selected]
+      required: [assigned, students]
+
     ExtraWork:
       type: object
       properties:
@@ -1695,6 +1903,10 @@ components:
     ScheduleDayInput:
       type: object
       properties:
+        timetableSlotId:
+          type: [integer, "null"]
+          minimum: 1
+
         classId:
           type: integer
         subjectId:
@@ -1720,6 +1932,18 @@ components:
             the day removes the note with it.
           type: ["string", "null"]
           maxLength: 2000
+        pageFrom:
+          description: >
+            The pages this class actually covered, when they are not the ones
+            the book prints for the section. Leave both out to keep whatever is
+            recorded; send null to fall back to the book's own range. A class
+            that went further than the section is the reason this exists, and a
+            teacher setting it changes nothing for any other class.
+          type: ["integer", "null"]
+          minimum: 1
+        pageTo:
+          type: ["integer", "null"]
+          minimum: 1
       required: [classId, scheduledOn, lessonId]
     QuizOption:
       type: object
@@ -1815,6 +2039,200 @@ components:
         - takenToday
         - previousScore
         - previousMaxScore
+    ClassDay:
+      type: object
+      properties:
+        classId:
+          type: integer
+        className:
+          type: string
+        date:
+          type: string
+        lessons:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClassDayLesson"
+        students:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClassDayStudent"
+      required: [classId, className, date, lessons, students]
+    ClassDayLesson:
+      type: object
+      properties:
+        timetableSlotId:
+          type: ["integer", "null"]
+        periodNo:
+          type: ["integer", "null"]
+        startsAt:
+          type: ["string", "null"]
+        note:
+          description: The teacher's own line for the day, which the class reads.
+          type: ["string", "null"]
+        subjectId:
+          type: integer
+        subjectName:
+          type: string
+        lessonId:
+          type: ["integer", "null"]
+        lessonCode:
+          type: ["string", "null"]
+        skillName:
+          type: ["string", "null"]
+        learningGoal:
+          type: ["string", "null"]
+        remember:
+          type: ["string", "null"]
+        workedExample:
+          type: ["string", "null"]
+        guidedPractice:
+          type: ["string", "null"]
+        independentPractice:
+          type: ["string", "null"]
+        studentMessage:
+          type: ["string", "null"]
+        estimatedMinutes:
+          type: ["integer", "null"]
+        book:
+          oneOf:
+            - $ref: "#/components/schemas/ClassDayBook"
+            - type: "null"
+      required:
+        - timetableSlotId
+        - periodNo
+        - startsAt
+        - note
+        - subjectId
+        - subjectName
+        - lessonId
+        - lessonCode
+        - skillName
+        - learningGoal
+        - remember
+        - workedExample
+        - guidedPractice
+        - independentPractice
+        - studentMessage
+        - estimatedMinutes
+        - book
+    ClassDayBook:
+      type: object
+      properties:
+        materialId:
+          type: integer
+        title:
+          type: ["string", "null"]
+        pageFrom:
+          description: The range in force - the teacher's, where they set one.
+          type: ["integer", "null"]
+        pageTo:
+          type: ["integer", "null"]
+        bookPageFrom:
+          description: What the book prints for this section, whatever the class did.
+          type: ["integer", "null"]
+        bookPageTo:
+          type: ["integer", "null"]
+        filePage:
+          type: ["integer", "null"]
+        fileUrl:
+          type: ["string", "null"]
+      required: [materialId, title, pageFrom, pageTo, bookPageFrom, bookPageTo, filePage, fileUrl]
+    ClassDayStudent:
+      type: object
+      properties:
+        studentId:
+          type: integer
+        studentName:
+          type: string
+        studentCode:
+          type: string
+        attempts:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClassDayAttempt"
+      required: [studentId, studentName, studentCode, attempts]
+    ClassDayAttempt:
+      type: object
+      properties:
+        attemptId:
+          type: integer
+        lessonCode:
+          type: ["string", "null"]
+        skillName:
+          type: ["string", "null"]
+        score:
+          type: integer
+        maxScore:
+          type: integer
+        submittedAt:
+          type: string
+        answers:
+          type: array
+          items:
+            type: object
+            properties:
+              questionId:
+                type: string
+              prompt:
+                type: string
+              chosenText:
+                type: string
+              correct:
+                type: boolean
+            required: [questionId, prompt, chosenText, correct]
+      required: [attemptId, lessonCode, skillName, score, maxScore, submittedAt, answers]
+    TeacherQuizPaper:
+      type: object
+      properties:
+        lessonId:
+          type: integer
+        lessonCode:
+          type: string
+        skillName:
+          type: string
+        subjectName:
+          type: string
+        kind:
+          type: string
+          enum: [LESSON, UNIT, MONTHLY, DIAGNOSTIC]
+        questions:
+          type: array
+          items:
+            $ref: "#/components/schemas/TeacherQuizQuestion"
+      required:
+        - lessonId
+        - lessonCode
+        - skillName
+        - subjectName
+        - kind
+        - questions
+    TeacherQuizQuestion:
+      type: object
+      properties:
+        itemId:
+          type: integer
+        prompt:
+          type: string
+        explanation:
+          description: The marking note, where the question carries one.
+          type: ["string", "null"]
+        options:
+          type: array
+          items:
+            type: object
+            properties:
+              optionId:
+                type: integer
+              text:
+                type: string
+              isCorrect:
+                type: boolean
+            required: [optionId, text, isCorrect]
+      required:
+        - itemId
+        - prompt
+        - explanation
+        - options
     QuizAnswer:
       type: object
       description: What the teacher sees afterwards, with the text copied in so it still reads after an edit.
@@ -2044,26 +2462,51 @@ components:
           type: string
         className:
           type: string
-        subjects:
+        slots:
           description: >
-            One entry per subject the student has work in today. A child studies
-            several subjects a day, so this is a list rather than a single
-            lesson.
+            One entry per period on the class's timetable, in bell order. Not
+            one per subject: Mongolian in the first period and again in the
+            second is two lessons, and a day with the same subject twice used
+            to come back as one. A split class puts two entries on one period,
+            which is what a split is.
           type: array
           items:
             $ref: "#/components/schemas/SubjectDay"
         notice:
           type: string
-      required: [date, dateLabel, className, subjects, notice]
+      required: [date, dateLabel, className, slots, notice]
     SubjectDay:
       type: object
       properties:
+        timetableSlotId:
+          type: [integer, "null"]
+
+        selectionPending:
+          type: boolean
+          description: Group membership has not yet been assigned by staff.
+
         subjectCode:
           type: string
         subjectName:
           type: string
+        startsAt:
+          description: Bell time, HH:MM. Null where the school has no period list.
+          type: [string, "null"]
+        endsAt:
+          type: [string, "null"]
+        teacherName:
+          description: Who takes this period, from the school's own timetable.
+          type: [string, "null"]
+        groupLabel:
+          description: >
+            Which half of a split class this slot is for, in the school's own
+            words ("6а-1"). Null for a lesson the whole class attends.
+          type: [string, "null"]
         lesson:
-          description: What the class is scheduled to study in this subject today.
+          description: >
+            What the class is scheduled to study in this subject today, or null
+            where nobody has written the lesson yet - which is most periods. A
+            timetable slot is owed to a child whether or not its content exists.
           oneOf:
             - $ref: "#/components/schemas/DailyLessonView"
             - type: "null"
@@ -2082,7 +2525,9 @@ components:
             or where the day's only work is the personal kind, which answers to
             no bell.
           type: ["integer", "null"]
-      required: [subjectCode, subjectName, lesson, extra, periodNo]
+      required:
+        [subjectCode, subjectName, startsAt, endsAt, teacherName, groupLabel,
+         lesson, extra, periodNo]
     SubjectOutlineSection:
       type: object
       properties:
@@ -2146,6 +2591,19 @@ components:
     ScheduledDay:
       type: object
       properties:
+        periodNo:
+          type: [integer, "null"]
+        groupLabel:
+          type: [string, "null"]
+        startsAt:
+          type: [string, "null"]
+        teacherName:
+          type: [string, "null"]
+
+        timetableSlotId:
+          type: [integer, "null"]
+          minimum: 1
+
         scheduledOn:
           description: Calendar date, YYYY-MM-DD.
           type: string
@@ -3035,6 +3493,147 @@ components:
       required:
         [studentCode, displayName, familyName, givenName, personalFile,
          attendance, notes, className, gradeLevel, schoolYear, guardians]
+    StudyPlanDay:
+      type: object
+      description: >-
+        One school day of the plan. weekdayNo is 1 for Monday. score and status
+        are how it went: almost every day is NOT ASSESSED with no score, which
+        is the honest state while the plan is written and the term untaught -
+        a zero in place of a missing mark would be an invention.
+      properties:
+        weekdayNo: {type: integer}
+        focus: {type: [string, "null"]}
+        sourceLabel: {type: [string, "null"]}
+        unitFocus: {type: [string, "null"]}
+        pages: {type: [string, "null"]}
+        task: {type: [string, "null"]}
+        teacherCheck: {type: [string, "null"]}
+        target: {type: [string, "null"]}
+        score: {type: [number, "null"]}
+        status: {type: string}
+      required:
+        [weekdayNo, focus, sourceLabel, unitFocus, pages, task, teacherCheck,
+         target, score, status]
+    StudyPlanSkill:
+      type: object
+      description: What one week is for in one skill, and what confirms it.
+      properties:
+        domain: {type: string}
+        sourceLabel: {type: [string, "null"]}
+        unitFocus: {type: [string, "null"]}
+        pages: {type: [string, "null"]}
+        task: {type: [string, "null"]}
+        masteryTarget: {type: [string, "null"]}
+        status: {type: string}
+      required: [domain, sourceLabel, unitFocus, pages, task, masteryTarget, status]
+    StudyPlanWeek:
+      type: object
+      description: >-
+        One week of the plan, in both of its shapes: the five days a child
+        works through, and the six skills the week is aimed at. They describe
+        the same week and answer different questions - a child works from the
+        days, a parent reads the skills.
+      properties:
+        subjectCode: {type: string}
+        weekNo: {type: integer}
+        days:
+          type: array
+          items:
+            $ref: "#/components/schemas/StudyPlanDay"
+        skills:
+          type: array
+          items:
+            $ref: "#/components/schemas/StudyPlanSkill"
+      required: [subjectCode, weekNo, days, skills]
+    TeacherWeekSlot:
+      type: object
+      description: >-
+        One period of a teacher's week. Rows are times and the cell names the
+        class, which is the question a teacher asks of a week - the per-class
+        view answers "what does 9a do", which the class list already answers.
+      properties:
+        slotId: {type: string}
+        weekdayNo: {type: integer}
+        periodNo: {type: integer}
+        startsAt: {type: [string, "null"]}
+        endsAt: {type: [string, "null"]}
+        classId: {type: integer}
+        className: {type: string}
+        gradeLevel: {type: integer}
+        subjectId: {type: integer}
+        subject: {type: string}
+        groupLabel: {type: [string, "null"]}
+        teacherName: {type: [string, "null"]}
+      required:
+        [slotId, weekdayNo, periodNo, startsAt, endsAt, classId, className,
+         gradeLevel, subjectId, subject, groupLabel, teacherName]
+    MarkableClass:
+      type: object
+      properties:
+        classId: {type: string}
+        className: {type: string}
+        gradeLevel: {type: integer}
+        students: {type: integer}
+      required: [classId, className, gradeLevel, students]
+    ProductiveTask:
+      type: object
+      description: >-
+        One writing or speaking task at a child's level, with the can-do
+        statement a teacher judges it against and whatever they have already
+        said. score null means nobody has looked yet.
+      properties:
+        itemId: {type: string}
+        itemCode: {type: string}
+        domain: {type: string}
+        prompt: {type: string}
+        rubric: {type: [string, "null"]}
+        maxScore: {type: number}
+        score: {type: [number, "null"]}
+        comment: {type: [string, "null"]}
+        ratedByName: {type: [string, "null"]}
+        ratedAt: {type: [string, "null"]}
+      required:
+        [itemId, itemCode, domain, prompt, rubric, maxScore, score, comment,
+         ratedByName, ratedAt]
+    ProductiveStudent:
+      type: object
+      description: >-
+        A placed child and the tasks their own level asks of them - not the
+        class's level. Two children in one class placed at A2 and C1 are asked
+        different things, which is the point of having placed them.
+      properties:
+        studentId: {type: string}
+        studentCode: {type: string}
+        studentName: {type: string}
+        levelCode: {type: string}
+        levelName: {type: string}
+        objectiveScore: {type: [number, "null"]}
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductiveTask"
+      required:
+        [studentId, studentCode, studentName, levelCode, levelName,
+         objectiveScore, tasks]
+    ProductiveMarkSheet:
+      type: object
+      properties:
+        classId: {type: string}
+        className: {type: string}
+        students:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductiveStudent"
+      required: [classId, className, students]
+    ProductiveRatingInput:
+      type: object
+      properties:
+        classId: {type: string}
+        studentId: {type: string}
+        itemId: {type: string}
+        score: {type: number}
+        comment: {type: [string, "null"]}
+      required: [classId, studentId, itemId, score]
     PlacementStep:
       type: object
       description: >-

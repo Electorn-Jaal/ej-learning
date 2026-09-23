@@ -8,6 +8,7 @@ import {
   numeric,
   smallint,
   text,
+  timestamp,
   unique,
   varchar,
 } from "drizzle-orm/pg-core";
@@ -17,6 +18,7 @@ import {
   assessment,
   content,
   diagnosticItemsInAssessment,
+  studentsInCore,
 } from "./database";
 
 /**
@@ -206,5 +208,55 @@ export const placementPathwaysInContent = content.table(
       foreignColumns: [proficiencyLevelsInContent.id],
       name: "placement_pathways_level_id_fkey",
     }),
+  ],
+);
+
+/**
+ * A teacher's judgement of one writing or speaking task.
+ *
+ * The placement paper has two halves. Sixty questions are marked against a key
+ * and the system can do that alone; twenty-four are judged by a person reading
+ * what a child wrote or listening to what they said, against a can-do
+ * statement. Only the first half had ever been recorded, which is why a
+ * hundred of the hundred and five children who sat the test carry a level
+ * their screens have to call provisional.
+ *
+ * Separate from assessment.diagnostic_responses, which records a score and
+ * nothing else. A judged task needs three more facts - what the teacher
+ * thought, who the teacher was, and when - because unlike a marked answer a
+ * judgement can be disagreed with, and then somebody has to be asked.
+ *
+ * score is numeric rather than boolean although the rubric asks a yes-or-no
+ * question, so a school that later wants half marks is not blocked by a
+ * migration.
+ */
+export const productiveRatingsInAssessment = assessment.table(
+  "productive_ratings",
+  {
+    id: bigint({ mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+    studentId: bigint("student_id", { mode: "number" }).notNull(),
+    diagnosticItemId: bigint("diagnostic_item_id", { mode: "number" }).notNull(),
+    score: numeric("score", { precision: 5, scale: 2 }).notNull(),
+    maxScore: numeric("max_score", { precision: 5, scale: 2 }).notNull(),
+    commentMn: text("comment_mn"),
+    ratedBy: bigint("rated_by", { mode: "number" }).notNull(),
+    ratedAt: timestamp("rated_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("productive_ratings_student_item_key").on(
+      table.studentId, table.diagnosticItemId,
+    ),
+    check("productive_ratings_score_check", sql`score >= 0 AND score <= max_score`),
+    index("idx_productive_ratings_student").using(
+      "btree",
+      table.studentId.asc().nullsLast().op("int8_ops"),
+    ),
+    foreignKey({
+      columns: [table.studentId],
+      foreignColumns: [studentsInCore.id],
+      name: "productive_ratings_student_id_fkey",
+    }).onDelete("cascade"),
   ],
 );

@@ -134,6 +134,59 @@ export async function recordQuizAttemptScored(
   return { ...attempt, results };
 }
 
+/**
+ * The paper a teacher reads: every question, with the key and the note.
+ *
+ * The child's copy of this deliberately leaves the answers on the server, so
+ * that a score means something. A teacher is the person who has to judge
+ * whether a question is any good, which cannot be done without seeing which
+ * option is meant to be right, so theirs carries the key.
+ *
+ * Scoped through the class the teacher chose on screen, the same way the
+ * results are: it is the class that establishes whether this member of staff
+ * teaches the subject at all. The lesson alone would not - a question belongs
+ * to a subject, and subjects are held per class.
+ */
+export async function quizPaperForTeacher(
+  user: AuthenticatedUser,
+  classId: number,
+  lessonId: number,
+) {
+  const klass = await authorisedClass(user, classId);
+  const [header] = await repository.lessonHeader(lessonId);
+  if (!header) throw badRequest("Ийм хичээл алга байна.", "NO_SUCH_LESSON");
+  await viewableSubjects(user, klass.classId, header.subjectId);
+
+  const rows = await repository.quizItemsForLesson(lessonId);
+  const byItem = new Map<number, {
+    itemId: number;
+    prompt: string;
+    explanation: string | null;
+    options: Array<{ optionId: number; text: string; isCorrect: boolean }>;
+  }>();
+  for (const row of rows) {
+    let question = byItem.get(row.itemId);
+    if (!question) {
+      question = { itemId: row.itemId, prompt: row.prompt, explanation: row.explanation, options: [] };
+      byItem.set(row.itemId, question);
+    }
+    question.options.push({
+      optionId: row.optionId,
+      text: row.optionText,
+      isCorrect: row.isCorrect,
+    });
+  }
+
+  return {
+    lessonId,
+    lessonCode: header.lessonCode,
+    skillName: header.skillName,
+    subjectName: header.subjectName,
+    kind: header.assessmentKind,
+    questions: [...byItem.values()],
+  };
+}
+
 export async function quizAttemptsForTeacher(
   user: AuthenticatedUser,
   query: {

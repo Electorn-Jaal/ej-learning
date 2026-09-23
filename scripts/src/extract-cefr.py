@@ -11,6 +11,13 @@ otherwise: Grade / Class is read from `Form Responses 1`, never from the
 derived sheets. Sheets read "8-1" as a date and wrote 2026-08-01, destroying
 the class in every sheet computed from it.
 
+Every sheet in the workbook is extracted, named or not. An earlier version
+listed five sheets by name and the workbook has eighteen, so the per-child
+weekly and daily plans - 2424 and 1880 rows of them - were invisible to
+everything downstream. Naming sheets to read is a decision that silently
+expires the next time the school adds one; reading them all and letting the
+importer choose does not.
+
     python scripts/src/extract-cefr.py <workbook.xlsx> local-data/extracted/cefr-extract.json
 """
 
@@ -104,33 +111,33 @@ def main(source: Path, target: Path) -> None:
             }
         )
 
+    # Every sheet, under its own name, so a sheet nobody has looked at yet is
+    # still in the file when somebody does.
+    sheets = {name: sheet_rows(wb, name) for name in wb.sheetnames}
+
     payload = {
         "source": source.name,
-        "sheetsRead": [
-            "Form Responses 1",
-            "Resource Map",
-            "Productive Rubrics",
-            "Teacher Scripts",
-            "CEFR Results",
-        ],
+        "sheetsRead": list(wb.sheetnames),
         "itemCount": len(items),
         "submissionCount": len(submissions),
         "items": items,
         "submissions": submissions,
-        "resourceMap": sheet_rows(wb, "Resource Map"),
-        "rubrics": sheet_rows(wb, "Productive Rubrics"),
-        "teacherScripts": sheet_rows(wb, "Teacher Scripts"),
-        "cefrResults": sheet_rows(wb, "CEFR Results"),
+        # The five the importers already read, kept at their existing keys so
+        # nothing that works today has to change to pick up the other thirteen.
+        "resourceMap": sheets.get("Resource Map", []),
+        "rubrics": sheets.get("Productive Rubrics", []),
+        "teacherScripts": sheets.get("Teacher Scripts", []),
+        "cefrResults": sheets.get("CEFR Results", []),
+        "sheets": sheets,
     }
     wb.close()
 
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
-    print(
-        f"{target}: {len(items)} items, {len(submissions)} submissions, "
-        f"{len(payload['resourceMap'])} resource rows, {len(payload['rubrics'])} rubrics, "
-        f"{len(payload['teacherScripts'])} scripts, {len(payload['cefrResults'])} results"
-    )
+    print(f"{target}: {len(items)} items, {len(submissions)} submissions")
+    for name, rows in sheets.items():
+        if rows:
+            print(f"  {name}: {len(rows)} rows")
 
 
 if __name__ == "__main__":

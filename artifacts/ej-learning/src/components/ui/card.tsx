@@ -8,10 +8,13 @@ const Card = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      // 4px. Twelve read as a consumer app and eight still softened every
-      // edge of a page that is mostly tables; a school register wants a
-      // corner you barely notice.
-      "rounded-sm border bg-card text-card-foreground shadow-sm",
+      // 2px and no shadow, the same surface every list and panel in the
+      // product wears. Twelve read as a consumer app, four still softened
+      // every edge of a page that is mostly tables, and a drop shadow lifts a
+      // card off the page - right for a menu that floats, wrong for a panel
+      // that is part of the page. A school register wants a corner you
+      // barely notice and no lift at all.
+      "rounded-[2px] border bg-card text-card-foreground",
       className
     )}
     {...props}

@@ -156,6 +156,42 @@ describe("EJ Learning API", { concurrency: false }, () => {
   });
 
   describe("student schedule", () => {
+    it("keeps repeated and split weekly periods without lesson content, within validity dates", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(accountsByRole.STUDENT);
+      const [enrolment] = await harness.sql(`
+        SELECT e.class_id FROM core.student_enrollments e
+        JOIN core.students s ON s.id = e.student_id
+        JOIN core.users u ON u.student_id = s.id
+        WHERE u.username = 'demo-student' AND e.is_active LIMIT 1`);
+      const subjects = await harness.sql("SELECT id FROM core.subjects WHERE is_active ORDER BY id LIMIT 2");
+      const inserted = await harness.sql(`
+        INSERT INTO learning.timetable_slots
+          (class_id, subject_id, weekday_no, period_no, group_label, valid_from, valid_to)
+        VALUES ($1, $2, 1, 1, NULL, '2099-01-05', '2099-01-12'),
+               ($1, $2, 1, 2, 'A', '2099-01-05', '2099-01-12'),
+               ($1, $3, 1, 2, 'B', '2099-01-05', '2099-01-12')
+        RETURNING id`, [enrolment.class_id, subjects[0].id, subjects[1].id]);
+      try {
+        for (const date of ['2099-01-05', '2099-01-12']) {
+          const response = await client.request('/student/schedule?date=' + date);
+          assert.equal(response.status, 200);
+          assert.deepEqual(response.payload.slots.map((slot) => slot.periodNo), [1, 2, 2]);
+          assert.ok(response.payload.slots.every((slot) => slot.lesson === null));
+          assert.deepEqual(response.payload.slots.filter((slot) => slot.periodNo === 2)
+            .map((slot) => slot.groupLabel).sort(), ['A', 'B']);
+        }
+        for (const date of ['2098-12-29', '2099-01-06', '2099-01-19']) {
+          const response = await client.request('/student/schedule?date=' + date);
+          assert.equal(response.status, 200);
+          assert.deepEqual(response.payload.slots, []);
+        }
+      } finally {
+        await harness.sql('DELETE FROM learning.timetable_slots WHERE id = ANY($1::bigint[])',
+          [inserted.map((row) => row.id)]);
+      }
+    });
+
     it("requires a student session", async () => {
       const client = createClient(harness.baseUrl);
       assert.equal((await client.request("/student/schedule")).status, 401);
@@ -178,7 +214,7 @@ describe("EJ Learning API", { concurrency: false }, () => {
       const schedule = await client.request("/student/schedule?date=2000-01-01");
       assert.equal(schedule.status, 200);
       assert.equal(schedule.payload.date, "2000-01-01");
-      assert.deepEqual(schedule.payload.subjects, []);
+      assert.deepEqual(schedule.payload.slots, []);
       for (const date of ["invalid", "2026-02-30", "2026-13-01"]) {
         assert.equal((await client.request("/student/schedule?date=" + date)).status, 400);
       }
@@ -221,8 +257,9 @@ describe("EJ Learning API", { concurrency: false }, () => {
 
     it("keeps the teacher's note on the day, and the student reads it", async () => {
       // A weekday, so the teacher may set it without the admin-only weekend rule.
+      // Today or later: a day already taught is not a day anybody rewrites.
       const [{ day: weekday }] = await harness.sql(
-        "SELECT d::date::text AS day FROM learning.terms t CROSS JOIN LATERAL generate_series(t.starts_on, t.ends_on, interval '1 day') d WHERE extract(isodow FROM d) < 6 AND NOT EXISTS (SELECT 1 FROM learning.class_schedule cs WHERE cs.class_id = $1 AND cs.scheduled_on = d::date) ORDER BY d LIMIT 1",
+        "SELECT d::date::text AS day FROM learning.terms t CROSS JOIN LATERAL generate_series(t.starts_on, t.ends_on, interval '1 day') d WHERE extract(isodow FROM d) < 6 AND d >= CURRENT_DATE AND NOT EXISTS (SELECT 1 FROM learning.class_schedule cs WHERE cs.class_id = $1 AND cs.scheduled_on = d::date) ORDER BY d LIMIT 1",
         [classId],
       );
       const day = { classId: Number(classId), subjectId: Number(subjectId), scheduledOn: weekday };
@@ -248,7 +285,7 @@ describe("EJ Learning API", { concurrency: false }, () => {
       // The student sees it on the day it belongs to.
       assert.equal((await teacher.request('/teacher/schedule/day', { method: 'PUT', body: { ...day, lessonId, note } })).status, 204);
       const personal = await student.request('/student/schedule?date=' + weekday);
-      const shown = personal.payload.subjects.find((row) => row.lesson?.id === lessonId);
+      const shown = personal.payload.slots.find((row) => row.lesson?.id === lessonId);
       assert.ok(shown, "the student should have this lesson that day");
       assert.equal(shown.lesson.teacherNote, note);
 
@@ -274,12 +311,298 @@ describe("EJ Learning API", { concurrency: false }, () => {
       const shown = await teacher.request('/teacher/schedule?classId=' + classId + '&subjectId=' + subjectId + '&from=' + weekend + '&to=' + weekend);
       assert.equal(shown.payload.days[0].lessonId, lessonId);
       const personal = await student.request('/student/schedule?date=' + weekend);
-      assert.ok(personal.payload.subjects.some((row) => row.lesson?.id === lessonId));
+      assert.ok(personal.payload.slots.some((row) => row.lesson?.id === lessonId));
       const clearing = { ...body, lessonId: null };
       assert.equal((await teacher.request('/teacher/schedule/day', { method: 'PUT', body: clearing })).status, 403);
       assert.equal((await admin.request('/teacher/schedule/day', { method: 'PUT', body: clearing })).status, 204);
       const cleared = await teacher.request('/teacher/schedule?classId=' + classId + '&subjectId=' + subjectId + '&from=' + weekend + '&to=' + weekend);
       assert.equal(cleared.payload.days[0].lessonId, null);
+    });
+  });
+
+  describe("a corrected day re-lays the rest of the term", () => {
+    let admin, klass, grade, subject, lessons, slot, days, material;
+    before(async () => {
+      admin = createClient(harness.baseUrl);
+      await admin.signIn(accountsByRole.ADMIN);
+      [{ id: klass, grade }] = await harness.sql(
+        `SELECT c.id::int, c.grade_level_id::int AS grade FROM core.classes c
+          WHERE c.class_code = 'MOCK-LOCAL-9A'`);
+      [{ id: subject }] = await harness.sql("SELECT id::int FROM core.subjects WHERE code = 'MATH'");
+
+      // Four sections of a book, in printed order, with a lesson on each. The
+      // seed carries one lesson per subject, and one lesson has no sequence to
+      // move: what is being tested is that the rest of the term follows the
+      // teacher's correction, which needs a rest of the term to exist.
+      [material] = await harness.sql(
+        `INSERT INTO content.source_materials (source_code, subject_id, title, material_type, status)
+         VALUES ('TEST-REPLAN-BOOK', $1, 'Replan fixture', 'TEXTBOOK', 'APPROVED') RETURNING id::int`,
+        [subject]);
+      for (let index = 1; index <= 4; index += 1) {
+        const [node] = await harness.sql(
+          `INSERT INTO content.source_outline_nodes
+             (source_material_id, outline_code, printed_number, node_type, title,
+              page_from, page_to, sequence_no, status)
+           VALUES ($1, $2, $3, 'SECTION', $4, $5, $5, $6, 'APPROVED') RETURNING id::int`,
+          [material.id, `TEST-REPLAN-${index}`, String(index), `Replan ${index}`, index * 10, index]);
+        const [skill] = await harness.sql(
+          `INSERT INTO content.skills (skill_code, subject_id, grade_level_id, name_mn, status)
+           VALUES ($1, $2, $3, $4, 'APPROVED') RETURNING id::int`,
+          [`TEST-REPLAN-S${index}`, subject, grade, `Replan skill ${index}`]);
+        const [topic] = await harness.sql(
+          `INSERT INTO content.content_nodes
+             (subject_id, content_code, level_type, name_mn, grade_from_id, grade_to_id, sequence_no, status)
+           VALUES ($1, $2, 'TOPIC', $3, $4, $4, $5, 'APPROVED') RETURNING id::int`,
+          [subject, `TEST-REPLAN-T${index}`, `Replan topic ${index}`, grade, index]);
+        await harness.sql(
+          `INSERT INTO content.content_skill_maps (map_code, content_node_id, skill_id, is_primary, status)
+           VALUES ($1, $2, $3, true, 'APPROVED')`,
+          [`TEST-REPLAN-M${index}`, topic.id, skill.id]);
+        await harness.sql(
+          `INSERT INTO content.content_source_alignments
+             (alignment_code, content_node_id, source_material_id, source_outline_node_id,
+              page_from, page_to, relation_type, status)
+           VALUES ($1, $2, $3, $4, $5, $5, 'PRIMARY', 'APPROVED')`,
+          [`TEST-REPLAN-A${index}`, topic.id, material.id, node.id, index * 10]);
+        await harness.sql(
+          `INSERT INTO learning.daily_lessons
+             (lesson_code, core_skill_id, lesson_type, learning_goal_mn, estimated_minutes,
+              print_ready, web_ready, source_material_id, source_outline_node_id, status)
+           VALUES ($1, $2, 'CORE', $3, 40, true, true, $4, $5, 'APPROVED')`,
+          [`TEST-REPLAN-L${index}`, skill.id, `Replan goal ${index}`, material.id, node.id]);
+      }
+      lessons = (await admin.request(`/teacher/lessons?classId=${klass}&subjectId=${subject}`))
+        .payload.filter((row) => row.lessonCode.startsWith('TEST-REPLAN-'));
+      assert.equal(lessons.length, 4);
+
+      // One period a week, running the whole term, so the plan has somewhere
+      // to spread to. Four Wednesdays are enough to watch the sequence move.
+      const [term] = await harness.sql(`SELECT id::int, starts_on::text AS "from", ends_on::text AS "to"
+        FROM learning.terms WHERE CURRENT_DATE BETWEEN starts_on AND ends_on
+        ORDER BY term_number LIMIT 1`);
+      assert.ok(term, 'no term covers today');
+      days = (await harness.sql(
+        `SELECT d::date::text AS day FROM generate_series($1::date, $2::date, interval '1 day') d
+          WHERE extract(isodow FROM d) = 3 ORDER BY d LIMIT 4`, [term.from, term.to],
+      )).map((row) => row.day);
+      [slot] = await harness.sql(`INSERT INTO learning.timetable_slots
+        (class_id, subject_id, weekday_no, period_no, group_label, valid_from, valid_to)
+        VALUES ($1, $2, 3, 4, NULL, $3::date, $4::date)
+        RETURNING id::int`, [klass, subject, term.from, term.to]);
+    });
+    after(async () => {
+      if (slot) {
+        await harness.sql('DELETE FROM learning.class_schedule WHERE timetable_slot_id = $1', [slot.id]);
+        await harness.sql('DELETE FROM learning.timetable_slots WHERE id = $1', [slot.id]);
+      }
+      if (material) {
+        await harness.sql(`DELETE FROM learning.class_schedule WHERE daily_lesson_id IN
+          (SELECT id FROM learning.daily_lessons WHERE lesson_code LIKE 'TEST-REPLAN-%')`);
+        await harness.sql("DELETE FROM learning.daily_lessons WHERE lesson_code LIKE 'TEST-REPLAN-%'");
+        await harness.sql("DELETE FROM content.content_source_alignments WHERE alignment_code LIKE 'TEST-REPLAN-%'");
+        await harness.sql("DELETE FROM content.content_skill_maps WHERE map_code LIKE 'TEST-REPLAN-%'");
+        await harness.sql("DELETE FROM content.content_nodes WHERE content_code LIKE 'TEST-REPLAN-%'");
+        await harness.sql("DELETE FROM content.skills WHERE skill_code LIKE 'TEST-REPLAN-%'");
+        await harness.sql("DELETE FROM content.source_outline_nodes WHERE outline_code LIKE 'TEST-REPLAN-%'");
+        await harness.sql("DELETE FROM content.source_materials WHERE source_code = 'TEST-REPLAN-BOOK'");
+      }
+    });
+
+    const topicOn = async (day) => {
+      const [row] = await harness.sql(
+        `SELECT cs.daily_lesson_id::int AS id, cs.created_by
+           FROM learning.class_schedule cs
+          WHERE cs.class_id = $1 AND cs.subject_id = $2 AND cs.scheduled_on = $3::date`,
+        [klass, subject, day]);
+      return row ?? null;
+    };
+
+    it("carries the following sections forward, and moves them when the teacher corrects one", async () => {
+      assert.ok(days.length >= 3, `days=${days.length}`);
+
+      // Setting the first section lays the rest of the term after it.
+      const first = await admin.request('/teacher/schedule/day', { method: 'PUT', body: {
+        classId: klass, subjectId: subject, scheduledOn: days[0], lessonId: lessons[0].id,
+        timetableSlotId: slot.id,
+      } });
+      assert.equal(first.status, 204, JSON.stringify(first.payload));
+      assert.equal((await topicOn(days[1])).id, lessons[1].id, 'the next period did not follow on');
+      assert.equal((await topicOn(days[2])).id, lessons[2].id);
+      // Laid out, not chosen: that is what an empty created_by says.
+      assert.equal((await topicOn(days[1])).created_by, null);
+
+      // The class went faster than the plan. Saying so moves everything after
+      // it rather than only that one day.
+      assert.equal((await admin.request('/teacher/schedule/day', { method: 'PUT', body: {
+        classId: klass, subjectId: subject, scheduledOn: days[0], lessonId: lessons[1].id,
+        timetableSlotId: slot.id,
+      } })).status, 204);
+      assert.equal((await topicOn(days[1])).id, lessons[2].id, 'the term did not move with the correction');
+      assert.equal((await topicOn(days[2])).id, lessons[3].id);
+
+      // What was taught stays taught: nothing before the corrected day moves.
+      assert.equal((await topicOn(days[0])).id, lessons[1].id);
+    });
+
+    it("sends the child to the pages the class actually covered", async () => {
+      // The book prints one range for the section; this class went further.
+      // The child opening their day is sent where their own teacher taught.
+      const student = createClient(harness.baseUrl);
+      await student.signIn(accountsByRole.STUDENT);
+
+      const saved = await admin.request('/teacher/schedule/day', { method: 'PUT', body: {
+        classId: klass, subjectId: subject, scheduledOn: days[0], lessonId: lessons[0].id,
+        timetableSlotId: slot.id, pageFrom: 40, pageTo: 45,
+      } });
+      assert.equal(saved.status, 204, JSON.stringify(saved.payload));
+
+      const day = await student.request('/student/schedule?date=' + days[0]);
+      assert.equal(day.status, 200);
+      const taught = day.payload.slots.find((row) => row.lesson !== null);
+      assert.ok(taught, 'the child cannot see the lesson at all');
+      assert.equal(taught.lesson.book.pageFrom, 40);
+      assert.equal(taught.lesson.book.pageTo, 45);
+
+      // Half a range is not a range.
+      const half = await admin.request('/teacher/schedule/day', { method: 'PUT', body: {
+        classId: klass, subjectId: subject, scheduledOn: days[0], lessonId: lessons[0].id,
+        timetableSlotId: slot.id, pageFrom: 40, pageTo: null,
+      } });
+      assert.equal(half.status, 400);
+      assert.equal(half.payload.code, 'INCOMPLETE_PAGE_RANGE');
+
+      // Sending null for both falls back to what the book prints.
+      assert.equal((await admin.request('/teacher/schedule/day', { method: 'PUT', body: {
+        classId: klass, subjectId: subject, scheduledOn: days[0], lessonId: lessons[0].id,
+        timetableSlotId: slot.id, pageFrom: null, pageTo: null,
+      } })).status, 204);
+      const back = await student.request('/student/schedule?date=' + days[0]);
+      const again = back.payload.slots.find((row) => row.lesson !== null);
+      assert.equal(again.lesson.book.pageFrom, 10, 'the book’s own range did not come back');
+    });
+  });
+
+  describe("weekly timetable content and group membership", () => {
+    let admin, student, teacher, otherTeacher, klass, subject, lesson, day, slots, studentId;
+    before(async () => {
+      admin = createClient(harness.baseUrl);
+      student = createClient(harness.baseUrl);
+      teacher = createClient(harness.baseUrl);
+      otherTeacher = createClient(harness.baseUrl);
+      await admin.signIn(accountsByRole.ADMIN);
+      await student.signIn(accountsByRole.STUDENT);
+      await teacher.signIn(byName['demo-teacher']);
+      await otherTeacher.signIn(byName['demo-teacher-b']);
+      [{ id: klass }] = await harness.sql("SELECT id::int FROM core.classes WHERE class_code = 'MOCK-LOCAL-9A'");
+      [{ id: subject }] = await harness.sql("SELECT id::int FROM core.subjects WHERE code = 'MATH'");
+      [{ id: studentId }] = await harness.sql("SELECT student_id::int AS id FROM core.users WHERE username = 'demo-student'");
+      const lessons = await admin.request(`/teacher/lessons?classId=${klass}&subjectId=${subject}`);
+      lesson = lessons.payload[0].id;
+      [{ day }] = await harness.sql(`SELECT d::date::text AS day FROM learning.terms t
+        CROSS JOIN LATERAL generate_series(t.starts_on, t.ends_on, interval '1 day') d
+        WHERE extract(isodow FROM d) < 6 AND d >= CURRENT_DATE AND NOT EXISTS
+          (SELECT 1 FROM learning.class_schedule cs WHERE cs.class_id = $1 AND cs.scheduled_on = d::date)
+        ORDER BY d LIMIT 1`, [klass]);
+      slots = await harness.sql(`INSERT INTO learning.timetable_slots
+        (class_id, subject_id, weekday_no, period_no, group_label, valid_from, valid_to)
+        VALUES ($1, $2, extract(isodow FROM $3::date), 1, NULL, $3, $3),
+               ($1, $2, extract(isodow FROM $3::date), 2, 'A', $3, $3)
+        RETURNING id::int`, [klass, subject, day]);
+    });
+    after(async () => {
+      if (slots) await harness.sql('DELETE FROM learning.timetable_slots WHERE id = ANY($1::bigint[])', [slots.map(s => s.id)]);
+    });
+
+    it('shows both empty periods to staff and requires an unambiguous content target', async () => {
+      const response = await admin.request(`/teacher/schedule?classId=${klass}&subjectId=${subject}&from=${day}&to=${day}`);
+      assert.equal(response.status, 200);
+      assert.deepEqual(response.payload.days.map(row => row.periodNo), [1, 2]);
+      assert.deepEqual(response.payload.days.map(row => row.timetableSlotId), slots.map(s => s.id));
+      assert.equal((await admin.request('/teacher/schedule/day', { method: 'PUT', body: {
+        classId: klass, subjectId: subject, scheduledOn: day, lessonId: lesson,
+      } })).status, 400);
+    });
+
+    it('stores repeated lessons separately and clearing one preserves the other and the timetable', async () => {
+      for (const [index, slot] of slots.entries()) {
+        const saved = await admin.request('/teacher/schedule/day', { method: 'PUT', body: {
+          classId: klass, subjectId: subject, scheduledOn: day, lessonId: lesson,
+          timetableSlotId: slot.id, note: `period ${index + 1}`,
+        } });
+        assert.equal(saved.status, 204, JSON.stringify(saved.payload));
+      }
+      let response = await student.request('/student/schedule?date=' + day);
+      assert.equal(response.status, 200);
+      assert.deepEqual(response.payload.slots.map(row => row.lesson?.teacherNote), ['period 1', 'period 2']);
+      assert.equal((await admin.request('/teacher/schedule/day', { method: 'PUT', body: {
+        classId: klass, subjectId: subject, scheduledOn: day, lessonId: null, timetableSlotId: slots[0].id,
+      } })).status, 204);
+      response = await student.request('/student/schedule?date=' + day);
+      assert.equal(response.payload.slots.length, 2);
+      assert.equal(response.payload.slots[0].lesson, null);
+      assert.equal(response.payload.slots[1].lesson.teacherNote, 'period 2');
+    });
+
+    it('leaves a day already taught alone, for everyone but the administrator', async () => {
+      // Yesterday: the class worked from whatever was set, and their answers
+      // are recorded against it. Reading it back is fine; rewriting it is not.
+      const [{ past }] = await harness.sql(
+        "SELECT (CURRENT_DATE - interval '1 day')::date::text AS past");
+      const refused = await teacher.request('/teacher/schedule/day', { method: 'PUT', body: {
+        classId: klass, subjectId: subject, scheduledOn: past, lessonId: lesson,
+      } });
+      assert.equal(refused.status, 403, JSON.stringify(refused.payload));
+      assert.equal(refused.payload.code, 'PAST_DAY');
+    });
+
+    it('refuses content on a day the class is not timetabled, and lets the admin place it', async () => {
+      // The day after the one slot this class has. Once a subject IS on the
+      // timetable, a day it does not fall on is a day nobody teaches it, and
+      // content put there would be shown to a class that is elsewhere.
+      const [{ other }] = await harness.sql(
+        "SELECT (($1::date) + interval '1 day')::date::text AS other", [day]);
+      const body = {
+        classId: klass, subjectId: subject, scheduledOn: other, lessonId: lesson,
+      };
+      const refused = await teacher.request('/teacher/schedule/day', { method: 'PUT', body });
+      assert.equal(refused.status, 403, JSON.stringify(refused.payload));
+      assert.equal(refused.payload.code, 'NOT_A_TEACHING_DAY');
+
+      // A makeup lesson is exactly this, and it is the administrator's to put
+      // there - so the rule stops at the teacher.
+      const allowed = await admin.request('/teacher/schedule/day', { method: 'PUT', body });
+      assert.equal(allowed.status, 204, JSON.stringify(allowed.payload));
+      await admin.request('/teacher/schedule/day', {
+        method: 'PUT', body: { ...body, lessonId: null },
+      });
+    });
+
+    it('validates slot dates and prevents another teacher or student from changing group membership', async () => {
+      const url = `/teacher/timetable/${slots[1].id}/students`;
+      assert.equal((await student.request(url)).status, 403);
+      assert.equal((await otherTeacher.request(url, { method: 'PUT', body: { studentIds: [] } })).status, 403);
+      assert.equal((await admin.request(url, { method: 'PUT', body: { studentIds: [99999999] } })).status, 400);
+      assert.equal((await admin.request('/teacher/schedule/day', { method: 'PUT', body: {
+        classId: klass, subjectId: subject, scheduledOn: '2000-01-03', lessonId: lesson, timetableSlotId: slots[1].id,
+      } })).status, 400);
+    });
+
+    it('persists membership and filters the student timetable after assigning a group', async () => {
+      const url = `/teacher/timetable/${slots[1].id}/students`;
+      const roster = await admin.request(url);
+      assert.equal(roster.status, 200);
+      assert.equal(roster.payload.assigned, false);
+      assert.ok(roster.payload.students.some(s => s.id === studentId));
+      assert.equal((await admin.request(url, { method: 'PUT', body: { studentIds: [] } })).status, 204);
+      let response = await student.request('/student/schedule?date=' + day);
+      assert.deepEqual(response.payload.slots.map(s => s.periodNo), [1]);
+      assert.equal((await admin.request(url, { method: 'PUT', body: { studentIds: [studentId] } })).status, 204);
+      response = await student.request('/student/schedule?date=' + day);
+      assert.deepEqual(response.payload.slots.map(s => s.periodNo), [1, 2]);
+      assert.equal(response.payload.slots[1].selectionPending, false);
+      const saved = await admin.request(url);
+      assert.equal(saved.payload.assigned, true);
+      assert.equal(saved.payload.students.find(s => s.id === studentId).selected, true);
     });
   });
 
@@ -630,11 +953,11 @@ describe("EJ Learning API", { concurrency: false }, () => {
           "/student/schedule?date=" + encodeURIComponent(row.day),
         );
         assert.equal(res.status, 200);
-        const placed = res.payload.subjects.filter((entry) => entry.periodNo === 2);
+        const placed = res.payload.slots.filter((entry) => entry.periodNo === 2);
         assert.equal(placed.length, 1, "the lesson reports the slot it was given");
 
         // Personal work answers to no bell, so it never claims a slot.
-        for (const entry of res.payload.subjects) {
+        for (const entry of res.payload.slots) {
           if (!entry.lesson && entry.extra) {
             assert.equal(entry.periodNo, null, "personal work carries no period");
           }
@@ -664,7 +987,7 @@ describe("EJ Learning API", { concurrency: false }, () => {
       assert.equal(today.status, 200);
       assert.match(today.payload.date, /^\d{4}-\d{2}-\d{2}$/);
 
-      const lessons = today.payload.subjects.map((s) => s.lesson).filter(Boolean);
+      const lessons = today.payload.slots.map((s) => s.lesson).filter(Boolean);
       assert.ok(lessons.length > 0, "expected a scheduled lesson today");
       assert.equal(lessons[0].lessonCode, "MOCK-LOCAL-LESSON");
     });
@@ -809,7 +1132,7 @@ describe("EJ Learning API", { concurrency: false }, () => {
       client = createClient(harness.baseUrl);
       await client.signIn(accountsByRole.STUDENT);
       const today = await client.request("/student/today");
-      const lesson = today.payload.subjects.map((s) => s.lesson).find(Boolean);
+      const lesson = today.payload.slots.map((s) => s.lesson).find(Boolean);
       const res = await client.request(`/student/quiz/${lesson.id}`);
       assert.equal(res.status, 200);
       paper = res.payload;
@@ -1676,6 +1999,168 @@ ${run.output}`);
     });
   });
 
+  describe("judging the written half confirms a provisional level", () => {
+    // The loop the whole placement exists for: a level marked from the
+    // objective half alone is provisional, a teacher reads the writing and
+    // hears the speaking, and the level stops being a guess. Nothing sets that
+    // flag by hand - it is derived from whether every judged task at the
+    // child's level has been marked - so this also proves it reverses.
+    let classId;
+    let studentId;
+    let levelId;
+    let engId;
+    let teacherId;
+    const items = [];
+
+    before(async () => {
+      [{ id: classId }] = await harness.sql(
+        "SELECT id FROM core.classes WHERE class_code = 'MOCK-LOCAL-9A'",
+      );
+      [{ id: studentId }] = await harness.sql(
+        "SELECT id FROM core.students WHERE student_code = 'MOCK-LOCAL-STUDENT'",
+      );
+      [{ id: engId }] = await harness.sql(
+        `INSERT INTO core.subjects (code, name_mn, is_active)
+         VALUES ('ENG', 'Англи хэл', true)
+         ON CONFLICT (code) DO UPDATE SET is_active = true RETURNING id`,
+      );
+      [{ id: levelId }] = await harness.sql(
+        `INSERT INTO content.proficiency_levels (framework, code, name_mn, sequence)
+         VALUES ('TEST-PROD', 'B2', 'Туршилтын түвшин', 1) RETURNING id`,
+      );
+      // Two judged tasks. A rubric and no options is what marks them out from
+      // the sixty the system can score on its own.
+      for (const [order, domain] of [[901, "Бичих"], [902, "Ярих"]]) {
+        const [row] = await harness.sql(
+          `INSERT INTO assessment.diagnostic_items
+             (item_code, subject_id, item_order, title_mn, domain_mn, max_score,
+              proficiency_level_id, answer_source, status, rubric_mn)
+           VALUES ($1, $2, $3, $4, $5, 1, $6, 'AUTHORITATIVE', 'APPROVED', 'Чадаж байна уу')
+           RETURNING id`,
+          [`TEST-PROD-${order}`, engId, order, `Туршилтын ${domain}`, domain, levelId],
+        );
+        items.push(row.id);
+      }
+      await harness.sql(
+        `INSERT INTO core.class_subjects (class_id, subject_id, origin, is_active)
+         VALUES ($1, $2, 'ROSTER', true) ON CONFLICT DO NOTHING`,
+        [classId, engId],
+      );
+      await harness.sql(
+        `INSERT INTO assessment.placement_attempts
+           (student_id, subject_id, proficiency_level_id, total_score, total_max_score,
+            answer_source, attempted_on)
+         VALUES ($1, $2, $3, 40, 60, 'RECONSTRUCTED', '2026-09-07')`,
+        [studentId, engId, levelId],
+      );
+      [{ id: teacherId }] = await harness.sql(
+        `SELECT t.id FROM core.teachers t JOIN core.users u ON u.id = t.user_id
+          WHERE u.username = 'demo-teacher'`,
+      );
+      await harness.sql(
+        "INSERT INTO core.teacher_subjects (teacher_id, subject_id) VALUES ($1, $2)",
+        [teacherId, engId],
+      );
+    });
+
+    after(async () => {
+      await harness.sql("DELETE FROM assessment.productive_ratings WHERE student_id = $1", [studentId]);
+      await harness.sql("DELETE FROM assessment.placement_attempts WHERE student_id = $1", [studentId]);
+      await harness.sql("DELETE FROM assessment.diagnostic_items WHERE item_code LIKE 'TEST-PROD-%'");
+      await harness.sql("DELETE FROM core.teacher_subjects WHERE teacher_id = $1", [teacherId]);
+      await harness.sql("DELETE FROM core.class_subjects WHERE class_id = $1 AND subject_id = $2", [classId, engId]);
+      await harness.sql("DELETE FROM content.proficiency_levels WHERE id = $1", [levelId]);
+    });
+
+    const confidence = async () => {
+      const [row] = await harness.sql(
+        "SELECT answer_source FROM assessment.placement_attempts WHERE student_id = $1",
+        [studentId],
+      );
+      return row.answer_source;
+    };
+
+    it("opens the class on the specialty alone and asks the child's own level", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(byName["demo-teacher"]);
+
+      const classes = await client.request("/teacher/productive/classes");
+      assert.equal(classes.status, 200);
+      assert.ok(
+        classes.payload.some((row) => row.classId === String(classId)),
+        "no class assignment exists, so the registered specialty has to be enough",
+      );
+
+      const sheet = await client.request(`/teacher/productive/classes/${classId}`);
+      assert.equal(sheet.status, 200);
+      const student = sheet.payload.students.find((row) => row.studentId === String(studentId));
+      assert.ok(student, "expected the placed child");
+      assert.equal(student.levelCode, "B2");
+      assert.deepEqual(student.tasks.map((task) => task.domain).sort(), ["Бичих", "Ярих"]);
+      assert.deepEqual(student.tasks.map((task) => task.score), [null, null]);
+    });
+
+    it("confirms the level only when every task is judged, and unconfirms it again", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(byName["demo-teacher"]);
+      assert.equal(await confidence(), "RECONSTRUCTED", "starts provisional");
+
+      const first = await client.request("/teacher/productive/rating", {
+        method: "PUT",
+        body: {
+          classId: String(classId), studentId: String(studentId),
+          itemId: String(items[0]), score: 1, comment: "Сайн бичсэн",
+        },
+      });
+      assert.equal(first.status, 200);
+      assert.equal(await confidence(), "RECONSTRUCTED", "one of two is not a confirmation");
+
+      const second = await client.request("/teacher/productive/rating", {
+        method: "PUT",
+        body: {
+          classId: String(classId), studentId: String(studentId),
+          itemId: String(items[1]), score: 0,
+        },
+      });
+      assert.equal(second.status, 200);
+      // A failed task still counts as judged: the level is confirmed because
+      // somebody looked, not because the child passed.
+      assert.equal(await confidence(), "AUTHORITATIVE", "both judged, so no longer a guess");
+
+      const student = second.payload.students.find((row) => row.studentId === String(studentId));
+      const written = student.tasks.find((task) => task.itemId === String(items[0]));
+      assert.equal(written.comment, "Сайн бичсэн");
+      assert.equal(written.ratedByName, byName["demo-teacher"].displayName ?? written.ratedByName);
+
+      await harness.sql(
+        "DELETE FROM assessment.productive_ratings WHERE student_id = $1 AND diagnostic_item_id = $2",
+        [studentId, items[1]],
+      );
+      await client.request("/teacher/productive/rating", {
+        method: "PUT",
+        body: {
+          classId: String(classId), studentId: String(studentId),
+          itemId: String(items[0]), score: 1,
+        },
+      });
+      assert.equal(await confidence(), "RECONSTRUCTED",
+        "a removed judgement takes the confirmation with it");
+    });
+
+    it("refuses a score the task is not worth", async () => {
+      const client = createClient(harness.baseUrl);
+      await client.signIn(byName["demo-teacher"]);
+      const res = await client.request("/teacher/productive/rating", {
+        method: "PUT",
+        body: {
+          classId: String(classId), studentId: String(studentId),
+          itemId: String(items[0]), score: 5,
+        },
+      });
+      assert.equal(res.status, 400);
+    });
+  });
+
   describe("a child's own plan for the day", () => {
     let client;
 
@@ -1761,7 +2246,7 @@ ${run.output}`);
       );
 
       const today = await client.request("/student/today");
-      const lesson = today.payload.subjects.map((s) => s.lesson).find(Boolean);
+      const lesson = today.payload.slots.map((s) => s.lesson).find(Boolean);
       const paper = await client.request(`/student/quiz/${lesson.id}`);
       assert.equal(paper.status, 200);
 

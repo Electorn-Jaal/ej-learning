@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, type ComponentType, type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
@@ -14,26 +14,60 @@ import Login from '@/pages/Login';
 // The shell and sign-in screen are the only eager application code. Each
 // authenticated page becomes its own chunk and is fetched when its route is
 // opened, rather than making every student download the admin and teacher UI.
-const Password = lazy(() => import('@/pages/Password'));
-const StudentToday = lazy(() => import('@/pages/student/Today'));
-const StudentSchedule = lazy(() => import('@/pages/student/Schedule'));
-const StudentSubjects = lazy(() => import('@/pages/student/Subjects'));
-const StudentSubjectDetail = lazy(() => import('@/pages/student/SubjectDetail'));
-const StudentProgress = lazy(() => import('@/pages/student/Progress'));
-const StudentProfile = lazy(() => import('@/pages/student/Profile'));
-const StudentAssignment = lazy(() => import('@/pages/student/Assignment'));
-const StudentSubjectView = lazy(() => import('@/pages/student/SubjectView'));
-const StudentPlan = lazy(() => import('@/pages/student/Plan'));
-const TeacherDashboard = lazy(() => import('@/pages/teacher/Dashboard'));
-const TeacherSchedule = lazy(() => import('@/pages/teacher/Schedule'));
-const TeacherQuizResults = lazy(() => import('@/pages/teacher/QuizResults'));
-const TeacherAnalytics = lazy(() => import('@/pages/teacher/Analytics'));
-const TeacherAssessment = lazy(() => import('@/pages/teacher/Assessment'));
-const AdminBooks = lazy(() => import('@/pages/admin/Books'));
-const AdminContentLinks = lazy(() => import('@/pages/admin/ContentLinks'));
-const TeacherIntegrations = lazy(() => import('@/pages/teacher/Integrations'));
-const TeacherCatalog = lazy(() => import('@/pages/teacher/Catalog'));
-const TeacherClassTopics = lazy(() => import('@/pages/teacher/ClassTopics'));
+
+/**
+ * One page's code, fetched the first time the page is opened.
+ *
+ * Every build renames these files. A browser left open on the previous build
+ * asks for a name that no longer exists, the import is rejected, and pressing
+ * a button in the navigation appears to do nothing whatsoever - the page that
+ * is already on screen keeps working, so it does not look like a failure, it
+ * looks like a dead button. There is nothing wrong with the page; the tab is
+ * simply out of date, so it reloads itself and arrives on the new build.
+ *
+ * Once, and only once, marked in sessionStorage: a chunk that is genuinely
+ * broken must reach the error boundary rather than reload the browser in a
+ * loop. A tab that refuses site data skips straight to the boundary.
+ */
+const RELOADED = 'ej.chunk-reload';
+
+function page(load: () => Promise<{ default: ComponentType<never> }>) {
+  return lazy(() => load().catch((error: unknown) => {
+    try {
+      if (sessionStorage.getItem(RELOADED) === null) {
+        sessionStorage.setItem(RELOADED, new Date().toISOString());
+        location.reload();
+        // The reload takes over; resolving would render against dead code.
+        return new Promise<{ default: ComponentType<never> }>(() => {});
+      }
+    } catch {
+      // No session storage: fall through and report the error honestly.
+    }
+    throw error;
+  }));
+}
+
+const Password = page(() => import('@/pages/Password'));
+const StudentToday = page(() => import('@/pages/student/Today'));
+const StudentSchedule = page(() => import('@/pages/student/Schedule'));
+const StudentSubjects = page(() => import('@/pages/student/Subjects'));
+const StudentSubjectDetail = page(() => import('@/pages/student/SubjectDetail'));
+const StudentProgress = page(() => import('@/pages/student/Progress'));
+const StudentProfile = page(() => import('@/pages/student/Profile'));
+const StudentAssignment = page(() => import('@/pages/student/Assignment'));
+const StudentSubjectView = page(() => import('@/pages/student/SubjectView'));
+const StudentPlan = page(() => import('@/pages/student/Plan'));
+const TeacherDashboard = page(() => import('@/pages/teacher/Dashboard'));
+const TeacherSchedule = page(() => import('@/pages/teacher/Schedule'));
+const TeacherQuizResults = page(() => import('@/pages/teacher/QuizResults'));
+const TeacherAnalytics = page(() => import('@/pages/teacher/Analytics'));
+const TeacherAssessment = page(() => import('@/pages/teacher/Assessment'));
+const AdminBooks = page(() => import('@/pages/admin/Books'));
+const AdminContentLinks = page(() => import('@/pages/admin/ContentLinks'));
+const TeacherIntegrations = page(() => import('@/pages/teacher/Integrations'));
+const TeacherCatalog = page(() => import('@/pages/teacher/Catalog'));
+const TeacherClassDay = page(() => import('@/pages/teacher/ClassDay'));
+const TeacherProductive = page(() => import('@/pages/teacher/Productive'));
 
 const queryClient = new QueryClient();
 
@@ -83,7 +117,8 @@ function StaffRoutes({ admin, takesLessons }: { admin: boolean; takesLessons: bo
       {takesLessons || admin ? (
         <Route path="/teacher/assessment" component={TeacherAssessment} />
       ) : null}
-      <Route path="/teacher/class-topics" component={TeacherClassTopics} />
+      <Route path="/teacher/class/:classId" component={TeacherClassDay} />
+      <Route path="/teacher/productive" component={TeacherProductive} />
       <Route path="/teacher/catalog" component={TeacherCatalog} />
       <Route path="/teacher/password" component={Password} />
       <Route component={NotFound} />

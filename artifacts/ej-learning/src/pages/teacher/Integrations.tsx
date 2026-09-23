@@ -184,7 +184,7 @@ export default function TeacherIntegrations() {
                 className={
                   item.emphasis
                     ? "rounded-lg border-2 border-primary/30 bg-primary/5 p-4"
-                    : "rounded-lg border border-border bg-card p-4"
+                    : "rounded-[2px] border border-border bg-card p-4"
                 }
               >
                 <div className="flex items-start gap-3">
@@ -209,7 +209,7 @@ export default function TeacherIntegrations() {
       </section>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="shadow-sm border-border/50">
+        <Card className="border-border/50">
           <CardHeader className="pb-3">
             <CardDescription className="text-xs font-medium uppercase tracking-wider">Бүртгэлийн систем</CardDescription>
             <CardTitle className="text-xl flex items-center gap-2">
@@ -224,7 +224,7 @@ export default function TeacherIntegrations() {
           </CardContent>
         </Card>
 
-        <Card className="shadow-sm border-border/50">
+        <Card className="border-border/50">
           <CardHeader className="pb-3">
             <CardDescription className="text-xs font-medium uppercase tracking-wider">Архитектурын зарчим</CardDescription>
             <CardTitle className="text-xl flex items-center gap-2">
@@ -239,7 +239,7 @@ export default function TeacherIntegrations() {
           </CardContent>
         </Card>
 
-        <Card className="shadow-sm border-border/50 bg-muted/30">
+        <Card className="border-border/50 bg-muted/30">
           <CardHeader className="pb-3">
             <CardDescription className="text-xs font-medium uppercase tracking-wider">Холболтын үйлдлүүд (идэвхгүй)</CardDescription>
             <CardTitle className="text-lg">Гараар ажиллуулах</CardTitle>
@@ -300,7 +300,7 @@ export default function TeacherIntegrations() {
 
         <div className="mt-6">
           <TabsContent value="sources" className="m-0 focus-visible:outline-none focus-visible:ring-0">
-            <Card className="shadow-sm">
+            <Card>
               <Table>
                 <TableHeader className="bg-muted/30">
                   <TableRow>
@@ -342,7 +342,7 @@ export default function TeacherIntegrations() {
                 {dashboard.pipeline.join(" → ")}
               </Badge>
             </div>
-            <Card className="shadow-sm">
+            <Card>
               <Table>
                 <TableHeader className="bg-muted/30">
                   <TableRow>
@@ -378,7 +378,7 @@ export default function TeacherIntegrations() {
           </TabsContent>
 
           <TabsContent value="courses" className="m-0 focus-visible:outline-none focus-visible:ring-0">
-            <Card className="shadow-sm">
+            <Card>
               <Table>
                 <TableHeader className="bg-muted/30">
                   <TableRow>
@@ -411,7 +411,7 @@ export default function TeacherIntegrations() {
           </TabsContent>
 
           <TabsContent value="batches" className="m-0 focus-visible:outline-none focus-visible:ring-0">
-            <Card className="shadow-sm">
+            <Card>
               <Table>
                 <TableHeader className="bg-muted/30">
                   <TableRow>
@@ -447,7 +447,7 @@ export default function TeacherIntegrations() {
           </TabsContent>
 
           <TabsContent value="audit" className="m-0 focus-visible:outline-none focus-visible:ring-0">
-            <Card className="shadow-sm">
+            <Card>
               <Table>
                 <TableHeader className="bg-muted/30">
                   <TableRow>

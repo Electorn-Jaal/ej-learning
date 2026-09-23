@@ -4,15 +4,19 @@
  * Dry-run (default): pnpm --filter @workspace/api-server seed-school-periods
  * Apply:             pnpm --filter @workspace/api-server seed-school-periods -- --apply --yes
  *
- * THE TIMES BELOW ARE PROVISIONAL, the same way the term dates are. The school
- * has not supplied its bell schedule, so these are the ordinary Mongolian
- * secondary shape: eight 40-minute periods with a short break between each, a
- * longer one after the third and lunch after the sixth. They exist so the grid has rows to
- * draw; every one of them is expected to move, and `name_mn` says so on each.
+ * These are the school's own times, from the 2026-2027 timetable it supplied
+ * and from the corrected bell sheet returned with the blank form. They are no
+ * longer provisional and the names no longer say so.
  *
- * Eight periods, 08:00 to 15:00. The day does not stop at noon - the school
- * runs into the afternoon - and a grid that ends at one o'clock would simply
- * lose every lesson after it.
+ * Ten periods, 08:00 to 15:25, forty minutes each with a five-minute change
+ * between them. An earlier version of this script invented eight periods on
+ * the ordinary Mongolian secondary shape, and was wrong in both the count and
+ * every time after the third - which put two lessons a day in the wrong row
+ * of the grid.
+ *
+ * Monday and Friday run to nine of these ten; the middle three days use all
+ * ten. The table holds one list per school year rather than one per weekday,
+ * so a day that finishes early simply has nothing timetabled in the last row.
  */
 import { pool } from "@workspace/db";
 
@@ -23,15 +27,15 @@ const SCHOOL_YEAR = "2026-2027";
 
 const periods = [
   { periodNo: 1, startsAt: "08:00", endsAt: "08:40" },
-  { periodNo: 2, startsAt: "08:50", endsAt: "09:30" },
-  { periodNo: 3, startsAt: "09:40", endsAt: "10:20" },
-  // Twenty minutes here rather than ten: the long morning break.
-  { periodNo: 4, startsAt: "10:40", endsAt: "11:20" },
-  { periodNo: 5, startsAt: "11:30", endsAt: "12:10" },
-  { periodNo: 6, startsAt: "12:20", endsAt: "13:00" },
-  // Lunch sits between the sixth and the seventh.
-  { periodNo: 7, startsAt: "13:30", endsAt: "14:10" },
-  { periodNo: 8, startsAt: "14:20", endsAt: "15:00" },
+  { periodNo: 2, startsAt: "08:45", endsAt: "09:25" },
+  { periodNo: 3, startsAt: "09:30", endsAt: "10:10" },
+  { periodNo: 4, startsAt: "10:15", endsAt: "10:55" },
+  { periodNo: 5, startsAt: "11:00", endsAt: "11:40" },
+  { periodNo: 6, startsAt: "11:45", endsAt: "12:25" },
+  { periodNo: 7, startsAt: "12:30", endsAt: "13:10" },
+  { periodNo: 8, startsAt: "13:15", endsAt: "13:55" },
+  { periodNo: 9, startsAt: "14:00", endsAt: "14:40" },
+  { periodNo: 10, startsAt: "14:45", endsAt: "15:25" },
 ];
 
 const client = await pool.connect();
@@ -73,7 +77,7 @@ try {
             name_mn = EXCLUDED.name_mn,
             starts_at = EXCLUDED.starts_at,
             ends_at = EXCLUDED.ends_at`,
-          [SCHOOL_YEAR, p.periodNo, `${p.periodNo}-р цаг (түр)`, p.startsAt, p.endsAt]);
+          [SCHOOL_YEAR, p.periodNo, `${p.periodNo}-р цаг`, p.startsAt, p.endsAt]);
       }
       await client.query("COMMIT");
       const { rows } = await client.query<{ period_no: number; starts_at: string; ends_at: string }>(

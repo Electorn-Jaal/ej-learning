@@ -7,6 +7,19 @@
  */
 
 export interface ScheduledDay {
+  /** @nullable */
+  periodNo?: number | null;
+  /** @nullable */
+  groupLabel?: string | null;
+  /** @nullable */
+  startsAt?: string | null;
+  /** @nullable */
+  teacherName?: string | null;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  timetableSlotId?: number | null;
   /**
      * Calendar date, YYYY-MM-DD.
      * @pattern ^\d{4}-\d{2}-\d{2}$

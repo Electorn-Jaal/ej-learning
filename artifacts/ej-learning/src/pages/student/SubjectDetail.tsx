@@ -1,13 +1,12 @@
 import { Link, useRoute } from 'wouter'
 import {
   useGetStudentPlacements,
+  useGetStudentStudyPlan,
   useGetStudentSubjectOutline,
-  type PlacementStep,
-  type StudentPlacement,
   type SubjectOutlineSection,
 } from '@workspace/api-client-react'
 import { useStudentScheduleDays } from '@workspace/api-client-react'
-import { ArrowLeft, ArrowRight, BookOpen, Check, ExternalLink, Target } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BookOpen, Check, ExternalLink } from 'lucide-react'
 import { dayName, schoolToday, scheduleWindow } from '@/lib/schedule-window'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -105,21 +104,6 @@ function SectionRow({
 }
 
 /**
- * One subject, end to end: the book it is taught from and every section in
- * it, with the class's place marked.
- *
- * Two blocks, kept apart on purpose. Үндсэн хичээл is what the whole class
- * works through together; Миний бэлтгэл is what this child alone has been
- * given. Collapsing them would be the mistake the schema went out of its way
- * to avoid - the core book is not personal work and personal work does not
- * replace the book.
- *
- * There is no third block for skills. content_skill_maps and
- * student_skill_mastery are both empty, so every figure it could show would
- * be zero, and a panel of zeroes reads as a broken page rather than as an
- * honest "not measured yet".
- */
-/**
  * When this subject falls in the week, read off the timetable.
  *
  * The same week the schedule page asks for, so react-query serves both from
@@ -129,11 +113,9 @@ function WeekSlots({ code }: { code: string }) {
   const week = scheduleWindow(schoolToday())
   const days = useStudentScheduleDays(week.dates)
   const slots = week.dates
-    .map((date, index) => ({
-      date,
-      entry: days[index]?.data?.subjects.find((row) => row.subjectCode === code),
-    }))
-    .filter((row) => row.entry?.periodNo)
+    .flatMap((date, index) => (days[index]?.data?.slots ?? [])
+      .filter((row) => row.subjectCode === code && row.periodNo !== null)
+      .map((entry) => ({ date, entry })))
 
   if (days.some((day) => day.isLoading)) return <Skeleton className="h-10 w-full" />
   if (slots.length === 0) {
@@ -145,8 +127,8 @@ function WeekSlots({ code }: { code: string }) {
   }
   return (
     <ul className="space-y-1">
-      {slots.map(({ date, entry }) => (
-        <li key={date} className="flex items-baseline justify-between gap-2 text-xs">
+      {slots.map(({ date, entry }, index) => (
+        <li key={`${date}:${entry.periodNo}:${index}`} className="flex items-baseline justify-between gap-2 text-xs">
           <span className={cn(date === schoolToday() && 'font-semibold text-primary')}>
             {dayName(date)} өдөр
           </span>
@@ -158,116 +140,28 @@ function WeekSlots({ code }: { code: string }) {
 }
 
 /**
- * How urgent the school said each step is.
+ * One subject, end to end: the book it is taught from and every section in it,
+ * with the class's place marked.
  *
- * The words are the school's own. FOUNDATION means the child is missing
- * something the level assumes; EXTEND means they have the level and are being
- * stretched. Rendering all four the same would flatten the one distinction the
- * sheet was careful to draw.
- */
-const PRIORITY_MN: Record<string, string> = {
-  FOUNDATION: 'Суурь нөхөх',
-  DEVELOP: 'Хөгжүүлэх',
-  EXTEND: 'Тэлэх',
-  'HIGH PRIORITY IF GAP': 'Дутагдалтай бол нэн тэргүүнд',
-}
-
-function PlanStep({ step }: { step: PlacementStep }) {
-  return (
-    <li className="flex gap-3 px-3 py-2.5">
-      <span className="w-5 shrink-0 pt-0.5 text-xs font-semibold tabular-nums text-muted-foreground">
-        {step.sequenceNo}
-      </span>
-      <div className="min-w-0 flex-1 space-y-1">
-        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-          <h4 className="text-sm font-semibold">{step.domain}</h4>
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
-            {PRIORITY_MN[step.priority] ?? step.priority}
-          </span>
-        </div>
-        <p className="flex items-start gap-1.5 text-xs">
-          <BookOpen className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-          <span>
-            {step.sourceLabel}
-            {step.unitFocus ? (
-              <span className="text-muted-foreground"> · {step.unitFocus}</span>
-            ) : null}
-            {step.pages ? <span className="text-muted-foreground"> · {step.pages}</span> : null}
-          </span>
-        </p>
-        <p className="text-xs leading-snug text-muted-foreground">{step.task}</p>
-      </div>
-      {step.verification ? (
-        <span className="hidden shrink-0 self-start text-[10px] uppercase tracking-wide text-muted-foreground sm:block">
-          {step.verification}
-        </span>
-      ) : null}
-    </li>
-  )
-}
-
-/**
- * The plan a placement level prescribes, in the school's own six parts.
+ * Two things, kept apart on purpose. Үндсэн хичээл is what the whole class
+ * works through together; the personal plan is what this child alone has been
+ * given, and it has a page of its own. This screen says whether one exists and
+ * links to it rather than printing it again - both pages used to render the
+ * same two cards and link to each other, so a child could press back and
+ * forth between them and never find anything new.
  *
- * This is the whole argument for having sat the test. A score on its own tells
- * a parent nothing they can act on; six named books with six named tasks is a
- * term's work. Nothing on this card is computed - the level came from a real
- * sitting and the steps came from the school's resource map - so it reports a
- * decision the school made rather than advice the system invented.
+ * There is no block for skills. content_skill_maps and student_skill_mastery
+ * are both empty, so every figure it could show would be zero, and a panel of
+ * zeroes reads as a broken page rather than as an honest "not measured yet".
  */
-function PlacementPlan({ placement }: { placement: StudentPlacement }) {
-  return (
-    <Card>
-      <CardContent className="p-0">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b px-3 py-2">
-          <h2 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            <Target className="h-3.5 w-3.5" />
-            Миний хувийн төлөвлөгөө
-          </h2>
-          <p className="text-[11px] text-muted-foreground">
-            Түвшин тогтоох шалгалтын дүнгээс гарсан
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b bg-sidebar-active px-3 py-2">
-          <span className="text-sm font-bold">{placement.levelCode}</span>
-          <span className="text-xs">{placement.levelName}</span>
-          {placement.score !== null && placement.maxScore !== null ? (
-            <span className="text-xs tabular-nums text-muted-foreground">
-              {placement.score}/{placement.maxScore} оноо
-            </span>
-          ) : null}
-          {placement.attemptedOn ? (
-            <span className="text-xs tabular-nums text-muted-foreground">
-              {placement.attemptedOn}
-            </span>
-          ) : null}
-        </div>
-
-        {placement.provisional ? (
-          // The level rests on the objective half of the paper. Saying so is
-          // what keeps a reading from being read as a confirmed result.
-          <p className="border-b px-3 py-1.5 text-[11px] text-muted-foreground">
-            Бичих, ярих даалгавар хараахан дүгнэгдээгүй тул энэ түвшин түр зэрэглэл.
-          </p>
-        ) : null}
-
-        <ul className="divide-y">
-          {placement.steps.map((step) => (
-            <PlanStep key={step.sequenceNo} step={step} />
-          ))}
-        </ul>
-      </CardContent>
-    </Card>
-  )
-}
-
 export default function StudentSubjectDetail() {
   const [, params] = useRoute('/subjects/:code')
   const code = params?.code ?? ''
   const { data, isLoading, isError } = useGetStudentSubjectOutline({ subject: code })
   const { data: placements } = useGetStudentPlacements()
+  const { data: plan } = useGetStudentStudyPlan()
   const placement = placements?.find((row) => row.subjectCode === code)
+  const planWeeks = plan?.filter((week) => week.subjectCode === code) ?? []
 
   const back = (
     <Link
@@ -375,10 +269,15 @@ export default function StudentSubjectDetail() {
             <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Миний бэлтгэл
             </h2>
-            {placement ? (
+            {placement || planWeeks.length ? (
+              // A summary and a way through, not the plan itself. The plan has
+              // a page; printing it here as well was the duplication.
               <p className="text-xs text-muted-foreground">
-                Түвшин тогтоох шалгалтаас гарсан {placement.steps.length} алхамт
-                төлөвлөгөө доор байна.
+                {[
+                  placement ? `${placement.levelCode} түвшин` : null,
+                  placement ? `${placement.steps.length} алхам` : null,
+                  planWeeks.length ? `${planWeeks.length} долоо хоногийн хуваарь` : null,
+                ].filter(Boolean).join(' · ')}
               </p>
             ) : (
               /* learning.student_assignments is empty and no placement has been
@@ -388,18 +287,19 @@ export default function StudentSubjectDetail() {
                 Энэ хичээлд танд өгсөн хувийн ажил одоогоор алга байна.
               </p>
             )}
-            <Link
-              href={`/subjects/${encodeURIComponent(code)}/plan`}
-              className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
-            >
-              Өдрийн төлөвлөгөө
-            </Link>
+            {placement || planWeeks.length ? (
+              <Link
+                href={`/subjects/${encodeURIComponent(code)}/plan`}
+                className={cn(buttonVariants({ size: 'sm' }))}
+              >
+                Хувийн төлөвлөгөө үзэх
+              </Link>
+            ) : null}
             </CardContent>
           </Card>
         </div>
       </div>
 
-      {placement ? <PlacementPlan placement={placement} /> : null}
     </div>
   )
 }

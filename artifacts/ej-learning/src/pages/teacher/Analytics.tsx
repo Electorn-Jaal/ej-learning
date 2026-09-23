@@ -5,6 +5,7 @@ import {
   useGetTeacherQuizAttempts,
 } from '@workspace/api-client-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { NATIVE_SELECT } from '@/components/ui/native-select'
 import { PageHeader } from '@/components/ui/page-header'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ScoreBands } from '@/components/charts/ScoreBands'
@@ -16,8 +17,7 @@ import {
 import { useLinkedSelection } from '@/lib/linked-selection'
 import { subjectParam } from '@/lib/teacher-class'
 
-const SELECT_STYLE =
-  'h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring'
+const SELECT_STYLE = NATIVE_SELECT
 
 /** How much of the measured class is behind on a skill. */
 const share = (skill: { gap: number; assessed: number }) =>

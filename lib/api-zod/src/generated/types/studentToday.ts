@@ -15,7 +15,7 @@ export interface StudentToday {
   date: string;
   dateLabel: string;
   className: string;
-  /** One entry per subject the student has work in today. A child studies several subjects a day, so this is a list rather than a single lesson. */
-  subjects: SubjectDay[];
+  /** One entry per period on the class's timetable, in bell order. Not one per subject: Mongolian in the first period and again in the second is two lessons, and a day with the same subject twice used to come back as one. A split class puts two entries on one period, which is what a split is. */
+  slots: SubjectDay[];
   notice: string;
 }

@@ -103,10 +103,10 @@ export const attemptHistory = (studentId: string) => readRows(`
  * Two different "where are we" answers come back, and they must not be
  * confused. The period figures describe the term the school is in TODAY and
  * they describe the BOOK: which chapters this term is meant to cover. The
- * topic fields describe the CLASS, and only exist because a teacher said so -
- * learning.class_topics is written by hand, never derived from the calendar.
- * A class behind its term shows a topic from an earlier period, which is the
- * truth and the whole reason the pointer is not computed.
+ * topic fields describe the CLASS - the newest section their own timetable has
+ * put in front of them, which a teacher sets by choosing the day's lesson. A
+ * class behind its term shows a topic from an earlier period, which is the
+ * truth and the whole reason the pointer is not the calendar's.
  */
 export const subjects = (studentId: string) => readRows(`
   WITH enrolled AS (
@@ -151,7 +151,7 @@ export const subjects = (studentId: string) => readRows(`
     tn.title AS "topicTitle",
     tn.page_from::int AS "topicPageFrom",
     tn.page_to::int AS "topicPageTo",
-    ct.effective_on::text AS "topicSince",
+    COALESCE(taught.effective_on, ct.effective_on)::text AS "topicSince",
     -- How long the book is, and how far into it that topic sits. The subject
     -- cards report "the 14th of 72", which is the CLASS's position - the only
     -- progress this system can honestly measure while no skill is mapped or
@@ -163,9 +163,23 @@ export const subjects = (studentId: string) => readRows(`
   FROM core.subjects sub
   LEFT JOIN enrolled en ON en.subject_id=sub.id
   LEFT JOIN content.source_materials bk ON bk.id=en.source_material_id
+  -- Where the class is, read off the calendar: the newest section their own
+  -- timetable has actually put in front of them. class_topics stays as the
+  -- fallback for a class whose days carry no content yet.
+  LEFT JOIN LATERAL (
+    SELECT dl.source_outline_node_id AS node_id, cs.scheduled_on AS effective_on
+      FROM learning.class_schedule cs
+      JOIN learning.daily_lessons dl ON dl.id=cs.daily_lesson_id
+     WHERE cs.class_id=en.class_id AND cs.subject_id=sub.id
+       AND dl.source_outline_node_id IS NOT NULL
+       AND cs.scheduled_on <= (now() AT TIME ZONE 'Asia/Ulaanbaatar')::date
+     ORDER BY cs.scheduled_on DESC
+     LIMIT 1
+  ) taught ON true
   LEFT JOIN learning.class_topics ct
     ON ct.class_id=en.class_id AND ct.subject_id=sub.id
-  LEFT JOIN content.source_outline_nodes tn ON tn.id=ct.source_outline_node_id
+  LEFT JOIN content.source_outline_nodes tn
+    ON tn.id=COALESCE(taught.node_id, ct.source_outline_node_id)
   WHERE sub.is_active AND (
     -- A subject this child's class is taught.
     en.subject_id IS NOT NULL
@@ -283,4 +297,48 @@ export const guardiansOf = (studentId: string) =>
     FROM core.student_guardians
     WHERE student_id = $1::bigint
     ORDER BY sequence_no`,
+    [studentId]);
+
+/**
+ * The child's generated study plan: four weeks, five days each.
+ *
+ * Read as days rather than as weeks-with-days, because the day is the row a
+ * child acts on and the week is only how they are grouped. The caller does
+ * the grouping; the query stays one round trip.
+ */
+export const studyPlanDays = (studentId: string) =>
+  readRows<{
+    subjectCode: string; weekNo: number; weekdayNo: number;
+    focus: string | null; levelCode: string | null; sourceLabel: string | null;
+    unitFocus: string | null; pages: string | null; task: string | null;
+    teacherCheck: string | null; target: string | null;
+    score: number | null; status: string;
+  }>(`
+    SELECT sub.code AS "subjectCode", d.week_no::int AS "weekNo",
+      d.weekday_no::int AS "weekdayNo", d.focus_mn AS focus,
+      d.level_code AS "levelCode", d.source_label AS "sourceLabel",
+      d.unit_focus_mn AS "unitFocus", d.pages_mn AS pages, d.task_mn AS task,
+      d.teacher_check_mn AS "teacherCheck", d.target_mn AS target,
+      d.score::float8 AS score, d.status
+    FROM learning.study_plan_days d
+    JOIN core.subjects sub ON sub.id = d.subject_id AND sub.is_active
+    WHERE d.student_id = $1::bigint
+    ORDER BY sub.code, d.week_no, d.weekday_no`,
+    [studentId]);
+
+/** The same plan seen by skill: what each week is for, per domain. */
+export const studyPlanWeeks = (studentId: string) =>
+  readRows<{
+    subjectCode: string; weekNo: number; domain: string;
+    sourceLabel: string | null; unitFocus: string | null; pages: string | null;
+    task: string | null; masteryTarget: string | null; status: string;
+  }>(`
+    SELECT sub.code AS "subjectCode", w.week_no::int AS "weekNo", w.domain_mn AS domain,
+      w.source_label AS "sourceLabel", w.unit_focus_mn AS "unitFocus",
+      w.pages_mn AS pages, w.task_mn AS task,
+      w.mastery_target_mn AS "masteryTarget", w.status
+    FROM learning.study_plan_weeks w
+    JOIN core.subjects sub ON sub.id = w.subject_id AND sub.is_active
+    WHERE w.student_id = $1::bigint
+    ORDER BY sub.code, w.week_no, w.id`,
     [studentId]);
