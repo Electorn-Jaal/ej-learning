@@ -80,10 +80,13 @@ jobs:
             export EJ_IMAGE_PREFIX EJ_VERSION
             printf 'Image %s-tools:%s\n' "$EJ_IMAGE_PREFIX" "$EJ_VERSION"
 
+            # The base compose file only. The gateway overlay names the TMS
+            # network that EJ web attaches to, which is a deployment concern
+            # and is configured through a variable the deploy passes in - it
+            # has nothing to do with counting rows, and including it made
+            # Compose refuse to parse the stack on a host where that variable
+            # is not set.
             compose="docker compose --project-name ej-learning --env-file $deploy_root/server.env -f ${release_dir}deploy/compose.yml"
-            if [ -f "${release_dir}deploy/compose.gateway.yml" ]; then
-              compose="$compose -f ${release_dir}deploy/compose.gateway.yml"
-            fi
 
             printf '\nContainers\n'
             $compose ps
