@@ -1,0 +1,77 @@
+# What is actually in the deployed database, counted without changing it.
+#
+# Before any data move there is one question that has to stop being a guess:
+# what does the server already hold. This runs lib/db/scripts/census.mjs - row
+# counts for every application table, with the data_origin breakdown - inside
+# the release that is already on the host, and prints the result.
+#
+# Read only by construction: it starts one throwaway tools container, runs one
+# script that issues SELECTs, and removes it. No service is stopped, no image
+# is pulled, nothing is migrated or written. Take this before a restore and
+# again after it; the two snapshots must agree.
+name: Server database census (read only)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ej-server-census
+  cancel-in-progress: false
+
+jobs:
+  count:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check required configuration
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_SSH_PASSWORD: ${{ secrets.SERVER_SSH_PASSWORD }}
+        run: |
+          set -eu
+          test -n "$SERVER_HOST" || { echo 'Missing SERVER_HOST'; exit 1; }
+          test -n "$SERVER_USER" || { echo 'Missing SERVER_USER'; exit 1; }
+          test -n "$SERVER_SSH_PASSWORD" || { echo 'Missing SERVER_SSH_PASSWORD'; exit 1; }
+          case "$SERVER_HOST" in *://*|*/*) echo 'SERVER_HOST must be a hostname or IP, without http:// or /'; exit 1;; esac
+
+      - name: Count rows without changing anything
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_SSH_PASSWORD }}
+          port: ${{ vars.SERVER_PORT || '22' }}
+          fingerprint: ${{ secrets.SERVER_FINGERPRINT }}
+          timeout: 30s
+          command_timeout: 8m
+          script: |
+            set -eu
+            deploy_root="$HOME/ej-learning"
+            test -f "$deploy_root/server.env" || { echo 'No server.env: nothing is deployed here.'; exit 1; }
+
+            # The release the host last deployed, by modification time. The
+            # census script is the same in every release, so any of them would
+            # do; the newest is simply the one whose compose file matches the
+            # running containers.
+            release_dir=$(ls -dt "$deploy_root"/releases/*/ 2>/dev/null | head -n 1)
+            test -n "$release_dir" || { echo 'No release directory found.'; exit 1; }
+            printf '\nRelease\n%s\n' "$release_dir"
+
+            compose="docker compose --project-name ej-learning --env-file $deploy_root/server.env -f ${release_dir}deploy/compose.yml"
+            if [ -f "${release_dir}deploy/compose.gateway.yml" ]; then
+              compose="$compose -f ${release_dir}deploy/compose.gateway.yml"
+            fi
+
+            printf '\nContainers\n'
+            $compose ps
+
+            printf '\nMigrations applied\n'
+            $compose exec -T db psql -U ej_owner -d ej_learning -tAc \
+              'SELECT count(*) FROM drizzle.__drizzle_migrations'
+
+            printf '\nRow counts\n'
+            $compose --profile ops run --rm --no-deps tools node lib/db/scripts/census.mjs
