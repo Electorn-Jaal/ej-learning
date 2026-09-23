@@ -35,7 +35,7 @@ Run CI build/tests before publishing. Images may be pushed to a private registry
 
 ## First deployment
 
-Create the storage directory and place the chosen PDFs there, preserving their database-relative paths. Files need to be readable by container UID 1000. The API mounts them read-only. Select either a fresh database or a reviewed existing-data restore, never both.
+Create the storage directory and place the chosen PDFs there, preserving their database-relative paths. Files need to be readable by container UID 1000, which means world-readable files inside traversable directories - not ownership. Leave the directory owned by the deploy account: `release.sh` runs `chmod 755` on it every deployment, and an account that no longer owns it fails with "Operation not permitted" before anything else runs. The API mounts them read-only. Select either a fresh database or a reviewed existing-data restore, never both.
 
 ```sh
 docker compose --env-file deploy/.env -f deploy/compose.yml up -d --wait db
