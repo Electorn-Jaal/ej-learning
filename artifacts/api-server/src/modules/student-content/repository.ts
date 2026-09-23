@@ -24,20 +24,25 @@ export const subjectOutline = (studentId: number, subjectCode: string) =>
        -- somebody maintains by hand: the newest section the timetable has
        -- actually put in front of them. learning.class_topics survives as the
        -- fallback for a class whose days carry no content yet.
+       -- Each arm is bracketed. ORDER BY and LIMIT inside a UNION arm bind to
+       -- the whole union unless the arm is parenthesised, and Postgres refuses
+       -- the statement outright: 42601, syntax error at or near "UNION". The
+       -- page this feeds - the sections of a subject's book, with the class's
+       -- place in it - returned 500 for every child until this was corrected.
        SELECT sequence_no FROM (
-         SELECT n.sequence_no, 1 AS rank
-           FROM learning.class_schedule cs
-           JOIN mine ON mine.class_id = cs.class_id AND mine.subject_id = cs.subject_id
-           JOIN learning.daily_lessons dl ON dl.id = cs.daily_lesson_id
-           JOIN content.source_outline_nodes n ON n.id = dl.source_outline_node_id
-          WHERE cs.scheduled_on <= (now() AT TIME ZONE 'Asia/Ulaanbaatar')::date
-          ORDER BY cs.scheduled_on DESC, n.sequence_no DESC
-          LIMIT 1
+         (SELECT n.sequence_no, 1 AS rank
+            FROM learning.class_schedule cs
+            JOIN mine ON mine.class_id = cs.class_id AND mine.subject_id = cs.subject_id
+            JOIN learning.daily_lessons dl ON dl.id = cs.daily_lesson_id
+            JOIN content.source_outline_nodes n ON n.id = dl.source_outline_node_id
+           WHERE cs.scheduled_on <= (now() AT TIME ZONE 'Asia/Ulaanbaatar')::date
+           ORDER BY cs.scheduled_on DESC, n.sequence_no DESC
+           LIMIT 1)
          UNION ALL
-         SELECT n.sequence_no, 2
-           FROM learning.class_topics ct
-           JOIN mine ON mine.class_id = ct.class_id AND mine.subject_id = ct.subject_id
-           JOIN content.source_outline_nodes n ON n.id = ct.source_outline_node_id
+         (SELECT n.sequence_no, 2
+            FROM learning.class_topics ct
+            JOIN mine ON mine.class_id = ct.class_id AND mine.subject_id = ct.subject_id
+            JOIN content.source_outline_nodes n ON n.id = ct.source_outline_node_id)
        ) found ORDER BY rank LIMIT 1
      )
      SELECT n.id::text AS "nodeId", n.printed_number AS "printedNumber", n.title,
