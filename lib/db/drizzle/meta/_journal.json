@@ -211,6 +211,41 @@
       "when": 1790114400000,
       "tag": "0029_student_transfers",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1790118000000,
+      "tag": "0030_study_plans",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1790121600000,
+      "tag": "0031_productive_ratings",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1790125200000,
+      "tag": "0032_timetable_slots",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1790128800000,
+      "tag": "0033_timetable_content",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1790215200000,
+      "tag": "0034_class_schedule_pages",
+      "breakpoints": true
     }
   ]
 }

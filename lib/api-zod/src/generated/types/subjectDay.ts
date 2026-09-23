@@ -9,9 +9,30 @@ import type { DailyLessonView } from './dailyLessonView';
 import type { ExtraWork } from './extraWork';
 
 export interface SubjectDay {
+  /** @nullable */
+  timetableSlotId?: number | null;
+  /** Group membership has not yet been assigned by staff. */
+  selectionPending?: boolean;
   subjectCode: string;
   subjectName: string;
-  /** What the class is scheduled to study in this subject today. */
+  /**
+     * Bell time, HH:MM. Null where the school has no period list.
+     * @nullable
+     */
+  startsAt: string | null;
+  /** @nullable */
+  endsAt: string | null;
+  /**
+     * Who takes this period, from the school's own timetable.
+     * @nullable
+     */
+  teacherName: string | null;
+  /**
+     * Which half of a split class this slot is for, in the school's own words ("6а-1"). Null for a lesson the whole class attends.
+     * @nullable
+     */
+  groupLabel: string | null;
+  /** What the class is scheduled to study in this subject today, or null where nobody has written the lesson yet - which is most periods. A timetable slot is owed to a child whether or not its content exists. */
   lesson: DailyLessonView | null;
   /** Work assigned to this student personally in this subject. Where the class works through one book it is remediation on top; where the subject places students by level it is the whole of the day's work. */
   extra: ExtraWork | null;

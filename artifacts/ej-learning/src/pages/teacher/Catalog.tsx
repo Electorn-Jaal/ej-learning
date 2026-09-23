@@ -167,7 +167,7 @@ export default function Catalog() {
               // A search or a filter has already narrowed things down, so what
               // is left is worth showing; otherwise the subject stays shut.
               open={sections.length === 1 || needle !== "" || kind !== "all" || level !== "all"}
-              className="overflow-hidden rounded-md border border-border bg-card"
+              className="overflow-hidden rounded-[2px] border border-border bg-card"
             >
               <summary className="flex cursor-pointer flex-wrap items-baseline gap-2 px-4 py-3 transition-colors hover:bg-secondary/50">
                 <span className="text-base font-bold">{name}</span>

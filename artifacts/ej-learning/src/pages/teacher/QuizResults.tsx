@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   getGetTeacherLessonsQueryKey,
   useAssignExtraWork,
@@ -8,8 +8,10 @@ import {
   type SchedulableLesson,
   type TeacherQuizAttemptRow,
 } from '@workspace/api-client-react'
-import { Check, ChevronDown, ChevronUp, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, ClipboardList, ListChecks, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { NATIVE_SELECT } from '@/components/ui/native-select'
+import { LessonSelect, QuizPaperView } from '@/components/teacher/QuizPaperView'
 import { DatePicker } from '@/components/DatePicker'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -271,7 +273,7 @@ function AssignExtra({
   }
 
   return (
-    <div className="space-y-3 rounded-md border border-border p-3">
+    <div className="space-y-3 rounded-[2px] border border-border p-3">
       <p className="text-sm font-medium">{studentName} — нэмэлт даалгавар</p>
       <Select value={lessonId} onValueChange={setLessonId}>
         <SelectTrigger aria-label="Хичээл">
@@ -399,7 +401,7 @@ function Attempts({
           хариулсныг, сурагч дээр дарж асуулт бүрийг харна.
         </p>
         {data.truncated ? (
-          <p className="rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+          <p className="rounded-[2px] border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
             Хамгийн сүүлийн {data.attempts.length} хариулт харагдаж байна. Дээрх
             хувь нь зөвхөн эдгээрийнх — бүтэн дүр зургийг харахын тулд богино
             хугацаа сонгоно уу.
@@ -408,7 +410,7 @@ function Attempts({
       </CardHeader>
 
       <CardContent className="space-y-6">
-        <div className="space-y-5 rounded-md border border-border p-4">
+        <div className="space-y-5 rounded-[2px] border border-border p-4">
           <BandSpread attempts={data.attempts} />
         </div>
 
@@ -566,7 +568,38 @@ function Attempts({
   )
 }
 
+/**
+ * Which half of this screen the teacher was last on.
+ *
+ * Kept in the browser rather than on the server: it is a preference about one
+ * screen on one device, it has to survive a reload, and it is worth nothing to
+ * anybody else. A chooser used to stand in front of the page asking every
+ * time, which is a question with a right answer that the screen already knew.
+ * localStorage can throw in a private window, so the marks are the answer when
+ * it does.
+ */
+const VIEW_KEY = 'ej.results.view'
+
+function storedView(): 'paper' | 'results' {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'paper' ? 'paper' : 'results'
+  } catch {
+    return 'results'
+  }
+}
+
 export default function TeacherQuizResults() {
+  const [view, setView] = useState<'paper' | 'results'>(storedView)
+  const [lessonId, setLessonId] = useState<number | null>(null)
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(VIEW_KEY, view)
+    } catch {
+      // A browser that refuses site data still gets a working screen; it just
+      // opens on the marks every time.
+    }
+  }, [view])
   const { data: classes, isLoading } = useGetTeacherClasses()
   const [selectedClass, setSelectedClass] = useState<string | null>(null)
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null)
@@ -589,14 +622,33 @@ export default function TeacherQuizResults() {
   const selectionKey = classId + ':' + subjectId + ':' + day
 
   return (
-    <div className="space-y-6">
-      <header className="space-y-1">
+    <div className="space-y-4">
+      {/* The switch sits top right, where the week's does. Every screen that
+          offers a choice of view puts it in the same corner. */}
+      <header className="flex items-center gap-2">
+        <span className="ml-auto flex shrink-0" role="group" aria-label="Юу харах">
+          <Button
+            type="button" size="sm" variant={view === 'paper' ? 'default' : 'outline'}
+            aria-pressed={view === 'paper'} onClick={() => setView('paper')}
+          >
+            <ClipboardList className="h-3.5 w-3.5" />
+            Материал
+          </Button>
+          <Button
+            type="button" size="sm" variant={view === 'results' ? 'default' : 'outline'}
+            aria-pressed={view === 'results'} onClick={() => setView('results')}
+            className="border-l border-border"
+          >
+            <ListChecks className="h-3.5 w-3.5" />
+            Дүн
+          </Button>
+        </span>
       </header>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-2">
           <label htmlFor="results-class" className="block text-sm font-medium">Анги</label>
-          <select id="results-class" className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring" value={String(classId)} onChange={(event) => {
+          <select id="results-class" className={NATIVE_SELECT} value={String(classId)} onChange={(event) => {
             setSelectedClass(event.target.value)
             setSelectedSubject(null)
           }}>
@@ -605,25 +657,43 @@ export default function TeacherQuizResults() {
         </div>
         <div className="space-y-2">
           <label htmlFor="results-subject" className="block text-sm font-medium">Хичээл</label>
-          <select id="results-subject" className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring" value={subjectId === null ? 'all' : String(subjectId)} onChange={(event) => setSelectedSubject(event.target.value)}>
+          <select id="results-subject" className={NATIVE_SELECT} value={subjectId === null ? 'all' : String(subjectId)} onChange={(event) => setSelectedSubject(event.target.value)}>
             {subjects.length ? subjects.map((subject) => <option key={subject.subjectId} value={String(subject.subjectId)}>{subject.subject}</option>) : <option value="all">Бүх хичээл</option>}
           </select>
         </div>
-        <div className="space-y-2">
-          <p className="text-sm font-medium">Өдөр</p>
-          <DatePicker value={day} onChange={setDay} />
-        </div>
-        <div className="space-y-2">
-          <label htmlFor="results-kind" className="block text-sm font-medium">Төрөл</label>
-          <select id="results-kind" className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-ring" value={kind} onChange={(event) => setKind(event.target.value)}>
-            <option value="all">Бүх төрөл</option>
-            {Object.entries(KIND_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
-        </div>
+        {/* The day and the kind belong to the marks; a paper is the same
+            paper whichever day it was sat on, so its own third box - which
+            section - takes their place and keeps the widths. */}
+        {view === 'results' ? (
+          <>
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Өдөр</p>
+              <DatePicker value={day} onChange={setDay} />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="results-kind" className="block text-sm font-medium">Төрөл</label>
+              <select id="results-kind" className={NATIVE_SELECT} value={kind} onChange={(event) => setKind(event.target.value)}>
+                <option value="all">Бүх төрөл</option>
+                {Object.entries(KIND_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </div>
+          </>
+        ) : (
+          <LessonSelect
+            key={classId + ':' + subjectId}
+            classId={classId}
+            subjectId={subjectId}
+            value={lessonId}
+            onChange={setLessonId}
+          />
+        )}
       </div>
 
-      <Attempts key={selectionKey} classId={classId} subjectId={subjectId} range={{ from: day, to: day }} today={today} kind={kind} />
-
+      {view === 'results' ? (
+        <Attempts key={selectionKey} classId={classId} subjectId={subjectId} range={{ from: day, to: day }} today={today} kind={kind} />
+      ) : (
+        <QuizPaperView classId={classId} lessonId={lessonId} />
+      )}
     </div>
   )
 }

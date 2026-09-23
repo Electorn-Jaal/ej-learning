@@ -2,12 +2,18 @@ import { Router, type IRouter } from "express";
 import {
   GetQuizPaperResponse,
   GetTeacherQuizAttemptsResponse,
+  GetTeacherQuizPaperResponse,
   SubmitQuizAttemptBody,
   SubmitQuizAttemptResponse,
 } from "@workspace/api-zod";
 import { requireRole } from "../../middlewares/auth";
 import { badRequest } from "../../shared/http-error";
-import { quizAttemptsForTeacher, quizPaper, recordQuizAttemptScored } from "./service";
+import {
+  quizAttemptsForTeacher,
+  quizPaper,
+  quizPaperForTeacher,
+  recordQuizAttemptScored,
+} from "./service";
 
 const router: IRouter = Router();
 
@@ -62,6 +68,27 @@ router.get(
         to: req.query.to,
       });
       res.json(GetTeacherQuizAttemptsResponse.parse(result));
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+router.get(
+  "/teacher/quiz-paper",
+  requireRole("TEACHER", "ADMIN"),
+  async (req, res, next) => {
+    try {
+      const classId = Number(req.query.classId);
+      const lessonId = Number(req.query.lessonId);
+      if (!Number.isInteger(classId) || classId <= 0) {
+        throw badRequest("Ангийн дугаар буруу байна.", "INVALID_CLASS_ID");
+      }
+      if (!Number.isInteger(lessonId) || lessonId <= 0) {
+        throw badRequest("Хичээлийн дугаар буруу байна.", "INVALID_LESSON_ID");
+      }
+      const paper = await quizPaperForTeacher(req.user!, classId, lessonId);
+      res.json(GetTeacherQuizPaperResponse.parse(paper));
     } catch (error) {
       next(error);
     }

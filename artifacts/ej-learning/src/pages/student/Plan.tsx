@@ -1,28 +1,32 @@
 import { Link, useRoute } from 'wouter'
-import { useGetStudentSubjects, useGetStudentToday } from '@workspace/api-client-react'
-import { ArrowLeft, BookOpen, ClipboardList, Library } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useGetStudentSubjects, useGetStudentToday, useGetStudentPlacements, useGetStudentStudyPlan } from '@workspace/api-client-react'
+import { ArrowLeft } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
+import { LessonBody } from '@/components/student/LessonBody'
+import { PlacementPlan, StudyPlan } from '@/components/student/StudyPlanCards'
 
 /**
  * A plan belongs to one student and one subject.
  *
- * The subject-aware API and imported plan/material rows do not exist yet, so
- * this screen deliberately renders an honest empty state. It must not reuse
- * the old date-only endpoint: doing that would show and overwrite the same
- * free-text plan from Mathematics, Mongolian and every other subject.
+ * Read the imported placement pathway and study plan for this subject.
+ * Keep the student's private daily notes separate from assigned school work.
  */
 export default function StudentPlan() {
   const [, params] = useRoute('/subjects/:code/plan')
   const code = params?.code ?? ''
   const subjects = useGetStudentSubjects()
   const today = useGetStudentToday()
+  const placements = useGetStudentPlacements()
+  const plan = useGetStudentStudyPlan()
 
-  if (subjects.isLoading || today.isLoading) return <Skeleton className="h-96 w-full" />
+  if (subjects.isLoading || today.isLoading || placements.isLoading || plan.isLoading) return <Skeleton className="h-96 w-full" />
 
   const subject = subjects.data?.find((item) => item.code === code)
-  const todaySubject = today.data?.subjects.find((item) => item.subjectCode === code)
+  const todaySubject = today.data?.slots.find((item) => item.subjectCode === code)
   const subjectName = subject?.name ?? todaySubject?.subjectName
+  const placement = placements.data?.find((row) => row.subjectCode === code)
+  const weeks = plan.data?.filter((row) => row.subjectCode === code) ?? []
+  const extra = today.data?.slots.find((row) => row.subjectCode === code && row.extra)?.extra
 
   const back = (
     <Link
@@ -68,43 +72,15 @@ export default function StudentPlan() {
         </div>
       </header>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <ClipboardList className="h-4 w-4" />
-              Миний зорилго
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            Энэ хичээлийн хувийн төлөвлөгөө хараахан ирээгүй байна.
-          </CardContent>
-        </Card>
+      {placements.isError || plan.isError ? <p role="alert" className="text-sm text-destructive">Төлөвлөгөөний мэдээллийг бүрэн уншиж чадсангүй.</p> : null}
+      {placement ? <PlacementPlan placement={placement} /> : null}
+      {weeks.length ? <StudyPlan weeks={weeks} /> : null}
+      {extra ? <section className="space-y-3"><h2 className="font-semibold">Өнөөдрийн нэмэлт бэлтгэл</h2><LessonBody lesson={extra.lesson} banner={extra.reason} /></section> : null}
+      {!placements.isError && !plan.isError && !placement && weeks.length === 0 && !extra ? (
+        <p className="text-sm text-muted-foreground">Энэ хичээлийн хувийн төлөвлөгөө хараахан оноогдоогүй байна.</p>
+      ) : null}
+      <Link href={`/subjects/${encodeURIComponent(code)}`} className="inline-block text-sm text-primary underline">Хичээлийн ном, сэдвийг үзэх</Link>
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Library className="h-4 w-4" />
-              Нэмэлт бэлтгэл
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            Бэлтгэх материал оноогдоогүй байна.
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <BookOpen className="h-4 w-4" />
-              Холбогдох сэдэв
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            Материалтай холбогдох номын сэдэв одоогоор байхгүй.
-          </CardContent>
-        </Card>
-      </div>
     </div>
   )
 }

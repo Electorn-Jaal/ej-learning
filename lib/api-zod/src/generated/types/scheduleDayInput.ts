@@ -7,6 +7,11 @@
  */
 
 export interface ScheduleDayInput {
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  timetableSlotId?: number | null;
   classId: number;
   /**
      * Which subject's day this is. Setting a lesson takes the subject from the lesson itself, so this only matters when clearing: without it, emptying Tuesday in the maths timetable would also empty Tuesday's physics. Null clears every subject the teacher holds in the class.
@@ -26,4 +31,15 @@ export interface ScheduleDayInput {
      * @nullable
      */
   note?: string | null;
+  /**
+     * The pages this class actually covered, when they are not the ones the book prints for the section. Leave both out to keep whatever is recorded; send null to fall back to the book's own range. A class that went further than the section is the reason this exists, and a teacher setting it changes nothing for any other class.
+     * @minimum 1
+     * @nullable
+     */
+  pageFrom?: number | null;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  pageTo?: number | null;
 }

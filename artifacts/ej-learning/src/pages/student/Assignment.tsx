@@ -119,7 +119,7 @@ export default function StudentAssignment() {
          <Link href="/" className="inline-flex items-center text-sm font-bold text-muted-foreground hover:text-foreground mb-6">
            <ArrowLeft className="w-4 h-4 mr-1" /> Буцах
          </Link>
-         <Card className="shadow-sm">
+         <Card>
            <CardContent className="p-8 text-center">
              <h2 className="text-xl font-bold mb-2">Мэдээлэл хаалттай байна</h2>
              <p className="text-muted-foreground font-medium">Энэхүү даалгавар одоогоор нээгдээгүй эсвэл боломжгүй байна.</p>
@@ -135,7 +135,7 @@ export default function StudentAssignment() {
          <Link href="/" className="inline-flex items-center text-sm font-bold text-muted-foreground hover:text-foreground mb-6">
            <ArrowLeft className="w-4 h-4 mr-1" /> Буцах
          </Link>
-         <Card className="border-pending/50 bg-pending/5 shadow-sm">
+         <Card className="border-pending/50 bg-pending/5">
            <CardContent className="p-8 text-center space-y-5">
              <div className="mx-auto w-16 h-16 bg-pending/20 text-pending rounded-full flex items-center justify-center mb-2">
                 <Loader2 className="w-8 h-8 animate-spin" />
@@ -157,7 +157,7 @@ export default function StudentAssignment() {
         <Link href="/" className="inline-flex items-center text-sm font-bold text-muted-foreground hover:text-foreground mb-6">
           <ArrowLeft className="w-4 h-4 mr-1" /> Буцах
         </Link>
-        <Card className="border-2 border-success bg-card shadow-sm">
+        <Card className="border-2 border-success bg-card">
           <CardContent className="p-8 text-center space-y-5">
             <div className="mx-auto w-16 h-16 bg-success text-success-foreground rounded-full flex items-center justify-center">
               <Check className="w-8 h-8" strokeWidth={3} />
@@ -246,7 +246,7 @@ export default function StudentAssignment() {
           </h2>
           
           {!currentStep.isQuestion ? (
-            <Card className="border-border shadow-sm mb-6 bg-card">
+            <Card className="border-border mb-6 bg-card">
               {currentStep.title && (
                 <div className="px-6 py-4 border-b bg-muted/30">
                   <h3 className="font-bold text-foreground">{currentStep.title}</h3>
@@ -261,7 +261,7 @@ export default function StudentAssignment() {
               </CardContent>
             </Card>
           ) : (
-            <Card className="border-primary/20 bg-card shadow-sm mb-6">
+            <Card className="border-primary/20 bg-card mb-6">
               <div className="px-6 py-4 border-b border-border flex items-center justify-between">
                 <h3 className="font-bold text-foreground flex items-center gap-2">
                   Ойлгосноо шалгах
@@ -338,7 +338,7 @@ export default function StudentAssignment() {
       )}
       
       {submittedResult && (
-        <Card className="border-2 border-success bg-card shadow-sm mt-8 animate-in fade-in zoom-in duration-300">
+        <Card className="border-2 border-success bg-card mt-8 animate-in fade-in zoom-in duration-300">
           <CardContent className="p-8 text-center space-y-5">
             <div className="mx-auto w-16 h-16 bg-success/20 rounded-full flex items-center justify-center text-success mb-2">
               <Check className="w-8 h-8" strokeWidth={3} />
@@ -347,7 +347,7 @@ export default function StudentAssignment() {
             <p className="text-base font-medium text-foreground/80">{submittedResult.message}</p>
             
             <div className="pt-4 pb-4">
-              <div className="bg-card rounded-md p-5 inline-block text-left shadow-sm border border-border w-full max-w-md mx-auto">
+              <div className="bg-card rounded-[2px] p-5 inline-block text-left border border-border w-full max-w-md mx-auto">
                 <p className="text-xs font-bold text-muted-foreground uppercase mb-1 tracking-wider">Дараагийн алхам</p>
                 <p className="text-base font-bold text-foreground mb-1">{submittedResult.nextAction.label}</p>
                 <p className="text-sm font-medium text-muted-foreground">{submittedResult.nextAction.description}</p>

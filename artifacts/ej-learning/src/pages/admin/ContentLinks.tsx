@@ -201,7 +201,7 @@ function TopicSkillTab({ data }: { data: SkillMap }) {
                 </span>
               </h2>
 
-              <ul className="divide-y rounded-md border border-border bg-card">
+              <ul className="divide-y rounded-[2px] border border-border bg-card">
                 {entries.map((node) => (
                   <li key={node.contentCode} className="px-4 py-3">
                     <div className="flex flex-wrap items-baseline gap-2">
@@ -260,7 +260,7 @@ function TopicSkillTab({ data }: { data: SkillMap }) {
             <span className="text-lg font-bold">Сэдэвт холбогдоогүй чадвар</span>
             <span className="text-sm font-normal text-muted-foreground">{orphans.length}</span>
           </h2>
-          <ul className="divide-y rounded-md border border-border bg-card">
+          <ul className="divide-y rounded-[2px] border border-border bg-card">
             {orphans.map((skill) => (
               <li
                 key={skill.skillCode}
@@ -404,7 +404,7 @@ function ChainTab({ data }: { data: SkillChain }) {
                 </span>
               </h2>
 
-              <ul className="divide-y rounded-md border border-border bg-card">
+              <ul className="divide-y rounded-[2px] border border-border bg-card">
                 {entries.map(([code, entry]) => (
                   <li key={code} className="px-4 py-3">
                     <div className="flex flex-wrap items-baseline gap-2">

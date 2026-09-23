@@ -97,7 +97,7 @@ export function BookUpload({ material }: { material: AdminMaterial }) {
   }
 
   return (
-    <section className="space-y-4 rounded-md border border-border p-4">
+    <section className="space-y-4 rounded-[2px] border border-border p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-sm font-semibold">{material.title ?? material.sourceCode}</h3>

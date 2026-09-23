@@ -5,6 +5,22 @@
  * EJ Learning adaptive learning API
  * OpenAPI spec version: 0.1.0
  */
+export interface TimetableStudentsInput {
+  /** @items.minimum 1 */
+  studentIds: number[];
+}
+
+export type TimetableStudentsStudentsItem = {
+  id: number;
+  name: string;
+  selected: boolean;
+};
+
+export interface TimetableStudents {
+  assigned: boolean;
+  students: TimetableStudentsStudentsItem[];
+}
+
 export type ExtraWorkSource = typeof ExtraWorkSource[keyof typeof ExtraWorkSource];
 
 
@@ -296,6 +312,11 @@ export interface GenerateScheduleResult {
 }
 
 export interface ScheduleDayInput {
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  timetableSlotId?: number | null;
   classId: number;
   /**
      * Which subject's day this is. Setting a lesson takes the subject from the lesson itself, so this only matters when clearing: without it, emptying Tuesday in the maths timetable would also empty Tuesday's physics. Null clears every subject the teacher holds in the class.
@@ -315,6 +336,17 @@ export interface ScheduleDayInput {
      * @nullable
      */
   note?: string | null;
+  /**
+     * The pages this class actually covered, when they are not the ones the book prints for the section. Leave both out to keep whatever is recorded; send null to fall back to the book's own range. A class that went further than the section is the reason this exists, and a teacher setting it changes nothing for any other class.
+     * @minimum 1
+     * @nullable
+     */
+  pageFrom?: number | null;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  pageTo?: number | null;
 }
 
 export interface QuizOption {
@@ -378,6 +410,137 @@ export interface QuizPaper {
   previousScore: number | null;
   /** @nullable */
   previousMaxScore: number | null;
+}
+
+export interface ClassDayBook {
+  materialId: number;
+  /** @nullable */
+  title: string | null;
+  /**
+     * The range in force - the teacher's, where they set one.
+     * @nullable
+     */
+  pageFrom: number | null;
+  /** @nullable */
+  pageTo: number | null;
+  /**
+     * What the book prints for this section, whatever the class did.
+     * @nullable
+     */
+  bookPageFrom: number | null;
+  /** @nullable */
+  bookPageTo: number | null;
+  /** @nullable */
+  filePage: number | null;
+  /** @nullable */
+  fileUrl: string | null;
+}
+
+export interface ClassDayLesson {
+  /** @nullable */
+  timetableSlotId: number | null;
+  /** @nullable */
+  periodNo: number | null;
+  /** @nullable */
+  startsAt: string | null;
+  /**
+     * The teacher's own line for the day, which the class reads.
+     * @nullable
+     */
+  note: string | null;
+  subjectId: number;
+  subjectName: string;
+  /** @nullable */
+  lessonId: number | null;
+  /** @nullable */
+  lessonCode: string | null;
+  /** @nullable */
+  skillName: string | null;
+  /** @nullable */
+  learningGoal: string | null;
+  /** @nullable */
+  remember: string | null;
+  /** @nullable */
+  workedExample: string | null;
+  /** @nullable */
+  guidedPractice: string | null;
+  /** @nullable */
+  independentPractice: string | null;
+  /** @nullable */
+  studentMessage: string | null;
+  /** @nullable */
+  estimatedMinutes: number | null;
+  book: ClassDayBook | null;
+}
+
+export type ClassDayAttemptAnswersItem = {
+  questionId: string;
+  prompt: string;
+  chosenText: string;
+  correct: boolean;
+};
+
+export interface ClassDayAttempt {
+  attemptId: number;
+  /** @nullable */
+  lessonCode: string | null;
+  /** @nullable */
+  skillName: string | null;
+  score: number;
+  maxScore: number;
+  submittedAt: string;
+  answers: ClassDayAttemptAnswersItem[];
+}
+
+export interface ClassDayStudent {
+  studentId: number;
+  studentName: string;
+  studentCode: string;
+  attempts: ClassDayAttempt[];
+}
+
+export interface ClassDay {
+  classId: number;
+  className: string;
+  date: string;
+  lessons: ClassDayLesson[];
+  students: ClassDayStudent[];
+}
+
+export type TeacherQuizPaperKind = typeof TeacherQuizPaperKind[keyof typeof TeacherQuizPaperKind];
+
+
+export const TeacherQuizPaperKind = {
+  LESSON: 'LESSON',
+  UNIT: 'UNIT',
+  MONTHLY: 'MONTHLY',
+  DIAGNOSTIC: 'DIAGNOSTIC',
+} as const;
+
+export type TeacherQuizQuestionOptionsItem = {
+  optionId: number;
+  text: string;
+  isCorrect: boolean;
+};
+
+export interface TeacherQuizQuestion {
+  itemId: number;
+  prompt: string;
+  /**
+     * The marking note, where the question carries one.
+     * @nullable
+     */
+  explanation: string | null;
+  options: TeacherQuizQuestionOptionsItem[];
+}
+
+export interface TeacherQuizPaper {
+  lessonId: number;
+  lessonCode: string;
+  skillName: string;
+  subjectName: string;
+  kind: TeacherQuizPaperKind;
+  questions: TeacherQuizQuestion[];
 }
 
 /**
@@ -480,9 +643,30 @@ export interface PasswordChangeInput {
 }
 
 export interface SubjectDay {
+  /** @nullable */
+  timetableSlotId?: number | null;
+  /** Group membership has not yet been assigned by staff. */
+  selectionPending?: boolean;
   subjectCode: string;
   subjectName: string;
-  /** What the class is scheduled to study in this subject today. */
+  /**
+     * Bell time, HH:MM. Null where the school has no period list.
+     * @nullable
+     */
+  startsAt: string | null;
+  /** @nullable */
+  endsAt: string | null;
+  /**
+     * Who takes this period, from the school's own timetable.
+     * @nullable
+     */
+  teacherName: string | null;
+  /**
+     * Which half of a split class this slot is for, in the school's own words ("6а-1"). Null for a lesson the whole class attends.
+     * @nullable
+     */
+  groupLabel: string | null;
+  /** What the class is scheduled to study in this subject today, or null where nobody has written the lesson yet - which is most periods. A timetable slot is owed to a child whether or not its content exists. */
   lesson: DailyLessonView | null;
   /** Work assigned to this student personally in this subject. Where the class works through one book it is remediation on top; where the subject places students by level it is the whole of the day's work. */
   extra: ExtraWork | null;
@@ -501,8 +685,8 @@ export interface StudentToday {
   date: string;
   dateLabel: string;
   className: string;
-  /** One entry per subject the student has work in today. A child studies several subjects a day, so this is a list rather than a single lesson. */
-  subjects: SubjectDay[];
+  /** One entry per period on the class's timetable, in bell order. Not one per subject: Mongolian in the first period and again in the second is two lessons, and a day with the same subject twice used to come back as one. A split class puts two entries on one period, which is what a split is. */
+  slots: SubjectDay[];
   notice: string;
 }
 
@@ -559,6 +743,19 @@ export interface SchoolPeriod {
 }
 
 export interface ScheduledDay {
+  /** @nullable */
+  periodNo?: number | null;
+  /** @nullable */
+  groupLabel?: string | null;
+  /** @nullable */
+  startsAt?: string | null;
+  /** @nullable */
+  teacherName?: string | null;
+  /**
+     * @minimum 1
+     * @nullable
+     */
+  timetableSlotId?: number | null;
   /**
      * Calendar date, YYYY-MM-DD.
      * @pattern ^\d{4}-\d{2}-\d{2}$
@@ -1221,6 +1418,137 @@ export interface StudentRecord {
 }
 
 /**
+ * One school day of the plan. weekdayNo is 1 for Monday. score and status are how it went: almost every day is NOT ASSESSED with no score, which is the honest state while the plan is written and the term untaught - a zero in place of a missing mark would be an invention.
+ */
+export interface StudyPlanDay {
+  weekdayNo: number;
+  /** @nullable */
+  focus: string | null;
+  /** @nullable */
+  sourceLabel: string | null;
+  /** @nullable */
+  unitFocus: string | null;
+  /** @nullable */
+  pages: string | null;
+  /** @nullable */
+  task: string | null;
+  /** @nullable */
+  teacherCheck: string | null;
+  /** @nullable */
+  target: string | null;
+  /** @nullable */
+  score: number | null;
+  status: string;
+}
+
+/**
+ * What one week is for in one skill, and what confirms it.
+ */
+export interface StudyPlanSkill {
+  domain: string;
+  /** @nullable */
+  sourceLabel: string | null;
+  /** @nullable */
+  unitFocus: string | null;
+  /** @nullable */
+  pages: string | null;
+  /** @nullable */
+  task: string | null;
+  /** @nullable */
+  masteryTarget: string | null;
+  status: string;
+}
+
+/**
+ * One week of the plan, in both of its shapes: the five days a child works through, and the six skills the week is aimed at. They describe the same week and answer different questions - a child works from the days, a parent reads the skills.
+ */
+export interface StudyPlanWeek {
+  subjectCode: string;
+  weekNo: number;
+  days: StudyPlanDay[];
+  skills: StudyPlanSkill[];
+}
+
+/**
+ * One period of a teacher's week. Rows are times and the cell names the class, which is the question a teacher asks of a week - the per-class view answers "what does 9a do", which the class list already answers.
+ */
+export interface TeacherWeekSlot {
+  slotId: string;
+  weekdayNo: number;
+  periodNo: number;
+  /** @nullable */
+  startsAt: string | null;
+  /** @nullable */
+  endsAt: string | null;
+  classId: number;
+  className: string;
+  gradeLevel: number;
+  subjectId: number;
+  subject: string;
+  /** @nullable */
+  groupLabel: string | null;
+  /** @nullable */
+  teacherName: string | null;
+}
+
+export interface MarkableClass {
+  classId: string;
+  className: string;
+  gradeLevel: number;
+  students: number;
+}
+
+/**
+ * One writing or speaking task at a child's level, with the can-do statement a teacher judges it against and whatever they have already said. score null means nobody has looked yet.
+ */
+export interface ProductiveTask {
+  itemId: string;
+  itemCode: string;
+  domain: string;
+  prompt: string;
+  /** @nullable */
+  rubric: string | null;
+  maxScore: number;
+  /** @nullable */
+  score: number | null;
+  /** @nullable */
+  comment: string | null;
+  /** @nullable */
+  ratedByName: string | null;
+  /** @nullable */
+  ratedAt: string | null;
+}
+
+/**
+ * A placed child and the tasks their own level asks of them - not the class's level. Two children in one class placed at A2 and C1 are asked different things, which is the point of having placed them.
+ */
+export interface ProductiveStudent {
+  studentId: string;
+  studentCode: string;
+  studentName: string;
+  levelCode: string;
+  levelName: string;
+  /** @nullable */
+  objectiveScore: number | null;
+  tasks: ProductiveTask[];
+}
+
+export interface ProductiveMarkSheet {
+  classId: string;
+  className: string;
+  students: ProductiveStudent[];
+}
+
+export interface ProductiveRatingInput {
+  classId: string;
+  studentId: string;
+  itemId: string;
+  score: number;
+  /** @nullable */
+  comment?: string | null;
+}
+
+/**
  * One skill's worth of work at a level: the book or task bank, the unit, what the child does, and how a teacher confirms it. sourceLabel is text rather than a link because most of these titles are not in the library yet; materialId is filled in only for the ones that are.
  */
 export interface PlacementStep {
@@ -1599,6 +1927,23 @@ to?: string;
  * @maximum 200
  */
 limit?: number;
+};
+
+export type GetClassDayParams = {
+classId: number;
+/**
+ * One subject the teacher holds here; omitted means all of them.
+ */
+subjectId?: number;
+/**
+ * A school date. Omitted means today in Ulaanbaatar.
+ */
+on?: string;
+};
+
+export type GetTeacherQuizPaperParams = {
+classId: number;
+lessonId: number;
 };
 
 export type GetAssessmentSheetParams = {

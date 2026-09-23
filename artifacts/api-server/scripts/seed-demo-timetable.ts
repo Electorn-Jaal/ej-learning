@@ -216,12 +216,15 @@ try {
                 $8::bigint, $9::bigint, 'APPROVED')
         ON CONFLICT (lesson_code) DO UPDATE SET learning_goal_mn = EXCLUDED.learning_goal_mn
         RETURNING id`,
+        // Nulls, not filler. A lesson made from a book's table of contents
+        // knows the section, the book and the pages, and knows nothing about
+        // how to teach it; sentences invented to fill the headings read as a
+        // lesson to the child looking at them, which is worse than a heading
+        // that is simply not drawn.
         [PREFIX + key, skill.id, `${name}-ийг ойлгож, дасгал гүйцэтгэх`,
-         nodeId
-           ? "Номын энэ сэдвийг уншиж, дасгалыг гүйцэтгэнэ."
-           : "Энэ бол хуваарийг харуулах зорилгоор оруулсан жишээ агуулга.",
-         "Жишээ бодолт энд орно.", "Номын дасгалыг гүйцэтгэнэ.",
-         nodeId ? "Номын сэдвээр явна." : "Жишээ агуулга — жинхэнэ сургалтын материал биш.",
+         nodeId ? null : "Энэ бол хуваарийг харуулах зорилгоор оруулсан жишээ агуулга.",
+         null, null,
+         nodeId ? null : "Жишээ агуулга — жинхэнэ сургалтын материал биш.",
          subject.source_material_id, nodeId])).rows;
       lessonIdOf.set(key, lesson.id);
       return lesson.id;

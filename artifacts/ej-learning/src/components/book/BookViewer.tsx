@@ -40,7 +40,7 @@ export function BookViewer({ book }: { book: Book }) {
         : `${book.pageFrom} хуудас`
 
   return (
-    <section className="rounded-md border border-border">
+    <section className="rounded-[2px] border border-border">
       <div className="flex flex-wrap items-center gap-3 p-4">
         <div className="min-w-0 flex-1">
           <h3 className="truncate text-sm font-semibold">

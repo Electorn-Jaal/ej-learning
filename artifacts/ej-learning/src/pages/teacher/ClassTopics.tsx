@@ -95,7 +95,7 @@ function SectionPicker({ row, onClose }: { row: ClassTopic; onClose: () => void 
       ) : null}
 
       {data ? (
-        <ul className="max-h-80 divide-y overflow-y-auto rounded-sm border border-border bg-card">
+        <ul className="max-h-80 divide-y overflow-y-auto rounded-[2px] border border-border bg-card">
           {data.map((section) => {
             const pages = pageRange(section.pageFrom, section.pageTo)
             const period = periodLabel(section.periodNo)
@@ -222,7 +222,7 @@ export default function ClassTopics() {
       />
 
       {shared.length > 0 ? (
-        <p className="flex items-start gap-2 rounded-sm border border-dashed p-2 text-xs text-muted-foreground">
+        <p className="flex items-start gap-2 rounded-[2px] border border-dashed p-2 text-xs text-muted-foreground">
           <Users className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>
             Танд тодорхой анги албан ёсоор томилогдоогүй байна. Одоогоор мэргэжлээрээ{" "}
@@ -234,7 +234,7 @@ export default function ClassTopics() {
       ) : null}
 
       {unset > 0 ? (
-        <p className="rounded-sm border border-dashed p-2 text-xs text-muted-foreground">
+        <p className="rounded-[2px] border border-dashed p-2 text-xs text-muted-foreground">
           Номтой боловч сэдэв заагаагүй {unset} мөр байна. Заагаагүй үед сурагчид зөвхөн
           тухайн улирлын хамрах хүрээг харна.
         </p>

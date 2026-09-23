@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'wouter'
 import { useGetStudentSubjects, type SubjectOverview } from '@workspace/api-client-react'
-import { BookOpen, LayoutGrid, List } from 'lucide-react'
+import { LayoutGrid, List } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -46,19 +46,20 @@ function SubjectCard({ subject }: { subject: SubjectOverview }) {
   return (
     <Link
       href={`/subjects/${encodeURIComponent(subject.code)}`}
-      className="block rounded-sm transition-colors hover:bg-sidebar-active/40"
+      className="block rounded-[2px] transition-colors hover:bg-sidebar-active/40"
     >
-      <Card className="h-full">
+      <Card className="h-full rounded-[2px]">
         <CardContent className="space-y-2 p-3">
-          <div className="flex items-start justify-between gap-2">
+          {/* The book sits beside the subject where it fits and drops under it
+              where it does not, so a short pair reads as one line and a long
+              title is not truncated into uselessness. */}
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
             <h2 className="text-sm font-bold leading-snug">{subject.name}</h2>
+            <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+              {subject.bookTitle ?? 'Үндсэн ном холбогдоогүй'}
+            </span>
             {subject.origin === 'CURRICULUM' ? <Provisional /> : null}
           </div>
-
-          <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <BookOpen className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">{subject.bookTitle ?? 'Үндсэн ном холбогдоогүй'}</span>
-          </p>
 
           {subject.topicTitle ? (
             <p className="line-clamp-2 text-xs leading-snug">
@@ -122,8 +123,36 @@ function SubjectRow({ subject }: { subject: SubjectOverview }) {
  * and seeing which subject has fallen behind. Neither hides anything the
  * other shows.
  */
+/**
+ * Which view this child last chose.
+ *
+ * Kept in the browser rather than on the server: it is a preference about one
+ * screen on one device, it must survive a reload, and it is worth nothing to
+ * anybody else. localStorage can throw in a private window, so every access
+ * is guarded and the grid is the answer when it does.
+ */
+const VIEW_KEY = 'ej.subjects.view'
+
+function storedView(): 'grid' | 'list' {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid'
+  } catch {
+    return 'grid'
+  }
+}
+
 export default function StudentSubjects() {
-  const [view, setView] = useState<'grid' | 'list'>('grid')
+  const [view, setView] = useState<'grid' | 'list'>(storedView)
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(VIEW_KEY, view)
+    } catch {
+      // A browser that refuses site data still gets a working page; it just
+      // opens on the grid every time.
+    }
+  }, [view])
+
   const { data, isLoading, isError } = useGetStudentSubjects()
 
   if (isLoading) return <Skeleton className="h-96 w-full" />
@@ -158,7 +187,7 @@ export default function StudentSubjects() {
       </header>
 
       {provisional > 0 ? (
-        <p className="rounded-sm border border-dashed p-2 text-xs text-muted-foreground">
+        <p className="rounded-[2px] border border-dashed p-2 text-xs text-muted-foreground">
           «Батлагдаагүй» гэсэн {provisional} хичээл нь улсын хөтөлбөрийн жагсаалтаас түр
           бөглөгдсөн бөгөөд сургуулиас баталгаажаагүй байна.
         </p>
@@ -169,13 +198,13 @@ export default function StudentSubjects() {
           Анги–хичээлийн холбоо орж ирсний дараа сурагчийн хичээлүүд энд харагдана.
         </p>
       ) : view === 'grid' ? (
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {data.map((subject) => (
             <SubjectCard key={subject.code} subject={subject} />
           ))}
         </div>
       ) : (
-        <ul className="divide-y overflow-hidden rounded-sm border border-border bg-card">
+        <ul className="divide-y overflow-hidden rounded-[2px] border border-border bg-card">
           {data.map((subject) => (
             <SubjectRow key={subject.code} subject={subject} />
           ))}

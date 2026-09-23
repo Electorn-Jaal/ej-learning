@@ -29,6 +29,7 @@ import type {
   AssignmentStepInput,
   AssignmentSubmissionInput,
   CatalogItem,
+  ClassDay,
   ClassSkills,
   ClassTopic,
   ClassTopicInput,
@@ -38,6 +39,7 @@ import type {
   GenerateScheduleInput,
   GenerateScheduleResult,
   GetAssessmentSheetParams,
+  GetClassDayParams,
   GetClassSkillsParams,
   GetItemAnalysisParams,
   GetStudentPlanParams,
@@ -45,16 +47,20 @@ import type {
   GetStudentSubjectOutlineParams,
   GetTeacherLessonsParams,
   GetTeacherQuizAttemptsParams,
+  GetTeacherQuizPaperParams,
   GetTeacherScheduleParams,
   HealthStatus,
   ItemAnalysis,
   LoginInput,
+  MarkableClass,
   MaterialOutline,
   MaterialOutlineInput,
   OutlineChoice,
   PageOffsetInput,
   PasswordChangeInput,
   PreviewStudent,
+  ProductiveMarkSheet,
+  ProductiveRatingInput,
   QuizAttempt,
   QuizAttemptInput,
   QuizPaper,
@@ -74,6 +80,7 @@ import type {
   StudentProgress,
   StudentRecord,
   StudentToday,
+  StudyPlanWeek,
   SubjectOutline,
   SubjectOverview,
   SubmissionResult,
@@ -81,8 +88,12 @@ import type {
   TeacherClass,
   TeacherDashboard,
   TeacherQuizAttempts,
+  TeacherQuizPaper,
   TeacherSchedule,
+  TeacherWeekSlot,
   Term,
+  TimetableStudents,
+  TimetableStudentsInput,
   UploadedFile,
   WorkspaceIntegrationDashboard,
   WorkspaceSimulationInput
@@ -114,6 +125,160 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetTimetableStudentsUrl = (slotId: number,) => {
+
+
+
+
+  return `/api/teacher/timetable/${slotId}/students`
+}
+
+export const getTimetableStudents = async (slotId: number, options?: Parameters<typeof customFetch>[1]): Promise<TimetableStudents> => {
+
+  return customFetch<TimetableStudents>(getGetTimetableStudentsUrl(slotId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTimetableStudentsQueryKey = (slotId: number,) => {
+    return [
+    `/api/teacher/timetable/${slotId}/students`
+    ] as const;
+    }
+
+
+export const getGetTimetableStudentsQueryOptions = <TData = Awaited<ReturnType<typeof getTimetableStudents>>, TError = ErrorType<unknown>>(slotId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTimetableStudents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTimetableStudentsQueryKey(slotId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTimetableStudents>>> = ({ signal }) => getTimetableStudents(slotId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: slotId !== null && slotId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTimetableStudents>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTimetableStudentsQueryResult = NonNullable<Awaited<ReturnType<typeof getTimetableStudents>>>
+export type GetTimetableStudentsQueryError = ErrorType<unknown>
+
+
+
+export function useGetTimetableStudents<TData = Awaited<ReturnType<typeof getTimetableStudents>>, TError = ErrorType<unknown>>(
+ slotId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTimetableStudents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTimetableStudentsQueryOptions(slotId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSetTimetableStudentsUrl = (slotId: number,) => {
+
+
+
+
+  return `/api/teacher/timetable/${slotId}/students`
+}
+
+export const setTimetableStudents = async (slotId: number,
+    timetableStudentsInput: TimetableStudentsInput, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<void>(getSetTimetableStudentsUrl(slotId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(timetableStudentsInput)
+  }
+);}
+
+
+
+
+
+export const getSetTimetableStudentsMutationKey = () => ['setTimetableStudents'] as const;
+
+export const getSetTimetableStudentsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setTimetableStudents>>, TError,SetTimetableStudentsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setTimetableStudents>>, TError,SetTimetableStudentsMutationVariables, TContext> => {
+
+const mutationKey = getSetTimetableStudentsMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setTimetableStudents>>, SetTimetableStudentsMutationVariables> = (props) => {
+          const {slotId,data} = props ?? {};
+
+          return  setTimetableStudents(slotId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetTimetableStudentsMutationResult = NonNullable<Awaited<ReturnType<typeof setTimetableStudents>>>
+    export type SetTimetableStudentsMutationBody = BodyType<TimetableStudentsInput>
+    export type SetTimetableStudentsMutationError = ErrorType<unknown>
+    export type SetTimetableStudentsMutationVariables = {slotId: number;data: BodyType<TimetableStudentsInput>}
+
+    export const useSetTimetableStudents = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setTimetableStudents>>, TError,SetTimetableStudentsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setTimetableStudents>>,
+        TError,
+        SetTimetableStudentsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSetTimetableStudentsMutationOptions(options));
+    }
 
 export const getGetPreviewStudentsUrl = () => {
 
@@ -1061,6 +1226,83 @@ export function useGetStudentRecord<TData = Awaited<ReturnType<typeof getStudent
 
 
 
+export const getGetStudentStudyPlanUrl = () => {
+
+
+
+
+  return `/api/student/study-plan`
+}
+
+/**
+ * @summary The student's own generated study plan, week by week
+ */
+export const getStudentStudyPlan = async ( options?: Parameters<typeof customFetch>[1]): Promise<StudyPlanWeek[]> => {
+
+  return customFetch<StudyPlanWeek[]>(getGetStudentStudyPlanUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStudentStudyPlanQueryKey = () => {
+    return [
+    `/api/student/study-plan`
+    ] as const;
+    }
+
+
+export const getGetStudentStudyPlanQueryOptions = <TData = Awaited<ReturnType<typeof getStudentStudyPlan>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStudentStudyPlan>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStudentStudyPlanQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStudentStudyPlan>>> = ({ signal }) => getStudentStudyPlan({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStudentStudyPlan>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetStudentStudyPlanQueryResult = NonNullable<Awaited<ReturnType<typeof getStudentStudyPlan>>>
+export type GetStudentStudyPlanQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary The student's own generated study plan, week by week
+ */
+
+export function useGetStudentStudyPlan<TData = Awaited<ReturnType<typeof getStudentStudyPlan>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStudentStudyPlan>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetStudentStudyPlanQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getGetStudentPlacementsUrl = () => {
 
 
@@ -1126,6 +1368,325 @@ export function useGetStudentPlacements<TData = Awaited<ReturnType<typeof getStu
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetStudentPlacementsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetMarkableClassesUrl = () => {
+
+
+
+
+  return `/api/teacher/productive/classes`
+}
+
+/**
+ * @summary Classes whose writing and speaking tasks this teacher may judge
+ */
+export const getMarkableClasses = async ( options?: Parameters<typeof customFetch>[1]): Promise<MarkableClass[]> => {
+
+  return customFetch<MarkableClass[]>(getGetMarkableClassesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMarkableClassesQueryKey = () => {
+    return [
+    `/api/teacher/productive/classes`
+    ] as const;
+    }
+
+
+export const getGetMarkableClassesQueryOptions = <TData = Awaited<ReturnType<typeof getMarkableClasses>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMarkableClasses>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMarkableClassesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMarkableClasses>>> = ({ signal }) => getMarkableClasses({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMarkableClasses>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMarkableClassesQueryResult = NonNullable<Awaited<ReturnType<typeof getMarkableClasses>>>
+export type GetMarkableClassesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Classes whose writing and speaking tasks this teacher may judge
+ */
+
+export function useGetMarkableClasses<TData = Awaited<ReturnType<typeof getMarkableClasses>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMarkableClasses>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMarkableClassesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetProductiveMarkSheetUrl = (classId: string,) => {
+
+
+
+
+  return `/api/teacher/productive/classes/${classId}`
+}
+
+/**
+ * @summary One class's children with the tasks their own level asks of them
+ */
+export const getProductiveMarkSheet = async (classId: string, options?: Parameters<typeof customFetch>[1]): Promise<ProductiveMarkSheet> => {
+
+  return customFetch<ProductiveMarkSheet>(getGetProductiveMarkSheetUrl(classId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetProductiveMarkSheetQueryKey = (classId: string,) => {
+    return [
+    `/api/teacher/productive/classes/${classId}`
+    ] as const;
+    }
+
+
+export const getGetProductiveMarkSheetQueryOptions = <TData = Awaited<ReturnType<typeof getProductiveMarkSheet>>, TError = ErrorType<unknown>>(classId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProductiveMarkSheet>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetProductiveMarkSheetQueryKey(classId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProductiveMarkSheet>>> = ({ signal }) => getProductiveMarkSheet(classId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: classId !== null && classId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProductiveMarkSheet>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetProductiveMarkSheetQueryResult = NonNullable<Awaited<ReturnType<typeof getProductiveMarkSheet>>>
+export type GetProductiveMarkSheetQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary One class's children with the tasks their own level asks of them
+ */
+
+export function useGetProductiveMarkSheet<TData = Awaited<ReturnType<typeof getProductiveMarkSheet>>, TError = ErrorType<unknown>>(
+ classId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProductiveMarkSheet>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetProductiveMarkSheetQueryOptions(classId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSaveProductiveRatingUrl = () => {
+
+
+
+
+  return `/api/teacher/productive/rating`
+}
+
+/**
+ * @summary Record one judgement, and re-derive whether the level is confirmed
+ */
+export const saveProductiveRating = async (productiveRatingInput: ProductiveRatingInput, options?: Parameters<typeof customFetch>[1]): Promise<ProductiveMarkSheet> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<ProductiveMarkSheet>(getSaveProductiveRatingUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(productiveRatingInput)
+  }
+);}
+
+
+
+
+
+export const getSaveProductiveRatingMutationKey = () => ['saveProductiveRating'] as const;
+
+export const getSaveProductiveRatingMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveProductiveRating>>, TError,SaveProductiveRatingMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveProductiveRating>>, TError,SaveProductiveRatingMutationVariables, TContext> => {
+
+const mutationKey = getSaveProductiveRatingMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveProductiveRating>>, SaveProductiveRatingMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  saveProductiveRating(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveProductiveRatingMutationResult = NonNullable<Awaited<ReturnType<typeof saveProductiveRating>>>
+    export type SaveProductiveRatingMutationBody = BodyType<ProductiveRatingInput>
+    export type SaveProductiveRatingMutationError = ErrorType<unknown>
+    export type SaveProductiveRatingMutationVariables = {data: BodyType<ProductiveRatingInput>}
+
+    /**
+ * @summary Record one judgement, and re-derive whether the level is confirmed
+ */
+export const useSaveProductiveRating = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveProductiveRating>>, TError,SaveProductiveRatingMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof saveProductiveRating>>,
+        TError,
+        SaveProductiveRatingMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSaveProductiveRatingMutationOptions(options));
+    }
+
+export const getGetTeacherWeekUrl = () => {
+
+
+
+
+  return `/api/teacher/my-week`
+}
+
+/**
+ * @summary The signed-in teacher's own week, every class they take
+ */
+export const getTeacherWeek = async ( options?: Parameters<typeof customFetch>[1]): Promise<TeacherWeekSlot[]> => {
+
+  return customFetch<TeacherWeekSlot[]>(getGetTeacherWeekUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTeacherWeekQueryKey = () => {
+    return [
+    `/api/teacher/my-week`
+    ] as const;
+    }
+
+
+export const getGetTeacherWeekQueryOptions = <TData = Awaited<ReturnType<typeof getTeacherWeek>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTeacherWeek>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTeacherWeekQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTeacherWeek>>> = ({ signal }) => getTeacherWeek({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTeacherWeek>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTeacherWeekQueryResult = NonNullable<Awaited<ReturnType<typeof getTeacherWeek>>>
+export type GetTeacherWeekQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary The signed-in teacher's own week, every class they take
+ */
+
+export function useGetTeacherWeek<TData = Awaited<ReturnType<typeof getTeacherWeek>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTeacherWeek>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTeacherWeekQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -2683,6 +3244,176 @@ export function useGetTeacherQuizAttempts<TData = Awaited<ReturnType<typeof getT
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetTeacherQuizAttemptsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetClassDayUrl = (params: GetClassDayParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/teacher/class-day?${stringifiedParams}` : `/api/teacher/class-day`
+}
+
+/**
+ * The two halves of a teacher's morning in one answer. The lessons are the same content the class is served, rather than a teacher's-eye summary that can drift from it, and the students are the whole register: a child who answered nothing is present with no attempts, because who has not done the work is the question worth asking.
+ * @summary One class on one day - what is set, and who has done it
+ */
+export const getClassDay = async (params: GetClassDayParams, options?: Parameters<typeof customFetch>[1]): Promise<ClassDay> => {
+
+  return customFetch<ClassDay>(getGetClassDayUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetClassDayQueryKey = (params?: GetClassDayParams,) => {
+    return [
+    `/api/teacher/class-day`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetClassDayQueryOptions = <TData = Awaited<ReturnType<typeof getClassDay>>, TError = ErrorType<ApiError>>(params: GetClassDayParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClassDay>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetClassDayQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClassDay>>> = ({ signal }) => getClassDay(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClassDay>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetClassDayQueryResult = NonNullable<Awaited<ReturnType<typeof getClassDay>>>
+export type GetClassDayQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary One class on one day - what is set, and who has done it
+ */
+
+export function useGetClassDay<TData = Awaited<ReturnType<typeof getClassDay>>, TError = ErrorType<ApiError>>(
+ params: GetClassDayParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClassDay>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetClassDayQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetTeacherQuizPaperUrl = (params: GetTeacherQuizPaperParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/teacher/quiz-paper?${stringifiedParams}` : `/api/teacher/quiz-paper`
+}
+
+/**
+ * What the class is actually asked, for the person who has to judge whether the asking is any good. The student's copy of this leaves the answers on the server; the teacher's carries them, because a question cannot be reviewed without knowing which option is meant to be right. Scoped through the class, which is what establishes that this member of staff teaches the subject the questions belong to.
+ * @summary The questions behind a lesson's quiz, with the key
+ */
+export const getTeacherQuizPaper = async (params: GetTeacherQuizPaperParams, options?: Parameters<typeof customFetch>[1]): Promise<TeacherQuizPaper> => {
+
+  return customFetch<TeacherQuizPaper>(getGetTeacherQuizPaperUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTeacherQuizPaperQueryKey = (params?: GetTeacherQuizPaperParams,) => {
+    return [
+    `/api/teacher/quiz-paper`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetTeacherQuizPaperQueryOptions = <TData = Awaited<ReturnType<typeof getTeacherQuizPaper>>, TError = ErrorType<ApiError>>(params: GetTeacherQuizPaperParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTeacherQuizPaper>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTeacherQuizPaperQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTeacherQuizPaper>>> = ({ signal }) => getTeacherQuizPaper(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTeacherQuizPaper>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTeacherQuizPaperQueryResult = NonNullable<Awaited<ReturnType<typeof getTeacherQuizPaper>>>
+export type GetTeacherQuizPaperQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary The questions behind a lesson's quiz, with the key
+ */
+
+export function useGetTeacherQuizPaper<TData = Awaited<ReturnType<typeof getTeacherQuizPaper>>, TError = ErrorType<ApiError>>(
+ params: GetTeacherQuizPaperParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTeacherQuizPaper>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTeacherQuizPaperQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

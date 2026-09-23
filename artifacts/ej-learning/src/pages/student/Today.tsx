@@ -1,62 +1,112 @@
 import { Link } from 'wouter'
 import {
+  useGetStudentPlacements,
+  useGetStudentStudyPlan,
   useGetStudentToday,
   type DailyLessonView,
   type SubjectDay,
 } from '@workspace/api-client-react'
+import { studentSlotLink } from '@/lib/student-slot'
 import { Clock } from 'lucide-react'
 import { buttonVariants } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { InfoBox } from '@/components/InfoBox'
+import { ROW_ACTION, ROW_ACTION_GROUP } from '@/components/ui/row-action'
 import { cn } from '@/lib/utils'
 
-/**
- * The day's buttons, paler than the rest of the product's.
- *
- * A subject line offers three or four of these at once, so the full amber
- * slab repeated across a row shouts. Here they rest at the pale amber the
- * navigation marks its active row with and take the full colour when reached
- * for. Ink reads 13.1:1 on the pale and 9.6:1 on the full, so both clear AA.
- *
- * Local to this page on purpose: every other screen keeps the one slab.
- */
-const DAY_BUTTON = 'h-auto self-stretch rounded-none bg-sidebar-active hover:bg-sidebar'
 
 /** One of the small buttons a subject offers. */
-function Choice({ code, view, children }: { code: string; view: string; children: string }) {
+function Choice({ day, view, children }: { day: SubjectDay; view: string; children: string }) {
   return (
     <Link
-      href={`/subject/${encodeURIComponent(code)}/${view}`}
-      className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), DAY_BUTTON)}
+      href={studentSlotLink(day, view)}
+      className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), ROW_ACTION)}
     >
       {children}
     </Link>
   )
 }
 
+/** Anything a child can actually open: content, personal work, questions. */
+const hasWork = (slot: SubjectDay) => Boolean(slot.lesson || slot.extra)
+
 /**
- * One subject's line in the day.
+ * One period of the day.
  *
- * It says what the subject is and what today's topic is called, and then
- * offers the three places a child can go from it. Nothing opens here: the
- * lesson, the child's own work and the questions each fill a page of their
- * own, so the day stays a short list however much work is in it.
- *
- * A button appears only where there is something behind it. A subject with no
- * class lesson - which is the normal state where students are placed by level
- * - offers the personal work and the questions, and does not offer a lesson
- * that is not there.
+ * A period can hold more than one lesson - half of 6a is in design while the
+ * other half is in IT, and the middle years choose between physical education
+ * and jiu-jitsu - so a row is a time, not a subject, and parallel options sit
+ * on it side by side. Rendering them as separate rows made the same Wednesday
+ * afternoon appear six times.
  */
-function SubjectRow({ day }: { day: SubjectDay }) {
+type Period = { periodNo: number | null; startsAt: string | null; endsAt: string | null; slots: SubjectDay[] }
+
+function byPeriod(slots: SubjectDay[]): Period[] {
+  const periods: Period[] = []
+  for (const slot of slots) {
+    const found = slot.periodNo === null
+      ? undefined
+      : periods.find((row) => row.periodNo === slot.periodNo)
+    if (found) found.slots.push(slot)
+    else periods.push({
+      periodNo: slot.periodNo,
+      startsAt: slot.startsAt,
+      endsAt: slot.endsAt,
+      slots: [slot],
+    })
+  }
+  return periods
+}
+
+/**
+ * One period of the day, and what the child can open on it.
+ *
+ * A row is a TIME, not a subject. A period can hold more than one lesson -
+ * half of 6a is in design while the other half is in IT, and the middle years
+ * choose between physical education and jiu-jitsu - and drawing each as its
+ * own row made one Wednesday afternoon of PE appear six times. They share a
+ * line now, and the label says a choice is involved.
+ *
+ * A button appears only where there is something behind it. Most periods have
+ * no written lesson, so most rows offer the personal plan and nothing else;
+ * printing four buttons on every row led to four empty pages.
+ */
+function PeriodRow({ period, hasPlan }: { period: Period; hasPlan: (code: string) => boolean }) {
+  // Where a period splits, the work is whichever half has any. Neither half
+  // has any today, so this is the first subject - and pointing at a plan that
+  // is empty for both is harmless in a way that guessing the child's group
+  // would not be.
+  const day = period.slots.find(hasWork) ?? period.slots[0]!
   const personalOnly = !day.lesson && Boolean(day.extra)
   const lessons = [day.lesson, day.extra?.lesson].filter(Boolean) as DailyLessonView[]
   const minutes = lessons.reduce((total, lesson) => total + (lesson.estimatedMinutes ?? 0), 0)
-  const lead = day.lesson?.skillName ?? day.extra?.lesson.skillName ?? null
+  // The topic, and nothing in its place. The teacher belongs on the weekly
+  // timetable, where a child is working out where to go; on the day they are
+  // working out what to do, and a name standing where the topic should be
+  // reads as though that were the work.
+  const topic = day.lesson?.skillName ?? day.extra?.lesson.skillName ?? null
 
   return (
     <li className="flex flex-wrap items-stretch gap-x-3 gap-y-2 pl-3">
+      <div className="flex w-12 shrink-0 flex-col justify-center py-2.5 text-xs tabular-nums text-muted-foreground">
+        {period.startsAt ?? '—'}
+      </div>
+
       <div className="flex min-w-0 flex-1 flex-col justify-center py-2.5">
-        <p className="text-sm font-semibold">{day.subjectName}</p>
-        <p className="truncate text-xs text-muted-foreground">{lead ?? 'Хичээл алга'}</p>
+        <p className="flex flex-wrap items-baseline gap-x-2 text-sm font-semibold">
+          {period.slots.map((slot) => slot.subjectName).join(' / ')}
+          {period.slots.length > 1 ? null : day.groupLabel ? (
+            <span className="text-[10px] font-normal uppercase tracking-wide text-muted-foreground">
+              {day.groupLabel}
+            </span>
+          ) : null}
+        </p>
+        {topic ? (
+          <p className="truncate text-xs text-muted-foreground">{topic}</p>
+        ) : null}
+        {day.selectionPending ? (
+          <p className="text-[11px] text-muted-foreground">Бүлгийн хуваарилалт тодруулаагүй</p>
+        ) : null}
       </div>
 
       {day.extra && !personalOnly ? (
@@ -73,39 +123,47 @@ function SubjectRow({ day }: { day: SubjectDay }) {
         </span>
       ) : null}
 
-      {/* The list's own divider colour, so one line runs through the whole
-          thing. It reads 1.15:1 on the amber against 1.34:1 between the
-          rows - fainter there than here, because the fill behind it is
-          darker. Matching was the ask; this is the cost of it. */}
-      <div className="flex flex-wrap items-stretch [&>*+*]:border-l [&>*+*]:border-border">
-        {day.lesson ? (
-          <Choice code={day.subjectCode} view="lesson">
-            Хичээл
-          </Choice>
+      {/* A button only where something is behind it. Бие даалт used to be
+          printed on every row, and on most of them it opened a page saying
+          the child had been given nothing - eleven subjects, eleven empty
+          pages. It appears now only for a subject this child actually has a
+          plan or a placement in. */}
+      <div className={ROW_ACTION_GROUP}>
+        {day.lesson ? <Choice day={day} view="lesson">Хичээл</Choice> : null}
+        {day.extra ? <Choice day={day} view="personal">Нэмэлт бэлтгэл</Choice> : null}
+        {hasPlan(day.subjectCode) ? (
+          <Link
+            href={`/subjects/${encodeURIComponent(day.subjectCode)}/plan`}
+            className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), ROW_ACTION)}
+          >
+            Бие даалт
+          </Link>
         ) : null}
-        {day.extra ? (
-          <Choice code={day.subjectCode} view="personal">
-            Нэмэлт бэлтгэл
-          </Choice>
-        ) : null}
-        <Link
-          href={`/subjects/${encodeURIComponent(day.subjectCode)}/plan`}
-          className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), DAY_BUTTON)}
-        >
-          Хувийн төлөвлөгөө
-        </Link>
-        {day.lesson || day.extra ? (
-          <Choice code={day.subjectCode} view="quiz">
-            Шалгалт
-          </Choice>
-        ) : null}
+        {day.lesson || day.extra ? <Choice day={day} view="quiz">Шалгалт</Choice> : null}
       </div>
     </li>
   )
 }
 
+/**
+ * The child's day, in bell order.
+ *
+ * One list and no headings: the page is short enough that naming its parts
+ * costs more height than it saves confusion. What each row offers is what
+ * that period actually has, so a subject earns its buttons rather than being
+ * listed in a fixed set of four.
+ */
 export default function StudentToday() {
   const { data, isLoading, isError } = useGetStudentToday()
+  // What the child has of their own, by subject. Both are small lists the
+  // subject pages already ask for, so react-query serves this from the same
+  // answers rather than fetching anything extra.
+  const { data: plan } = useGetStudentStudyPlan()
+  const { data: placements } = useGetStudentPlacements()
+  const planned = new Set([
+    ...(plan ?? []).map((week) => week.subjectCode),
+    ...(placements ?? []).map((row) => row.subjectCode),
+  ])
 
   if (isLoading) {
     return (
@@ -120,50 +178,29 @@ export default function StudentToday() {
     return <p role="alert">Өнөөдрийн хичээлийг уншиж чадсангүй.</p>
   }
 
+  const periods = byPeriod(data.slots)
+
+  // The day on the left, the school's notice beside it. On a phone the box
+  // drops under the day, where a notice nobody has written yet costs nothing.
   return (
-    <div className="space-y-4">
-      {/* The date is in the top bar and the class is on the account menu,
-          so the page opens on the lessons themselves. */}
-      {data.subjects.length === 0 ? (
+    <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1fr)_15rem]">
+      {data.slots.length === 0 ? (
         // Plain text, not a card. A card frames something; an empty day has
         // nothing to frame, and boxing the sentence makes the absence look
         // like a broken component.
         <p className="py-6 text-sm text-muted-foreground">{data.notice}</p>
       ) : (
-        // The list narrows and holds the left; the panel beside it is
-        // reserved and deliberately empty. Below `lg` the two stack, and the
-        // list takes the width back.
-        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
-          <ul className="divide-y overflow-hidden rounded-sm border border-border bg-card">
-            {data.subjects.map((day) => (
-              <SubjectRow key={day.subjectCode} day={day} />
-            ))}
-          </ul>
-          <aside
-            aria-label="Мэдэгдэл"
-            className="hidden rounded-sm border border-border bg-card p-3 lg:block"
-          >
-            <h2 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Мэдэгдэл
-            </h2>
-            {/* Written here, not read from anywhere: the database has no
-                notifications table and no endpoint to fill one. The tag says
-                so on the notice itself, because a school notice nobody sent
-                is worse than an empty panel. */}
-            <div className="mt-2 border-l-2 border-pending pl-2.5">
-              <div className="flex items-center gap-2">
-                <p className="text-xs font-semibold">Эцэг эхийн хурал</p>
-                <span className="rounded-[2px] bg-muted px-1 text-[9px] font-medium text-muted-foreground">
-                  Жишээ
-                </span>
-              </div>
-              <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
-                Баасан гаригт 18:00 цагт, 6а ангийн танхимд.
-              </p>
-            </div>
-          </aside>
-        </div>
+        <ul className="divide-y overflow-hidden rounded-[2px] border border-border bg-card">
+          {periods.map((period, index) => (
+            <PeriodRow
+              key={`${period.periodNo ?? 'x'}:${index}`}
+              period={period}
+              hasPlan={(code) => planned.has(code)}
+            />
+          ))}
+        </ul>
       )}
+      <InfoBox className={data.className} />
     </div>
   )
 }

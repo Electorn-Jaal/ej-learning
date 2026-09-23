@@ -33,7 +33,14 @@
     "import-cefr-results": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/import-cefr-results.ts",
     "import-cefr-pathways": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/import-cefr-pathways.ts",
     "import-student-details": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/import-student-details.ts",
-    "import-student-transfers": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/import-student-transfers.ts"
+    "import-student-transfers": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/import-student-transfers.ts",
+    "import-study-plans": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/import-study-plans.ts",
+    "add-missing-subjects": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/add-missing-subjects.ts",
+    "import-timetable-links": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/import-timetable-links.ts",
+    "merge-teacher-records": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/merge-teacher-records.ts",
+    "import-timetable-slots": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/import-timetable-slots.ts",
+    "schedule-book-lessons": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/schedule-book-lessons.ts",
+    "clear-placeholder-lessons": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/clear-placeholder-lessons.ts"
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",

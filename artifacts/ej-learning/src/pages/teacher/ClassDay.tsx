@@ -1,0 +1,463 @@
+import { useState } from 'react'
+import { Link, useRoute, useSearch } from 'wouter'
+import { useQueryClient } from '@tanstack/react-query'
+import {
+  getGetTeacherLessonsQueryKey,
+  useGetClassDay,
+  useGetTeacherLessons,
+  useSetScheduleDay,
+  type ClassDayLesson,
+  type ClassDayStudent,
+} from '@workspace/api-client-react'
+import { ArrowLeft, Check, ChevronDown, ChevronUp, ClipboardList, Users, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { NATIVE_INPUT, NATIVE_SELECT } from '@/components/ui/native-select'
+import { BookViewer } from '@/components/book/BookViewer'
+import { Skeleton } from '@/components/ui/skeleton'
+import { subjectParam } from '@/lib/teacher-class'
+import { hasRole, useSession } from '@/lib/session'
+import { schoolToday } from '@/lib/schedule-window'
+import { cn } from '@/lib/utils'
+
+const TIME = new Intl.DateTimeFormat('mn-MN', {
+  hour: '2-digit',
+  minute: '2-digit',
+  timeZone: 'Asia/Ulaanbaatar',
+})
+
+/**
+ * One block of the lesson, printed only where it has been written.
+ *
+ * Empty headings are worse than absent ones: a teacher scanning for the
+ * practice reads four titles with nothing under them and concludes the page
+ * is broken rather than that the lesson is thin.
+ */
+function Block({ title, body }: { title: string; body: string | null }) {
+  if (!body) return null
+  return (
+    <div className="space-y-0.5">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {title}
+      </p>
+      <p className="whitespace-pre-line text-sm">{body}</p>
+    </div>
+  )
+}
+
+/**
+ * One period: what the class is given, and the three things a teacher changes
+ * about it - which section it is, which pages it actually took, and what they
+ * want said about it today.
+ *
+ * One Хадгалах for all three. The topic used to save the moment it changed and
+ * the note the moment the box lost focus, which is invisible: a teacher who
+ * picks a section, corrects the pages and types an instruction has made one
+ * decision, and is entitled to see it saved once, deliberately.
+ *
+ * The pages are prefilled from the book and are an override, not a record. The
+ * printed range is right nearly always; a class that went further did that,
+ * and their children should be sent to the pages their own teacher taught
+ * from - without moving the pages for every other school using the book.
+ */
+function LessonCard({ classId, date, lesson, editable, onSaved }: {
+  classId: number
+  date: string
+  lesson: ClassDayLesson
+  editable: boolean
+  onSaved: () => void
+}) {
+  const params = { classId, ...subjectParam(lesson.subjectId) }
+  const { data: lessons } = useGetTeacherLessons(params, {
+    query: { queryKey: getGetTeacherLessonsQueryKey(params) },
+  })
+  const { mutate: setDay, isPending: saving, error } = useSetScheduleDay()
+
+  const server = {
+    lessonId: lesson.lessonId === null ? '' : String(lesson.lessonId),
+    pageFrom: lesson.book?.pageFrom == null ? '' : String(lesson.book.pageFrom),
+    pageTo: lesson.book?.pageTo == null ? '' : String(lesson.book.pageTo),
+    note: lesson.note ?? '',
+  }
+  const [draft, setDraft] = useState(server)
+  const [saved, setSaved] = useState(false)
+
+  // Re-seeded whenever the day comes back different, so a save elsewhere or a
+  // replan does not leave the boxes showing something no longer true.
+  const key = [server.lessonId, server.pageFrom, server.pageTo, server.note].join('\u0000')
+  const [seed, setSeed] = useState(key)
+  if (seed !== key) {
+    setSeed(key)
+    setDraft(server)
+  }
+
+  const dirty = (Object.keys(server) as Array<keyof typeof server>)
+    .some((field) => draft[field] !== server[field])
+
+  const save = () => {
+    setDay({
+      data: {
+        classId,
+        scheduledOn: date,
+        timetableSlotId: lesson.timetableSlotId,
+        subjectId: lesson.subjectId,
+        lessonId: draft.lessonId ? Number(draft.lessonId) : null,
+        note: draft.note.trim() === '' ? null : draft.note,
+        // A range needs both ends or neither; the server says so too.
+        pageFrom: draft.pageFrom === '' ? null : Number(draft.pageFrom),
+        pageTo: draft.pageTo === '' ? null : Number(draft.pageTo),
+      },
+    }, {
+      onSuccess: () => {
+        setSaved(true)
+        onSaved()
+      },
+    })
+  }
+
+  const printed = lesson.book && lesson.book.bookPageFrom !== null
+    ? String(lesson.book.bookPageFrom)
+      + (lesson.book.bookPageTo && lesson.book.bookPageTo !== lesson.book.bookPageFrom
+        ? '–' + lesson.book.bookPageTo : '')
+    : null
+
+  return (
+    <li className="space-y-3 px-4 py-3">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className="text-xs tabular-nums text-muted-foreground">
+          {lesson.periodNo ? lesson.periodNo + '-р цаг' : 'Цаг заагаагүй'}
+          {lesson.startsAt ? ' · ' + lesson.startsAt : ''}
+        </span>
+        <span className="text-sm font-semibold">{lesson.subjectName}</span>
+        {lesson.estimatedMinutes ? (
+          <span className="text-xs text-muted-foreground">{lesson.estimatedMinutes} мин</span>
+        ) : null}
+      </div>
+
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="min-w-0 flex-1 space-y-0.5 sm:max-w-sm">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Сэдэв
+          </p>
+          <select
+            className={NATIVE_SELECT}
+            aria-label={lesson.subjectName + ' — өнөөдрийн сэдэв'}
+            disabled={saving || !editable}
+            value={draft.lessonId}
+            onChange={(event) => setDraft({ ...draft, lessonId: event.target.value })}
+          >
+            <option value="">Сэдэв сонгох</option>
+            {(lessons ?? []).map((row) => (
+              <option key={row.id} value={String(row.id)}>
+                {row.skillName}{row.chapterTitle ? ' · ' + row.chapterTitle : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Disabled where no book is linked to the section: a page number
+            that refers to nothing would be stored and never shown to
+            anybody. */}
+        <div className="space-y-0.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Хуудас{printed ? ' · номд ' + printed : lesson.book ? '' : ' · ном алга'}
+          </p>
+          <div className="flex items-center gap-1.5">
+            <input
+              type="number" min={1} inputMode="numeric"
+              className={cn(NATIVE_INPUT, 'w-20')}
+              aria-label="Хуудас — эхлэл"
+              disabled={saving || !editable || !lesson.book}
+              value={draft.pageFrom}
+              onChange={(event) => setDraft({ ...draft, pageFrom: event.target.value })}
+            />
+            <span className="text-xs text-muted-foreground">&#8211;</span>
+            <input
+              type="number" min={1} inputMode="numeric"
+              className={cn(NATIVE_INPUT, 'w-20')}
+              aria-label="Хуудас — төгсгөл"
+              disabled={saving || !editable || !lesson.book}
+              value={draft.pageTo}
+              onChange={(event) => setDraft({ ...draft, pageTo: event.target.value })}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-3xl space-y-0.5">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Тайлбар
+        </p>
+        {editable ? (
+          <input
+            type="text"
+            className={NATIVE_INPUT}
+            placeholder="Өнөөдрийн заавар — сурагч харна"
+            aria-label="Өнөөдрийн заавар"
+            maxLength={2000}
+            disabled={saving}
+            value={draft.note}
+            onChange={(event) => setDraft({ ...draft, note: event.target.value })}
+          />
+        ) : (
+          <p className="text-sm">{lesson.note || '—'}</p>
+        )}
+      </div>
+
+      {editable ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" size="sm" disabled={saving || !dirty} onClick={save}>
+            {saving ? 'Хадгалж байна…' : 'Хадгалах'}
+          </Button>
+          {/* Said once, and only after something was actually written. */}
+          {!dirty && saved ? (
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Check className="h-3.5 w-3.5 text-success" />
+              Хадгалагдлаа
+            </span>
+          ) : null}
+          {error ? (
+            <span role="alert" className="text-xs text-destructive">
+              {error?.data?.error ?? 'Хадгалж чадсангүй.'}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
+      {lesson.lessonId === null ? (
+        <p className="text-xs text-muted-foreground">
+          Сэдэв сонгоогүй тул сурагчид энэ цагт нээх материалгүй байна.
+        </p>
+      ) : (
+        // Exactly what the class is served, in the order they are served it.
+        <div className="space-y-3 border-l-2 border-primary pl-3">
+          <div>
+            <p className="text-sm font-medium">{lesson.skillName}</p>
+            {lesson.learningGoal ? (
+              <p className="text-xs text-muted-foreground">{lesson.learningGoal}</p>
+            ) : null}
+          </div>
+          {lesson.book ? (
+            <BookViewer
+              book={{
+                materialId: lesson.book.materialId,
+                title: lesson.book.title,
+                chapterTitle: null,
+                pageFrom: lesson.book.pageFrom,
+                pageTo: lesson.book.pageTo,
+                filePage: lesson.book.filePage,
+                fileUrl: lesson.book.fileUrl,
+              }}
+            />
+          ) : null}
+          <Block title="Сануулах" body={lesson.remember} />
+          <Block title="Жишээ" body={lesson.workedExample} />
+          <Block title="Хамтдаа" body={lesson.guidedPractice} />
+          <Block title="Бие даан хийх" body={lesson.independentPractice} />
+          <Block title="Сурагчид хэлэх" body={lesson.studentMessage} />
+        </div>
+      )}
+    </li>
+  )
+}
+
+/** One child, and how they answered - opened one at a time. */
+function StudentRow({ student }: { student: ClassDayStudent }) {
+  const [open, setOpen] = useState(false)
+  const answered = student.attempts.length > 0
+  const score = student.attempts.reduce((sum, row) => sum + row.score, 0)
+  const outOf = student.attempts.reduce((sum, row) => sum + row.maxScore, 0)
+
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={() => answered && setOpen(!open)}
+        aria-expanded={answered ? open : undefined}
+        disabled={!answered}
+        className={cn(
+          'flex w-full items-center gap-3 px-4 py-2 text-left transition-colors',
+          answered && 'hover:bg-sidebar-active/60',
+        )}
+      >
+        <span className="min-w-0 flex-1 truncate text-sm">
+          {student.studentName}
+          <span className="ml-2 text-xs text-muted-foreground">{student.studentCode}</span>
+        </span>
+
+        {answered ? (
+          <>
+            <span className="shrink-0 text-sm font-semibold tabular-nums">{score}/{outOf}</span>
+            <span className="w-14 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+              {TIME.format(new Date(student.attempts[0]!.submittedAt))}
+            </span>
+            {open ? (
+              <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+            )}
+          </>
+        ) : (
+          <span className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="h-1.5 w-1.5 rounded-full bg-pending" />
+            Хариулаагүй
+          </span>
+        )}
+      </button>
+
+      {open ? (
+        <div className="space-y-3 border-t border-border bg-muted/30 px-4 py-3">
+          {student.attempts.map((attempt) => (
+            <div key={attempt.attemptId} className="space-y-1.5">
+              <p className="text-xs font-semibold">
+                {attempt.skillName ?? attempt.lessonCode}
+                <span className="ml-2 font-normal text-muted-foreground">
+                  {attempt.score}/{attempt.maxScore}
+                </span>
+              </p>
+              <ul className="space-y-1">
+                {attempt.answers.map((answer) => (
+                  <li key={answer.questionId} className="flex items-start gap-2 text-xs">
+                    <span className="w-4 shrink-0 pt-0.5">
+                      {answer.correct ? (
+                        <Check className="h-3.5 w-3.5 text-success" />
+                      ) : (
+                        <X className="h-3.5 w-3.5 text-destructive" />
+                      )}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block">{answer.prompt}</span>
+                      <span className="block text-muted-foreground">
+                        {answer.chosenText || 'Хариулаагүй'}
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </li>
+  )
+}
+
+/**
+ * One class, one day, from both ends.
+ *
+ * The board's two buttons used to open two strips underneath a row: a lesson
+ * name with no lesson in it, and a list of the children who had not answered.
+ * Neither could be acted on where it stood. They arrive here instead - the
+ * material as the class receives it, editable, and the whole register with
+ * every answer behind each name.
+ */
+export default function TeacherClassDay() {
+  const { user } = useSession()
+  const [, params] = useRoute('/teacher/class/:classId')
+  const search = new URLSearchParams(useSearch())
+  const classId = Number(params?.classId ?? 0)
+  const on = search.get('on')
+  const rawSubject = search.get('subject')
+  const subjectId = rawSubject === null || rawSubject === '' ? null : Number(rawSubject)
+  const [view, setView] = useState<'lesson' | 'students'>(
+    search.get('view') === 'students' ? 'students' : 'lesson',
+  )
+
+  const queryClient = useQueryClient()
+  const query = { classId, ...subjectParam(subjectId), ...(on ? { on } : {}) }
+  const { data, isLoading, isError, error } = useGetClassDay(query)
+
+  const refresh = () => queryClient.invalidateQueries({
+    predicate: (entry) => typeof entry.queryKey[0] === 'string' && (
+      entry.queryKey[0].includes('/teacher/class-day')
+      || entry.queryKey[0].includes('/teacher/dashboard')
+      || entry.queryKey[0].includes('/teacher/schedule')
+      || entry.queryKey[0].includes('/student/today')
+    ),
+  })
+
+  const back = (
+    <Link href="/teacher" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+      <ArrowLeft className="h-4 w-4" />
+      Хяналтын самбар
+    </Link>
+  )
+
+  if (isLoading) return <Skeleton className="h-96 w-full" />
+  if (isError || !data) {
+    return (
+      <div className="space-y-3">
+        {back}
+        <p role="alert" className="text-sm text-destructive">
+          {error?.data?.error ?? 'Ангийн өдрийг уншиж чадсангүй.'}
+        </p>
+      </div>
+    )
+  }
+
+  const answered = data.students.filter((student) => student.attempts.length > 0).length
+
+  return (
+    <div className="space-y-3">
+      {back}
+
+      {/* One row: what is being looked at on the left, the switch on the
+          right. The week does it this way and every screen that offers a
+          choice of view now does the same. */}
+      <header className="flex items-center gap-2">
+        <span className="flex min-w-0 items-baseline gap-x-3">
+          <h1 className="truncate text-lg font-bold">{data.className}</h1>
+          <span className="shrink-0 text-xs text-muted-foreground">{data.date}</span>
+        </span>
+
+        <span className="ml-auto flex shrink-0" role="group" aria-label="Юу харах">
+          <Button
+            type="button" size="sm" variant={view === 'lesson' ? 'default' : 'outline'}
+            aria-pressed={view === 'lesson'} onClick={() => setView('lesson')}
+          >
+            <ClipboardList className="h-3.5 w-3.5" />
+            Хичээл
+          </Button>
+          <Button
+            type="button" size="sm" variant={view === 'students' ? 'default' : 'outline'}
+            aria-pressed={view === 'students'} onClick={() => setView('students')}
+            className="border-l border-border"
+          >
+            <Users className="h-3.5 w-3.5" />
+            Сурагчид · {answered}/{data.students.length}
+          </Button>
+        </span>
+      </header>
+
+      {view === 'lesson' ? (
+        data.lessons.length === 0 ? (
+          <p className="rounded-[2px] border border-border bg-card p-6 text-sm text-muted-foreground">
+            Энэ өдөр хуваарьт цаг алга байна.
+          </p>
+        ) : (
+          <ul className="divide-y divide-border rounded-[2px] border border-border bg-card">
+            {data.lessons.map((lesson, index) => (
+              <LessonCard
+                key={`${lesson.timetableSlotId ?? 'x'}:${lesson.subjectId}:${index}`}
+                classId={data.classId}
+                date={data.date}
+                lesson={lesson}
+                editable={data.date >= schoolToday() || hasRole(user, 'ADMIN')}
+                onSaved={refresh}
+              />
+            ))}
+          </ul>
+        )
+      ) : data.students.length === 0 ? (
+        <p className="rounded-[2px] border border-border bg-card p-6 text-sm text-muted-foreground">
+          Энэ ангид бүртгэлтэй сурагч алга байна.
+        </p>
+      ) : (
+        <ul className="divide-y divide-border rounded-[2px] border border-border bg-card">
+          {data.students.map((student) => (
+            <StudentRow key={student.studentId} student={student} />
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}

@@ -8,6 +8,40 @@
 import * as zod from 'zod';
 
 
+
+
+
+export const GetTimetableStudentsParams = zod.object({
+  "slotId": zod.coerce.number().int().min(1)
+})
+
+export const GetTimetableStudentsResponse = zod.object({
+  "assigned": zod.boolean(),
+  "students": zod.array(zod.object({
+  "id": zod.number().int(),
+  "name": zod.string(),
+  "selected": zod.boolean()
+}))
+})
+
+
+
+
+
+export const SetTimetableStudentsParams = zod.object({
+  "slotId": zod.coerce.number().int().min(1)
+})
+
+
+
+
+export const SetTimetableStudentsBody = zod.object({
+  "studentIds": zod.array(zod.number().int().min(1))
+})
+
+export const SetTimetableStudentsResponse = zod.void()
+
+
 /**
  * @summary Read-only local database preview
  */
@@ -305,6 +339,37 @@ export const GetStudentRecordResponse = zod.object({
 
 
 /**
+ * @summary The student's own generated study plan, week by week
+ */
+export const GetStudentStudyPlanResponseItem = zod.object({
+  "subjectCode": zod.string(),
+  "weekNo": zod.number().int(),
+  "days": zod.array(zod.object({
+  "weekdayNo": zod.number().int(),
+  "focus": zod.string().nullable(),
+  "sourceLabel": zod.string().nullable(),
+  "unitFocus": zod.string().nullable(),
+  "pages": zod.string().nullable(),
+  "task": zod.string().nullable(),
+  "teacherCheck": zod.string().nullable(),
+  "target": zod.string().nullable(),
+  "score": zod.number().nullable(),
+  "status": zod.string()
+}).describe('One school day of the plan. weekdayNo is 1 for Monday. score and status are how it went: almost every day is NOT ASSESSED with no score, which is the honest state while the plan is written and the term untaught - a zero in place of a missing mark would be an invention.')),
+  "skills": zod.array(zod.object({
+  "domain": zod.string(),
+  "sourceLabel": zod.string().nullable(),
+  "unitFocus": zod.string().nullable(),
+  "pages": zod.string().nullable(),
+  "task": zod.string().nullable(),
+  "masteryTarget": zod.string().nullable(),
+  "status": zod.string()
+}).describe('What one week is for in one skill, and what confirms it.'))
+}).describe('One week of the plan, in both of its shapes: the five days a child works through, and the six skills the week is aimed at. They describe the same week and answer different questions - a child works from the days, a parent reads the skills.')
+export const GetStudentStudyPlanResponse = zod.array(GetStudentStudyPlanResponseItem)
+
+
+/**
  * @summary Where this student was placed, and the plan that level prescribes
  */
 export const GetStudentPlacementsResponseItem = zod.object({
@@ -330,6 +395,108 @@ export const GetStudentPlacementsResponseItem = zod.object({
 }).describe('One skill\'s worth of work at a level: the book or task bank, the unit, what the child does, and how a teacher confirms it. sourceLabel is text rather than a link because most of these titles are not in the library yet; materialId is filled in only for the ones that are.'))
 }).describe('The level a placement test put this child at, and what follows from it. provisional is true while the level rests on the objective half of the paper alone - the writing and speaking tasks are judged by a teacher and most children have not had them marked, so the level is a reading rather than a confirmed result.')
 export const GetStudentPlacementsResponse = zod.array(GetStudentPlacementsResponseItem)
+
+
+/**
+ * @summary Classes whose writing and speaking tasks this teacher may judge
+ */
+export const GetMarkableClassesResponseItem = zod.object({
+  "classId": zod.string(),
+  "className": zod.string(),
+  "gradeLevel": zod.number().int(),
+  "students": zod.number().int()
+})
+export const GetMarkableClassesResponse = zod.array(GetMarkableClassesResponseItem)
+
+
+/**
+ * @summary One class's children with the tasks their own level asks of them
+ */
+export const GetProductiveMarkSheetParams = zod.object({
+  "classId": zod.coerce.string()
+})
+
+export const GetProductiveMarkSheetResponse = zod.object({
+  "classId": zod.string(),
+  "className": zod.string(),
+  "students": zod.array(zod.object({
+  "studentId": zod.string(),
+  "studentCode": zod.string(),
+  "studentName": zod.string(),
+  "levelCode": zod.string(),
+  "levelName": zod.string(),
+  "objectiveScore": zod.number().nullable(),
+  "tasks": zod.array(zod.object({
+  "itemId": zod.string(),
+  "itemCode": zod.string(),
+  "domain": zod.string(),
+  "prompt": zod.string(),
+  "rubric": zod.string().nullable(),
+  "maxScore": zod.number(),
+  "score": zod.number().nullable(),
+  "comment": zod.string().nullable(),
+  "ratedByName": zod.string().nullable(),
+  "ratedAt": zod.string().nullable()
+}).describe('One writing or speaking task at a child\'s level, with the can-do statement a teacher judges it against and whatever they have already said. score null means nobody has looked yet.'))
+}).describe('A placed child and the tasks their own level asks of them - not the class\'s level. Two children in one class placed at A2 and C1 are asked different things, which is the point of having placed them.'))
+})
+
+
+/**
+ * @summary Record one judgement, and re-derive whether the level is confirmed
+ */
+export const SaveProductiveRatingBody = zod.object({
+  "classId": zod.string(),
+  "studentId": zod.string(),
+  "itemId": zod.string(),
+  "score": zod.number(),
+  "comment": zod.string().nullish()
+})
+
+export const SaveProductiveRatingResponse = zod.object({
+  "classId": zod.string(),
+  "className": zod.string(),
+  "students": zod.array(zod.object({
+  "studentId": zod.string(),
+  "studentCode": zod.string(),
+  "studentName": zod.string(),
+  "levelCode": zod.string(),
+  "levelName": zod.string(),
+  "objectiveScore": zod.number().nullable(),
+  "tasks": zod.array(zod.object({
+  "itemId": zod.string(),
+  "itemCode": zod.string(),
+  "domain": zod.string(),
+  "prompt": zod.string(),
+  "rubric": zod.string().nullable(),
+  "maxScore": zod.number(),
+  "score": zod.number().nullable(),
+  "comment": zod.string().nullable(),
+  "ratedByName": zod.string().nullable(),
+  "ratedAt": zod.string().nullable()
+}).describe('One writing or speaking task at a child\'s level, with the can-do statement a teacher judges it against and whatever they have already said. score null means nobody has looked yet.'))
+}).describe('A placed child and the tasks their own level asks of them - not the class\'s level. Two children in one class placed at A2 and C1 are asked different things, which is the point of having placed them.'))
+})
+
+
+/**
+ * @summary The signed-in teacher's own week, every class they take
+ */
+export const GetTeacherWeekResponseItem = zod.object({
+  "slotId": zod.string(),
+  "weekdayNo": zod.number().int(),
+  "periodNo": zod.number().int(),
+  "startsAt": zod.string().nullable(),
+  "endsAt": zod.string().nullable(),
+  "classId": zod.number().int(),
+  "className": zod.string(),
+  "gradeLevel": zod.number().int(),
+  "subjectId": zod.number().int(),
+  "subject": zod.string(),
+  "groupLabel": zod.string().nullable(),
+  "teacherName": zod.string().nullable()
+}).describe('One period of a teacher\'s week. Rows are times and the cell names the class, which is the question a teacher asks of a week - the per-class view answers "what does 9a do", which the class list already answers.')
+export const GetTeacherWeekResponse = zod.array(GetTeacherWeekResponseItem)
 
 
 /**
@@ -684,9 +851,15 @@ export const GetStudentTodayResponse = zod.object({
   "date": zod.string().regex(getStudentTodayResponseDateRegExp).describe('Calendar date, YYYY-MM-DD. Not an instant, so not format:date.'),
   "dateLabel": zod.string(),
   "className": zod.string(),
-  "subjects": zod.array(zod.object({
+  "slots": zod.array(zod.object({
+  "timetableSlotId": zod.number().int().nullish(),
+  "selectionPending": zod.boolean().optional().describe('Group membership has not yet been assigned by staff.'),
   "subjectCode": zod.string(),
   "subjectName": zod.string(),
+  "startsAt": zod.string().nullable().describe('Bell time, HH:MM. Null where the school has no period list.'),
+  "endsAt": zod.string().nullable(),
+  "teacherName": zod.string().nullable().describe('Who takes this period, from the school\'s own timetable.'),
+  "groupLabel": zod.string().nullable().describe('Which half of a split class this slot is for, in the school\'s own words ("6а-1"). Null for a lesson the whole class attends.\n'),
   "lesson": zod.union([zod.object({
   "id": zod.number().int(),
   "lessonCode": zod.string(),
@@ -709,7 +882,7 @@ export const GetStudentTodayResponse = zod.object({
   "filePage": zod.number().int().nullable().describe('Which page of the file to open at. Not the same as pageFrom: a scanned book carries covers and front matter the printed numbering does not count, so printed page 3 can be file page 9. The student is shown the printed numbers and the viewer opens the file page.\n'),
   "fileUrl": zod.string().nullable()
 }).describe('Where in the book this lesson sits.'),zod.null()])
-}),zod.null()]).describe('What the class is scheduled to study in this subject today.'),
+}),zod.null()]).describe('What the class is scheduled to study in this subject today, or null where nobody has written the lesson yet - which is most periods. A timetable slot is owed to a child whether or not its content exists.\n'),
   "extra": zod.union([zod.object({
   "lesson": zod.object({
   "id": zod.number().int(),
@@ -738,7 +911,7 @@ export const GetStudentTodayResponse = zod.object({
   "reason": zod.string().nullable()
 }),zod.null()]).describe('Work assigned to this student personally in this subject. Where the class works through one book it is remediation on top; where the subject places students by level it is the whole of the day\'s work.\n'),
   "periodNo": zod.number().int().nullable().describe('Which slot in the day the class lesson sits in, matching a row of /school/periods. Null where the school has supplied no timetable, or where the day\'s only work is the personal kind, which answers to no bell.\n')
-})).describe('One entry per subject the student has work in today. A child studies several subjects a day, so this is a list rather than a single lesson.\n'),
+})).describe('One entry per period on the class\'s timetable, in bell order. Not one per subject: Mongolian in the first period and again in the second is two lessons, and a day with the same subject twice used to come back as one. A split class puts two entries on one period, which is what a split is.\n'),
   "notice": zod.string()
 })
 
@@ -760,9 +933,15 @@ export const GetStudentScheduleResponse = zod.object({
   "date": zod.string().regex(getStudentScheduleResponseDateRegExp).describe('Calendar date, YYYY-MM-DD. Not an instant, so not format:date.'),
   "dateLabel": zod.string(),
   "className": zod.string(),
-  "subjects": zod.array(zod.object({
+  "slots": zod.array(zod.object({
+  "timetableSlotId": zod.number().int().nullish(),
+  "selectionPending": zod.boolean().optional().describe('Group membership has not yet been assigned by staff.'),
   "subjectCode": zod.string(),
   "subjectName": zod.string(),
+  "startsAt": zod.string().nullable().describe('Bell time, HH:MM. Null where the school has no period list.'),
+  "endsAt": zod.string().nullable(),
+  "teacherName": zod.string().nullable().describe('Who takes this period, from the school\'s own timetable.'),
+  "groupLabel": zod.string().nullable().describe('Which half of a split class this slot is for, in the school\'s own words ("6а-1"). Null for a lesson the whole class attends.\n'),
   "lesson": zod.union([zod.object({
   "id": zod.number().int(),
   "lessonCode": zod.string(),
@@ -785,7 +964,7 @@ export const GetStudentScheduleResponse = zod.object({
   "filePage": zod.number().int().nullable().describe('Which page of the file to open at. Not the same as pageFrom: a scanned book carries covers and front matter the printed numbering does not count, so printed page 3 can be file page 9. The student is shown the printed numbers and the viewer opens the file page.\n'),
   "fileUrl": zod.string().nullable()
 }).describe('Where in the book this lesson sits.'),zod.null()])
-}),zod.null()]).describe('What the class is scheduled to study in this subject today.'),
+}),zod.null()]).describe('What the class is scheduled to study in this subject today, or null where nobody has written the lesson yet - which is most periods. A timetable slot is owed to a child whether or not its content exists.\n'),
   "extra": zod.union([zod.object({
   "lesson": zod.object({
   "id": zod.number().int(),
@@ -814,7 +993,7 @@ export const GetStudentScheduleResponse = zod.object({
   "reason": zod.string().nullable()
 }),zod.null()]).describe('Work assigned to this student personally in this subject. Where the class works through one book it is remediation on top; where the subject places students by level it is the whole of the day\'s work.\n'),
   "periodNo": zod.number().int().nullable().describe('Which slot in the day the class lesson sits in, matching a row of /school/periods. Null where the school has supplied no timetable, or where the day\'s only work is the personal kind, which answers to no bell.\n')
-})).describe('One entry per subject the student has work in today. A child studies several subjects a day, so this is a list rather than a single lesson.\n'),
+})).describe('One entry per period on the class\'s timetable, in bell order. Not one per subject: Mongolian in the first period and again in the second is two lessons, and a day with the same subject twice used to come back as one. A split class puts two entries on one period, which is what a split is.\n'),
   "notice": zod.string()
 })
 
@@ -833,6 +1012,7 @@ export const GetTeacherScheduleQueryParams = zod.object({
   "to": zod.coerce.string().regex(getTeacherScheduleQueryToRegExp).optional().describe('Inclusive end date (YYYY-MM-DD). Defaults to fourteen days ahead.')
 })
 
+
 export const getTeacherScheduleResponseDaysItemScheduledOnRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
 
 
@@ -842,6 +1022,11 @@ export const GetTeacherScheduleResponse = zod.object({
   "gradeLevel": zod.number().int(),
   "stage": zod.enum(['PRIMARY', 'SECONDARY']).describe('Derived from the class\'s grade, not stored on the teacher: the two workflows differ per class, and one teacher may hold both.\n'),
   "days": zod.array(zod.object({
+  "periodNo": zod.number().int().nullish(),
+  "groupLabel": zod.string().nullish(),
+  "startsAt": zod.string().nullish(),
+  "teacherName": zod.string().nullish(),
+  "timetableSlotId": zod.number().int().min(1).nullish(),
   "scheduledOn": zod.string().regex(getTeacherScheduleResponseDaysItemScheduledOnRegExp).describe('Calendar date, YYYY-MM-DD.'),
   "isToday": zod.boolean(),
   "subjectId": zod.number().int().nullable().describe('The subject this row\'s lesson belongs to, null on a day nothing is scheduled for. A day appears once per subject taught that day, so this is what tells two rows of the same date apart.\n'),
@@ -954,6 +1139,98 @@ export const GetTeacherQuizAttemptsResponse = zod.object({
   "chosenText": zod.string(),
   "correct": zod.boolean()
 }).describe('What the teacher sees afterwards, with the text copied in so it still reads after an edit.'))
+}))
+})
+
+
+/**
+ * The two halves of a teacher's morning in one answer. The lessons are the same content the class is served, rather than a teacher's-eye summary that can drift from it, and the students are the whole register: a child who answered nothing is present with no attempts, because who has not done the work is the question worth asking.
+ * @summary One class on one day - what is set, and who has done it
+ */
+export const GetClassDayQueryParams = zod.object({
+  "classId": zod.coerce.number().int(),
+  "subjectId": zod.coerce.number().int().optional().describe('One subject the teacher holds here; omitted means all of them.'),
+  "on": zod.date().optional().describe('A school date. Omitted means today in Ulaanbaatar.')
+})
+
+export const GetClassDayResponse = zod.object({
+  "classId": zod.number().int(),
+  "className": zod.string(),
+  "date": zod.string(),
+  "lessons": zod.array(zod.object({
+  "timetableSlotId": zod.number().int().nullable(),
+  "periodNo": zod.number().int().nullable(),
+  "startsAt": zod.string().nullable(),
+  "note": zod.string().nullable().describe('The teacher\'s own line for the day, which the class reads.'),
+  "subjectId": zod.number().int(),
+  "subjectName": zod.string(),
+  "lessonId": zod.number().int().nullable(),
+  "lessonCode": zod.string().nullable(),
+  "skillName": zod.string().nullable(),
+  "learningGoal": zod.string().nullable(),
+  "remember": zod.string().nullable(),
+  "workedExample": zod.string().nullable(),
+  "guidedPractice": zod.string().nullable(),
+  "independentPractice": zod.string().nullable(),
+  "studentMessage": zod.string().nullable(),
+  "estimatedMinutes": zod.number().int().nullable(),
+  "book": zod.union([zod.object({
+  "materialId": zod.number().int(),
+  "title": zod.string().nullable(),
+  "pageFrom": zod.number().int().nullable().describe('The range in force - the teacher\'s, where they set one.'),
+  "pageTo": zod.number().int().nullable(),
+  "bookPageFrom": zod.number().int().nullable().describe('What the book prints for this section, whatever the class did.'),
+  "bookPageTo": zod.number().int().nullable(),
+  "filePage": zod.number().int().nullable(),
+  "fileUrl": zod.string().nullable()
+}),zod.null()])
+})),
+  "students": zod.array(zod.object({
+  "studentId": zod.number().int(),
+  "studentName": zod.string(),
+  "studentCode": zod.string(),
+  "attempts": zod.array(zod.object({
+  "attemptId": zod.number().int(),
+  "lessonCode": zod.string().nullable(),
+  "skillName": zod.string().nullable(),
+  "score": zod.number().int(),
+  "maxScore": zod.number().int(),
+  "submittedAt": zod.string(),
+  "answers": zod.array(zod.object({
+  "questionId": zod.string(),
+  "prompt": zod.string(),
+  "chosenText": zod.string(),
+  "correct": zod.boolean()
+}))
+}))
+}))
+})
+
+
+/**
+ * What the class is actually asked, for the person who has to judge whether the asking is any good. The student's copy of this leaves the answers on the server; the teacher's carries them, because a question cannot be reviewed without knowing which option is meant to be right. Scoped through the class, which is what establishes that this member of staff teaches the subject the questions belong to.
+ * @summary The questions behind a lesson's quiz, with the key
+ */
+export const GetTeacherQuizPaperQueryParams = zod.object({
+  "classId": zod.coerce.number().int(),
+  "lessonId": zod.coerce.number().int()
+})
+
+export const GetTeacherQuizPaperResponse = zod.object({
+  "lessonId": zod.number().int(),
+  "lessonCode": zod.string(),
+  "skillName": zod.string(),
+  "subjectName": zod.string(),
+  "kind": zod.enum(['LESSON', 'UNIT', 'MONTHLY', 'DIAGNOSTIC']),
+  "questions": zod.array(zod.object({
+  "itemId": zod.number().int(),
+  "prompt": zod.string(),
+  "explanation": zod.string().nullable().describe('The marking note, where the question carries one.'),
+  "options": zod.array(zod.object({
+  "optionId": zod.number().int(),
+  "text": zod.string(),
+  "isCorrect": zod.boolean()
+}))
 }))
 })
 
@@ -1118,17 +1395,23 @@ export const GenerateScheduleResponse = zod.object({
  * The teacher's correction surface. A null lessonId clears the day, which is how a holiday or a school event is recorded. Weekend lessons may only be assigned, changed, or cleared by an administrator.
  * @summary Set, replace or clear one day's lesson
  */
+
 export const setScheduleDayBodyScheduledOnRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
 export const setScheduleDayBodyNoteMax = 2000;
 
 
 
+
+
 export const SetScheduleDayBody = zod.object({
+  "timetableSlotId": zod.number().int().min(1).nullish(),
   "classId": zod.number().int(),
   "subjectId": zod.number().int().nullish().describe('Which subject\'s day this is. Setting a lesson takes the subject from the lesson itself, so this only matters when clearing: without it, emptying Tuesday in the maths timetable would also empty Tuesday\'s physics. Null clears every subject the teacher holds in the class.\n'),
   "scheduledOn": zod.string().regex(setScheduleDayBodyScheduledOnRegExp),
   "lessonId": zod.number().int().nullable().describe('null clears the day.'),
-  "note": zod.string().max(setScheduleDayBodyNoteMax).nullish().describe('What the teacher wants the class to know about this day - which pages to read, which exercises to do, what to watch out for. The student sees it. Leave the field out to keep whatever note is already there; send null or an empty string to remove it. Clearing the day removes the note with it.\n')
+  "note": zod.string().max(setScheduleDayBodyNoteMax).nullish().describe('What the teacher wants the class to know about this day - which pages to read, which exercises to do, what to watch out for. The student sees it. Leave the field out to keep whatever note is already there; send null or an empty string to remove it. Clearing the day removes the note with it.\n'),
+  "pageFrom": zod.number().int().min(1).nullish().describe('The pages this class actually covered, when they are not the ones the book prints for the section. Leave both out to keep whatever is recorded; send null to fall back to the book\'s own range. A class that went further than the section is the reason this exists, and a teacher setting it changes nothing for any other class.\n'),
+  "pageTo": zod.number().int().min(1).nullish()
 })
 
 export const SetScheduleDayResponse = zod.void()

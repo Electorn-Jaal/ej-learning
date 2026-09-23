@@ -131,3 +131,42 @@ export async function studentRecord(user: AuthenticatedUser) {
   if (!record) throw new HttpError(404, 'Идэвхтэй сурагч олдсонгүй.', 'STUDENT_NOT_FOUND');
   return { ...record, guardians };
 }
+
+/**
+ * The child's own four-week plan, grouped into weeks.
+ *
+ * Two views of the same four weeks, because they answer different questions.
+ * The days are what a child does on Tuesday; the skills are what the week is
+ * for. A parent reads the second and a child works from the first.
+ *
+ * score and status come back untouched. Almost every day is NOT ASSESSED,
+ * which is the truth - the plan is written and the term has not been taught -
+ * and a screen that filled the gap with a zero would be inventing a mark.
+ */
+export async function studentStudyPlan(user: AuthenticatedUser) {
+  const student = await currentStudent(user);
+  const [days, skills] = await Promise.all([
+    repository.studyPlanDays(student.id),
+    repository.studyPlanWeeks(student.id),
+  ]);
+
+  const weeks = new Map<string, {
+    subjectCode: string; weekNo: number;
+    days: typeof days; skills: typeof skills;
+  }>();
+  const weekFor = (subjectCode: string, weekNo: number) => {
+    const key = `${subjectCode}|${weekNo}`;
+    const found = weeks.get(key);
+    if (found) return found;
+    const created = { subjectCode, weekNo, days: [] as typeof days, skills: [] as typeof skills };
+    weeks.set(key, created);
+    return created;
+  };
+  for (const day of days) weekFor(day.subjectCode, day.weekNo).days.push(day);
+  for (const skill of skills) weekFor(skill.subjectCode, skill.weekNo).skills.push(skill);
+
+  return [...weeks.values()].sort(
+    (left, right) =>
+      left.subjectCode.localeCompare(right.subjectCode) || left.weekNo - right.weekNo,
+  );
+}

@@ -20,10 +20,25 @@ export const subjectOutline = (studentId: number, subjectCode: string) =>
         WHERE e.student_id = $1::bigint AND e.is_active
         LIMIT 1
      ), here AS (
-       SELECT n.sequence_no
-         FROM learning.class_topics ct
-         JOIN mine ON mine.class_id = ct.class_id AND mine.subject_id = ct.subject_id
-         JOIN content.source_outline_nodes n ON n.id = ct.source_outline_node_id
+       -- Where the class is, read off the calendar rather than off a pointer
+       -- somebody maintains by hand: the newest section the timetable has
+       -- actually put in front of them. learning.class_topics survives as the
+       -- fallback for a class whose days carry no content yet.
+       SELECT sequence_no FROM (
+         SELECT n.sequence_no, 1 AS rank
+           FROM learning.class_schedule cs
+           JOIN mine ON mine.class_id = cs.class_id AND mine.subject_id = cs.subject_id
+           JOIN learning.daily_lessons dl ON dl.id = cs.daily_lesson_id
+           JOIN content.source_outline_nodes n ON n.id = dl.source_outline_node_id
+          WHERE cs.scheduled_on <= (now() AT TIME ZONE 'Asia/Ulaanbaatar')::date
+          ORDER BY cs.scheduled_on DESC, n.sequence_no DESC
+          LIMIT 1
+         UNION ALL
+         SELECT n.sequence_no, 2
+           FROM learning.class_topics ct
+           JOIN mine ON mine.class_id = ct.class_id AND mine.subject_id = ct.subject_id
+           JOIN content.source_outline_nodes n ON n.id = ct.source_outline_node_id
+       ) found ORDER BY rank LIMIT 1
      )
      SELECT n.id::text AS "nodeId", n.printed_number AS "printedNumber", n.title,
        n.page_from::int AS "pageFrom", n.page_to::int AS "pageTo",

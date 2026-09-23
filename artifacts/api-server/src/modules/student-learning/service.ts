@@ -37,6 +37,21 @@ function toLessonView(row: repository.LessonRow) {
   };
 }
 
+/**
+ * A child's day: every period on their class's timetable, in bell order.
+ *
+ * One entry per slot, not per subject. Монгол хэл in the first period and
+ * again in the second is two lessons and used to be collapsed into one, which
+ * told a child they had half the day they really had.
+ *
+ * A slot with no prepared content still appears, carrying its subject, time
+ * and teacher. The school has a full timetable and almost no lesson content,
+ * so hiding the empty ones would hide the timetable.
+ *
+ * Personal work is attached to the first slot of its subject, and a subject
+ * with personal work but nothing timetabled gets a slot of its own with no
+ * period - it answers to no bell.
+ */
 export async function studentToday(user: AuthenticatedUser, date = todayInUlaanbaatar()) {
   if (user.studentId === null) {
     throw forbidden(
@@ -45,57 +60,65 @@ export async function studentToday(user: AuthenticatedUser, date = todayInUlaanb
     );
   }
 
-  const [[enrolment], classRows, assignments] = await Promise.all([
+  const [[enrolment], timetable, assignments] = await Promise.all([
     repository.studentClass(user.studentId),
     repository.lessonsForDay(user.studentId, date),
     repository.assignmentsForDay(user.studentId, date),
   ]);
-  const bySubject = new Map<
-    string,
-    {
-      subjectCode: string;
-      subjectName: string;
-      periodNo: number | null;
-      lesson: ReturnType<typeof toLessonView> | null;
-      extra: {
-        lesson: ReturnType<typeof toLessonView>;
-        source: "AUTO" | "TEACHER";
-        reason: string | null;
-      } | null;
-    }
-  >();
 
-  const entryFor = (subjectCode: string, subjectName: string) => {
-    const existing = bySubject.get(subjectCode);
-    if (existing) return existing;
-    const created = { subjectCode, subjectName, periodNo: null, lesson: null, extra: null };
-    bySubject.set(subjectCode, created);
-    return created;
+  type Extra = {
+    lesson: ReturnType<typeof toLessonView>;
+    source: "AUTO" | "TEACHER";
+    reason: string | null;
   };
+  const slots = timetable.map((row) => ({
+    subjectCode: row.subjectCode,
+    subjectName: row.subjectName,
+    periodNo: row.periodNo,
+    startsAt: row.startsAt ?? null,
+    endsAt: row.endsAt ?? null,
+    teacherName: row.teacherName ?? null,
+    groupLabel: row.groupLabel ?? null,
+    selectionPending: row.selectionPending ?? false,
+    timetableSlotId: row.timetableSlotId ?? null,
+    // Null where nobody has written the lesson, which is most of them.
+    lesson: row.id === null ? null : toLessonView(row),
+    extra: null as Extra | null,
+  }));
 
-  for (const row of classRows) {
-    const entry = entryFor(row.subjectCode, row.subjectName);
-    entry.lesson = toLessonView(row);
-    entry.periodNo = row.periodNo;
-  }
   for (const assignment of assignments) {
-    entryFor(assignment.subjectCode, assignment.subjectName).extra = {
+    const extra: Extra = {
       lesson: toLessonView(assignment),
       source: assignment.source as "AUTO" | "TEACHER",
       reason: assignment.reason,
     };
+    const slot = slots.find((row) => row.subjectCode === assignment.subjectCode);
+    if (slot) {
+      slot.extra = extra;
+    } else {
+      slots.push({
+        subjectCode: assignment.subjectCode,
+        subjectName: assignment.subjectName,
+        periodNo: null,
+        startsAt: null,
+        endsAt: null,
+        teacherName: null,
+        groupLabel: null,
+        selectionPending: false,
+        timetableSlotId: null,
+        lesson: null,
+        extra,
+      });
+    }
   }
 
-  const subjects = [...bySubject.values()].sort((a, b) =>
-    a.subjectName.localeCompare(b.subjectName, "mn"),
-  );
   return {
     date,
     dateLabel: longDate(date),
     className: enrolment?.className ?? "",
-    subjects,
+    slots,
     notice:
-      subjects.length > 0
+      slots.length > 0
         ? "Хичээлээ дэвтэртээ гүйцэтгээд шалгах асуултад хариулна."
         : !enrolment
           ? "Та ангид бүртгэгдээгүй байна. Багштайгаа холбогдоно уу."

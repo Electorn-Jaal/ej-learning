@@ -3,7 +3,7 @@ import { useGetCurrentTerm } from "@workspace/api-client-react"
 import {
   LayoutDashboard, BookOpen, TrendingUp, User, Database, LogOut,
   CalendarDays, Sun, KeyRound, ClipboardCheck, Library, PenLine, Network, BarChart3,
-  BookMarked,
+  BookMarked, Bell,
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -36,7 +36,7 @@ const TEACHER_NAV = [
   { href: "/teacher/schedule", label: "Хуваарь", icon: CalendarDays },
   { href: "/teacher/results", label: "Шалгалт", icon: ClipboardCheck },
   { href: "/teacher/analytics", label: "Дүн шинжилгээ", icon: BarChart3 },
-  { href: "/teacher/class-topics", label: "Ангийн сэдэв", icon: BookMarked },
+  { href: "/teacher/productive", label: "Бичих, ярих дүгнэлт", icon: PenLine },
   { href: "/teacher/catalog", label: "Хичээлийн агуулга", icon: BookOpen },
 ]
 
@@ -104,6 +104,40 @@ const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Админ",
   TEACHER: "Багш",
   STUDENT: "Сурагч",
+}
+
+/**
+ * Мэдэгдэл: the box, with nothing in it.
+ *
+ * Deliberately empty. There is no notifications table, no writer and no
+ * endpoint, so anything printed here would be invented - which is what the
+ * hand-written list that used to sit on the child's day was, and why it came
+ * out. The box exists so both sides of the school have the one place a message
+ * will arrive in, and it says plainly that none has.
+ *
+ * It sits in the header rather than on a page because it belongs to the
+ * person, not to the screen they happen to be on, and the header is the one
+ * thing a teacher and a child share.
+ */
+function NotificationBox() {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label="Мэдэгдэл"
+          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-sidebar-active hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <Bell className="h-4 w-4" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-64">
+        <DropdownMenuLabel className="py-1 text-xs font-semibold">Мэдэгдэл</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <p className="px-2 py-3 text-xs text-muted-foreground">Мэдэгдэл алга байна.</p>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 }
 
 /**
@@ -330,6 +364,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <span className="hidden text-xs text-muted-foreground lg:block">
               {TODAY.format(new Date())}
             </span>
+            <NotificationBox />
             <AccountMenu
               name={user.displayName}
               roleLabel={roleLabel}

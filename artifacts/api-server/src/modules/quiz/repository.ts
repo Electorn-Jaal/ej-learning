@@ -102,7 +102,12 @@ export const lessonReachableByStudent = async (lessonId: number, studentId: numb
        WHERE dl.id = $2::bigint AND dl.status = 'APPROVED' AND (
          EXISTS (SELECT 1 FROM core.student_enrollments e
                  JOIN learning.class_schedule cs ON cs.class_id = e.class_id
-                 WHERE e.student_id = $1::bigint AND e.is_active AND cs.daily_lesson_id = dl.id)
+                 WHERE e.student_id = $1::bigint AND e.is_active AND cs.daily_lesson_id = dl.id
+                   AND NOT EXISTS (
+                     SELECT 1 FROM learning.timetable_slots ts
+                     WHERE ts.id = cs.timetable_slot_id AND ts.audience_assigned
+                       AND NOT EXISTS (SELECT 1 FROM learning.timetable_slot_students m
+                         WHERE m.timetable_slot_id = ts.id AND m.student_id = $1)))
          OR EXISTS (SELECT 1 FROM learning.student_assignments sa
                     WHERE sa.student_id = $1::bigint AND sa.daily_lesson_id = dl.id))
        LIMIT 1`,
@@ -111,11 +116,19 @@ export const lessonReachableByStudent = async (lessonId: number, studentId: numb
   ).length > 0;
 
 export const lessonHeader = (lessonId: number) =>
-  readRows<{ lessonCode: string; skillName: string; assessmentKind: string }>(
+  readRows<{
+    lessonCode: string;
+    skillName: string;
+    assessmentKind: string;
+    subjectId: number;
+    subjectName: string;
+  }>(
     `SELECT dl.lesson_code AS "lessonCode", sk.name_mn AS "skillName",
-       dl.assessment_kind::text AS "assessmentKind"
+       dl.assessment_kind::text AS "assessmentKind",
+       sk.subject_id::int AS "subjectId", sub.name_mn AS "subjectName"
      FROM learning.daily_lessons dl
      JOIN content.skills sk ON sk.id = dl.core_skill_id
+     JOIN core.subjects sub ON sub.id = sk.subject_id
      WHERE dl.id = $1::bigint`,
     [lessonId],
   );

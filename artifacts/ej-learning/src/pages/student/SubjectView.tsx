@@ -1,4 +1,4 @@
-import { Link, useRoute } from 'wouter'
+import { Link, useRoute, useSearch } from 'wouter'
 import { useGetStudentToday } from '@workspace/api-client-react'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { buttonVariants } from '@/components/ui/button'
@@ -6,6 +6,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { LessonBody } from '@/components/student/LessonBody'
 import { LessonQuiz } from '@/components/quiz/LessonQuiz'
+
+import { selectStudentSlot, studentSlotLink } from '@/lib/student-slot'
 
 const TITLE: Record<string, string> = {
   lesson: 'Хичээл',
@@ -29,13 +31,14 @@ export default function StudentSubjectView() {
   const [, params] = useRoute('/subject/:code/:view')
   const { data, isLoading, isError } = useGetStudentToday()
 
+  const search = useSearch()
   const code = params?.code ?? ''
   const view = params?.view ?? ''
 
   if (isLoading) return <Skeleton className="h-96 w-full" />
   if (isError || !data) return <p role="alert">Өнөөдрийн хичээлийг уншиж чадсангүй.</p>
 
-  const day = data.subjects.find((subject) => subject.subjectCode === code)
+  const day = selectStudentSlot(data.slots, code, search)
 
   const back = (
     <Link href="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
@@ -71,7 +74,7 @@ export default function StudentSubjectView() {
             <LessonBody lesson={day.lesson} />
             <div className="border-t pt-6">
               <Link
-                href={`/subject/${encodeURIComponent(code)}/quiz`}
+                href={studentSlotLink(day, 'quiz')}
                 className={cn(buttonVariants({ size: 'sm' }))}
               >
                 Шалгалт руу
@@ -95,7 +98,7 @@ export default function StudentSubjectView() {
             <LessonBody lesson={day.extra.lesson} banner={day.extra.reason} />
             <div className="border-t pt-6">
               <Link
-                href={`/subject/${encodeURIComponent(code)}/quiz`}
+                href={studentSlotLink(day, 'quiz')}
                 className={cn(buttonVariants({ size: 'sm' }))}
               >
                 Шалгалт руу
