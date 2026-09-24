@@ -373,6 +373,10 @@ export async function setScheduleDay(
     held?: boolean;
     notHeldReason?: string | null;
     isContinuation?: boolean;
+    quizOpensAt?: string | null;
+    quizQuestionCount?: number | null;
+    quizAttempts?: number | null;
+    answersOpenAt?: string | null;
   },
 ) {
   const klass = await authorisedClass(user, input.classId);
@@ -422,6 +426,31 @@ export async function setScheduleDay(
     throw badRequest(`Шалтгаан ${MAX_NOTE_LENGTH} тэмдэгтээс урт байна.`, "REASON_TOO_LONG");
   }
   const notHeldReason = held ? null : reason;
+
+  // The check's own settings. All four move together or not at all: a teacher
+  // correcting a topic has said nothing about when the check opens, and
+  // silently resetting their window would be worse than refusing to.
+  const replaceQuiz =
+    input.quizOpensAt !== undefined ||
+    input.quizQuestionCount !== undefined ||
+    input.quizAttempts !== undefined ||
+    input.answersOpenAt !== undefined;
+  const quizOpensAt = input.quizOpensAt ?? null;
+  if (quizOpensAt !== null && !/^\d{2}:\d{2}$/.test(quizOpensAt)) {
+    throw badRequest("Сорил нээгдэх цаг буруу байна.", "INVALID_TIME");
+  }
+  const quizQuestionCount = input.quizQuestionCount ?? null;
+  if (quizQuestionCount !== null && (quizQuestionCount < 1 || quizQuestionCount > 50)) {
+    throw badRequest("Асуултын тоо 1-50 хооронд байна.", "INVALID_QUESTION_COUNT");
+  }
+  const quizAttempts = input.quizAttempts ?? null;
+  if (quizAttempts !== null && (quizAttempts < 1 || quizAttempts > 10)) {
+    throw badRequest("Оролдлогын тоо 1-10 хооронд байна.", "INVALID_ATTEMPTS");
+  }
+  const answersOpenAt = input.answersOpenAt ?? null;
+  if (answersOpenAt !== null && Number.isNaN(Date.parse(answersOpenAt))) {
+    throw badRequest("Хариулт нээх хугацаа буруу байна.", "INVALID_TIMESTAMP");
+  }
 
   // Both or neither: half a range is not a range, and a teacher who means
   // "one page" sends the same number twice.
@@ -523,6 +552,11 @@ export async function setScheduleDay(
     held,
     notHeldReason,
     isContinuation: input.isContinuation ?? false,
+    quizOpensAt,
+    quizQuestionCount,
+    quizAttempts,
+    answersOpenAt,
+    replaceQuiz,
   });
 
   // What the period actually got through.

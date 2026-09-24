@@ -160,3 +160,36 @@ export const attemptsOnDate = (studentId: number, lessonId: number, onDate: stri
      ORDER BY submitted_at DESC`,
     [studentId, lessonId, onDate],
   );
+
+
+/**
+ * How this child's class has this check set, for the day it falls on.
+ *
+ * The settings live on the period, not on the section: the same section taught
+ * to two classes is two different afternoons, and a teacher who holds one back
+ * until half past ten has said nothing about the other. So the row is found
+ * through the child's own enrolment.
+ *
+ * Nothing comes back for a section the child meets some other way - personal
+ * work, say - and the defaults then stand, which is the right answer for work
+ * that belongs to no period.
+ */
+export const quizSettingsForStudent = (studentId: number, lessonId: number, onDate: string) =>
+  readRows<{
+    quizOpensAt: string | null;
+    quizQuestionCount: number | null;
+    quizAttempts: number | null;
+    answersOpen: boolean;
+  }>(
+    `SELECT to_char(cs.quiz_opens_at, 'HH24:MI') AS "quizOpensAt",
+       cs.quiz_question_count::int AS "quizQuestionCount",
+       cs.quiz_attempts::int AS "quizAttempts",
+       (cs.answers_open_at IS NOT NULL AND cs.answers_open_at <= now()) AS "answersOpen"
+     FROM core.student_enrollments e
+     JOIN learning.class_schedule cs ON cs.class_id = e.class_id
+     WHERE e.student_id = $1::bigint AND e.is_active
+       AND cs.daily_lesson_id = $2::bigint AND cs.scheduled_on = $3::date
+     ORDER BY cs.answers_open_at NULLS LAST, cs.period_no
+     LIMIT 1`,
+    [studentId, lessonId, onDate],
+  );

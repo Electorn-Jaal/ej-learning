@@ -60,6 +60,10 @@ export async function classDay(
     held: row.held,
     notHeldReason: row.notHeldReason,
     isContinuation: row.isContinuation,
+    quizOpensAt: row.quizOpensAt,
+    quizQuestionCount: row.quizQuestionCount,
+    quizAttempts: row.quizAttempts,
+    answersOpenAt: row.answersOpenAt,
     book:
       row.materialId === null
         ? null

@@ -198,16 +198,23 @@ export async function setScheduleDay(row: {
   held: boolean;
   notHeldReason: string | null;
   isContinuation: boolean;
+  quizOpensAt: string | null;
+  quizQuestionCount: number | null;
+  quizAttempts: number | null;
+  answersOpenAt: string | null;
+  replaceQuiz: boolean;
 }) {
   await db.execute(sql`
     INSERT INTO learning.class_schedule
       (class_id, term_id, daily_lesson_id, scheduled_on, subject_id, created_by, note,
        page_from, page_to, timetable_slot_id, period_no, held, not_held_reason,
-       is_continuation)
+       is_continuation, quiz_opens_at, quiz_question_count, quiz_attempts,
+       answers_open_at)
     SELECT ${row.classId}, ${row.termId}, ${row.dailyLessonId}, ${row.scheduledOn}::date,
       sk.subject_id, ${row.createdBy}, ${row.note}, ${row.pageFrom}, ${row.pageTo},
       ${row.timetableSlotId}, ${row.periodNo}, ${row.held}, ${row.notHeldReason},
-      ${row.isContinuation}
+      ${row.isContinuation}, ${row.quizOpensAt}::time, ${row.quizQuestionCount},
+      ${row.quizAttempts}, ${row.answersOpenAt}::timestamptz
     FROM learning.daily_lessons dl
     JOIN content.skills sk ON sk.id = dl.core_skill_id
     WHERE dl.id = ${row.dailyLessonId}
@@ -219,6 +226,17 @@ export async function setScheduleDay(row: {
       held = EXCLUDED.held,
       not_held_reason = EXCLUDED.not_held_reason,
       is_continuation = EXCLUDED.is_continuation,
+      -- Left out, left alone. The quiz settings belong to the period rather
+      -- than to the section, and a teacher correcting a topic or a note has
+      -- said nothing about when the check opens.
+      quiz_opens_at = CASE WHEN ${row.replaceQuiz} THEN EXCLUDED.quiz_opens_at
+                           ELSE learning.class_schedule.quiz_opens_at END,
+      quiz_question_count = CASE WHEN ${row.replaceQuiz} THEN EXCLUDED.quiz_question_count
+                                 ELSE learning.class_schedule.quiz_question_count END,
+      quiz_attempts = CASE WHEN ${row.replaceQuiz} THEN EXCLUDED.quiz_attempts
+                           ELSE learning.class_schedule.quiz_attempts END,
+      answers_open_at = CASE WHEN ${row.replaceQuiz} THEN EXCLUDED.answers_open_at
+                             ELSE learning.class_schedule.answers_open_at END,
       note = CASE WHEN ${row.replaceNote} THEN EXCLUDED.note
                   ELSE learning.class_schedule.note END,
       -- A page range belongs to the section that was taught. Changing the

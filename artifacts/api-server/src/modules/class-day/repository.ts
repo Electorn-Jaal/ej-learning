@@ -8,6 +8,10 @@ export type ClassDayLessonRow = {
   held: boolean;
   notHeldReason: string | null;
   isContinuation: boolean;
+  quizOpensAt: string | null;
+  quizQuestionCount: number | null;
+  quizAttempts: number | null;
+  answersOpenAt: string | null;
   subjectId: number;
   subjectName: string;
   lessonId: number | null;
@@ -55,7 +59,8 @@ export const lessonsForClassDay = (
      ), combined AS (
        SELECT p.slot_id, p.period_no, p.subject_id, cs.daily_lesson_id, cs.note,
               cs.page_from, cs.page_to, COALESCE(cs.held, true) AS held,
-              cs.not_held_reason, COALESCE(cs.is_continuation, false) AS is_continuation
+              cs.not_held_reason, COALESCE(cs.is_continuation, false) AS is_continuation,
+              cs.quiz_opens_at, cs.quiz_question_count, cs.quiz_attempts, cs.answers_open_at
          FROM pattern p
          LEFT JOIN learning.class_schedule cs
            ON cs.class_id = $1::bigint AND cs.scheduled_on = $3::date
@@ -66,7 +71,8 @@ export const lessonsForClassDay = (
        -- A lesson put on a day that the timetable does not carry: a makeup
        -- lesson, or one moved. It belongs on the page as much as the rest.
        SELECT NULL::bigint, cs.period_no, cs.subject_id, cs.daily_lesson_id, cs.note,
-              cs.page_from, cs.page_to, cs.held, cs.not_held_reason, cs.is_continuation
+              cs.page_from, cs.page_to, cs.held, cs.not_held_reason, cs.is_continuation,
+              cs.quiz_opens_at, cs.quiz_question_count, cs.quiz_attempts, cs.answers_open_at
          FROM learning.class_schedule cs
         WHERE cs.class_id = $1::bigint AND cs.scheduled_on = $3::date
           AND ($2::bigint[] IS NULL OR cs.subject_id = ANY($2::bigint[]))
@@ -93,7 +99,11 @@ export const lessonsForClassDay = (
        book.page_from::int AS "bookPageFrom", book.page_to::int AS "bookPageTo",
        COALESCE(book.page_offset, 0)::int AS "pageOffset",
        combined.held, combined.not_held_reason AS "notHeldReason",
-       combined.is_continuation AS "isContinuation"
+       combined.is_continuation AS "isContinuation",
+       to_char(combined.quiz_opens_at, 'HH24:MI') AS "quizOpensAt",
+       combined.quiz_question_count::int AS "quizQuestionCount",
+       combined.quiz_attempts::int AS "quizAttempts",
+       to_json(combined.answers_open_at) #>> '{}' AS "answersOpenAt"
      FROM combined
      JOIN core.classes c ON c.id = $1::bigint
      JOIN core.subjects sub ON sub.id = combined.subject_id

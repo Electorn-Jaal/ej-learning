@@ -156,6 +156,23 @@ export const classScheduleInLearning = learning.table(
     // also reads differently to a child, who is being told to pick the book up
     // rather than open it.
     isContinuation: boolean("is_continuation").default(false).notNull(),
+    // When the day's check may be sat, how long it is, and how many goes it
+    // allows. All three are null nearly always, and null means the rule the
+    // system runs on: open all day, five questions, three attempts. A teacher
+    // who wants the check held back until the practice is done sets a time,
+    // and one whose section carries three questions rather than five says so
+    // instead of having the paper silently padded.
+    quizOpensAt: time("quiz_opens_at"),
+    quizQuestionCount: smallint("quiz_question_count"),
+    quizAttempts: smallint("quiz_attempts"),
+    // When the key and the marking notes become the child's to see. Null is
+    // "not yet", which is the state a check is in while it is still being
+    // sat: a child on their second go must not have been handed the answer
+    // on their first, and a parent reading over their shoulder is exactly the
+    // route by which that happens. Whether each answer was right is told at
+    // once - that is the feedback - but which option was right, and why, waits
+    // for the teacher.
+    answersOpenAt: timestamp("answers_open_at", { withTimezone: true, mode: "string" }),
     createdBy: bigint("created_by", { mode: "number" }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
       .defaultNow()
@@ -168,6 +185,14 @@ export const classScheduleInLearning = learning.table(
     check(
       "class_schedule_not_held_reason_check",
       sql`held OR not_held_reason IS NOT NULL`,
+    ),
+    check(
+      "class_schedule_quiz_question_count_check",
+      sql`quiz_question_count IS NULL OR quiz_question_count BETWEEN 1 AND 50`,
+    ),
+    check(
+      "class_schedule_quiz_attempts_check",
+      sql`quiz_attempts IS NULL OR quiz_attempts BETWEEN 1 AND 10`,
     ),
     check("class_schedule_page_from_check", sql`${table.pageFrom} > 0`),
     check("class_schedule_page_to_check", sql`${table.pageTo} > 0`),
