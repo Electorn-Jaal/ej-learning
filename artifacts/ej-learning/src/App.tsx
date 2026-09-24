@@ -67,6 +67,8 @@ const AdminContentLinks = page(() => import('@/pages/admin/ContentLinks'));
 const TeacherIntegrations = page(() => import('@/pages/teacher/Integrations'));
 const TeacherCatalog = page(() => import('@/pages/teacher/Catalog'));
 const TeacherClassDay = page(() => import('@/pages/teacher/ClassDay'));
+const TeacherProfile = page(() => import('@/pages/teacher/Profile'));
+const AdminStaff = page(() => import('@/pages/admin/Staff'));
 const TeacherProductive = page(() => import('@/pages/teacher/Productive'));
 
 const queryClient = new QueryClient();
@@ -120,6 +122,8 @@ function StaffRoutes({ admin, takesLessons }: { admin: boolean; takesLessons: bo
       <Route path="/teacher/class/:classId" component={TeacherClassDay} />
       <Route path="/teacher/productive" component={TeacherProductive} />
       <Route path="/teacher/catalog" component={TeacherCatalog} />
+      <Route path="/teacher/profile" component={TeacherProfile} />
+      {admin ? <Route path="/teacher/staff" component={AdminStaff} /> : null}
       <Route path="/teacher/password" component={Password} />
       <Route component={NotFound} />
     </Switch>

@@ -320,8 +320,144 @@ describe("EJ Learning API", { concurrency: false }, () => {
     });
   });
 
+
+  describe("a staff profile the school can reshape", () => {
+    let admin, teacher, student, teacherId, added;
+    before(async () => {
+      admin = createClient(harness.baseUrl);
+      teacher = createClient(harness.baseUrl);
+      student = createClient(harness.baseUrl);
+      await admin.signIn(accountsByRole.ADMIN);
+      await teacher.signIn(byName["demo-teacher"]);
+      await student.signIn(accountsByRole.STUDENT);
+      const mine = await teacher.request("/staff/me");
+      assert.equal(mine.status, 200, JSON.stringify(mine.payload));
+      teacherId = mine.payload.teacherId;
+    });
+    after(async () => {
+      if (added) {
+        await harness.sql("DELETE FROM core.staff_fields WHERE id = $1", [added]);
+      }
+    });
+
+    it("says what a profile is made of, and who may write each part", async () => {
+      const res = await teacher.request("/staff/fields");
+      assert.equal(res.status, 200);
+      const keys = res.payload.map((row) => row.fieldKey);
+      // The register's own columns, seeded by the migration.
+      for (const key of ["job_title", "department", "phone", "service_since"]) {
+        assert.ok(keys.includes(key), `${key} missing from the field list`);
+      }
+      const title = res.payload.find((row) => row.fieldKey === "job_title");
+      const phone = res.payload.find((row) => row.fieldKey === "phone");
+      // A job title is a decision the school made; a telephone number is theirs.
+      assert.equal(title.selfEditable, false);
+      assert.equal(phone.selfEditable, true);
+      assert.equal(typeof title.columnName, "string");
+    });
+
+    it("lets a teacher write their own fields and refuses the school's", async () => {
+      const refused = await teacher.request("/staff/me", {
+        method: "PATCH", body: { fields: { job_title: "Захирал" } },
+      });
+      assert.equal(refused.status, 403);
+      assert.equal(refused.payload.code, "ADMIN_ONLY_FIELD");
+
+      const saved = await teacher.request("/staff/me", {
+        method: "PATCH", body: { fields: { phone: "99112233" } },
+      });
+      assert.equal(saved.status, 200, JSON.stringify(saved.payload));
+      assert.equal(
+        saved.payload.fields.find((row) => row.fieldKey === "phone").value,
+        "99112233",
+      );
+
+      // A date has to look like one before it reaches a date column.
+      const bad = await teacher.request("/staff/me", {
+        method: "PATCH", body: { fields: { service_since: "хоёр жилийн өмнө" } },
+      });
+      assert.equal(bad.status, 400);
+      assert.equal(bad.payload.code, "INVALID_DATE");
+    });
+
+    it("keeps one member of staff's record out of another's reach", async () => {
+      assert.equal((await student.request("/staff/me")).status, 403);
+      assert.equal((await student.request("/staff")).status, 403);
+      assert.equal((await teacher.request("/staff")).status, 403);
+
+      // An administrator reads anybody's; a teacher reads only their own.
+      assert.equal((await admin.request(`/staff/${teacherId}`)).status, 200);
+      const [{ other }] = await harness.sql(
+        `SELECT t.id::int AS other FROM core.teachers t
+          JOIN core.users u ON u.id = t.user_id
+         WHERE t.is_active AND u.is_active AND t.id <> $1 LIMIT 1`, [teacherId]);
+      if (other) {
+        const peeking = await teacher.request(`/staff/${other}`);
+        assert.equal(peeking.status, 403, "a teacher read somebody else's record");
+      }
+    });
+
+    it("adds a field the school names, and shows it on every profile at once", async () => {
+      const created = await admin.request("/admin/staff/fields", {
+        method: "POST",
+        body: { labelMn: "Боловсрол", valueKind: "TEXT", selfEditable: true },
+      });
+      assert.equal(created.status, 201, JSON.stringify(created.payload));
+      const field = created.payload.find((row) => row.labelMn === "Боловсрол");
+      assert.ok(field, "the new field is not in the list");
+      assert.equal(field.columnName, null, "a school field must not claim a column");
+      added = field.id;
+
+      // It is a field like any other the moment it exists: the teacher's own
+      // page carries it, and because it was marked self-editable they can
+      // fill it in without asking anybody.
+      const mine = await teacher.request("/staff/me");
+      assert.ok(mine.payload.fields.some((row) => row.fieldKey === field.fieldKey));
+      const wrote = await teacher.request("/staff/me", {
+        method: "PATCH", body: { fields: { [field.fieldKey]: "МУИС, математик" } },
+      });
+      assert.equal(wrote.status, 200, JSON.stringify(wrote.payload));
+      assert.equal(
+        wrote.payload.fields.find((row) => row.fieldKey === field.fieldKey).value,
+        "МУИС, математик",
+      );
+
+      // Renaming changes the label everywhere and nothing else.
+      const renamed = await admin.request(`/admin/staff/fields/${field.id}`, {
+        method: "PATCH", body: { labelMn: "Боловсрол, мэргэжил" },
+      });
+      assert.equal(renamed.status, 200);
+      assert.equal(
+        renamed.payload.find((row) => row.id === field.id).labelMn,
+        "Боловсрол, мэргэжил",
+      );
+      const after = await teacher.request("/staff/me");
+      assert.equal(
+        after.payload.fields.find((row) => row.fieldKey === field.fieldKey).value,
+        "МУИС, математик",
+        "renaming a field lost its values",
+      );
+    });
+
+    it("refuses to switch off a field that has a column behind it", async () => {
+      const fields = (await admin.request("/staff/fields")).payload;
+      const builtin = fields.find((row) => row.columnName !== null);
+      const res = await admin.request(`/admin/staff/fields/${builtin.id}`, {
+        method: "PATCH", body: { isActive: false },
+      });
+      assert.equal(res.status, 400);
+      assert.equal(res.payload.code, "BUILTIN_FIELD");
+
+      // Renaming one is fine, and is the point of the table.
+      const renamed = await admin.request(`/admin/staff/fields/${builtin.id}`, {
+        method: "PATCH", body: { labelMn: builtin.labelMn },
+      });
+      assert.equal(renamed.status, 200);
+    });
+  });
+
   describe("a corrected day re-lays the rest of the term", () => {
-    let admin, klass, grade, subject, lessons, slot, days, material;
+    let admin, klass, grade, subject, lessons, slot, days, material, restore;
     before(async () => {
       admin = createClient(harness.baseUrl);
       await admin.signIn(accountsByRole.ADMIN);
@@ -389,6 +525,16 @@ describe("EJ Learning API", { concurrency: false }, () => {
         (class_id, subject_id, weekday_no, period_no, group_label, valid_from, valid_to)
         VALUES ($1, $2, 3, 4, NULL, $3::date, $4::date)
         RETURNING id::int`, [klass, subject, term.from, term.to]);
+
+      // What this class already has for the subject, kept so it can be put
+      // back. Setting a lesson re-lays the rest of the term - correctly - and
+      // that means deleting the rows the seed wrote for the later tests in
+      // this file, which read the same class.
+      restore = await harness.sql(
+        `SELECT term_id, daily_lesson_id, scheduled_on::text AS scheduled_on, note,
+                created_by, period_no, timetable_slot_id, page_from, page_to
+           FROM learning.class_schedule
+          WHERE class_id = $1 AND subject_id = $2`, [klass, subject]);
     });
     after(async () => {
       if (slot) {
@@ -405,6 +551,21 @@ describe("EJ Learning API", { concurrency: false }, () => {
         await harness.sql("DELETE FROM content.skills WHERE skill_code LIKE 'TEST-REPLAN-%'");
         await harness.sql("DELETE FROM content.source_outline_nodes WHERE outline_code LIKE 'TEST-REPLAN-%'");
         await harness.sql("DELETE FROM content.source_materials WHERE source_code = 'TEST-REPLAN-BOOK'");
+      }
+      if (restore) {
+        await harness.sql(
+          'DELETE FROM learning.class_schedule WHERE class_id = $1 AND subject_id = $2',
+          [klass, subject]);
+        for (const row of restore) {
+          await harness.sql(
+            `INSERT INTO learning.class_schedule
+               (class_id, subject_id, term_id, daily_lesson_id, scheduled_on, note,
+                created_by, period_no, timetable_slot_id, page_from, page_to)
+             VALUES ($1, $2, $3, $4, $5::date, $6, $7, $8, $9, $10, $11)`,
+            [klass, subject, row.term_id, row.daily_lesson_id, row.scheduled_on,
+             row.note, row.created_by, row.period_no, row.timetable_slot_id,
+             row.page_from, row.page_to]);
+        }
       }
     });
 
@@ -556,13 +717,27 @@ describe("EJ Learning API", { concurrency: false }, () => {
     });
 
     it('refuses content on a day the class is not timetabled, and lets the admin place it', async () => {
-      // The day after the one slot this class has. Once a subject IS on the
-      // timetable, a day it does not fall on is a day nobody teaches it, and
-      // content put there would be shown to a class that is elsewhere.
+      // A school day this class does not have the subject on. Once a subject
+      // IS on the timetable, a day it does not fall on is a day nobody teaches
+      // it, and content put there would be shown to a class that is elsewhere.
+      //
+      // Chosen rather than "the day after": the day after can be a Saturday,
+      // and the weekend rule would answer first - which is how this test broke
+      // the moment the clock passed midnight into a Thursday.
       const [{ other }] = await harness.sql(
-        "SELECT (($1::date) + interval '1 day')::date::text AS other", [day]);
+        `SELECT d::date::text AS other
+           FROM learning.terms t
+           CROSS JOIN LATERAL generate_series(t.starts_on, t.ends_on, interval '1 day') d
+          WHERE extract(isodow FROM d) < 6
+            AND extract(isodow FROM d) <> extract(isodow FROM $1::date)
+            AND d > CURRENT_DATE
+          ORDER BY d LIMIT 1`, [day]);
+      // Clearing rather than setting, on purpose: the rule is checked before
+      // either happens, and setting a lesson would re-lay the rest of the term
+      // from that day - which is correct behaviour and would quietly rewrite
+      // the schedule the other tests in this file read.
       const body = {
-        classId: klass, subjectId: subject, scheduledOn: other, lessonId: lesson,
+        classId: klass, subjectId: subject, scheduledOn: other, lessonId: null,
       };
       const refused = await teacher.request('/teacher/schedule/day', { method: 'PUT', body });
       assert.equal(refused.status, 403, JSON.stringify(refused.payload));
@@ -572,9 +747,6 @@ describe("EJ Learning API", { concurrency: false }, () => {
       // there - so the rule stops at the teacher.
       const allowed = await admin.request('/teacher/schedule/day', { method: 'PUT', body });
       assert.equal(allowed.status, 204, JSON.stringify(allowed.payload));
-      await admin.request('/teacher/schedule/day', {
-        method: 'PUT', body: { ...body, lessonId: null },
-      });
     });
 
     it('validates slot dates and prevents another teacher or student from changing group membership', async () => {

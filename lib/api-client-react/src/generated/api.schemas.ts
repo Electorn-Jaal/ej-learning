@@ -412,6 +412,92 @@ export interface QuizPaper {
   previousMaxScore: number | null;
 }
 
+export type StaffFieldValueKind = typeof StaffFieldValueKind[keyof typeof StaffFieldValueKind];
+
+
+export const StaffFieldValueKind = {
+  TEXT: 'TEXT',
+  LONG_TEXT: 'LONG_TEXT',
+  DATE: 'DATE',
+  PHONE: 'PHONE',
+  EMAIL: 'EMAIL',
+} as const;
+
+export interface StaffField {
+  id: number;
+  /** Stable across renames; what the code refers to. */
+  fieldKey: string;
+  /** What the school calls it, and what it may change. */
+  labelMn: string;
+  valueKind: StaffFieldValueKind;
+  sortOrder: number;
+  selfEditable: boolean;
+  isActive: boolean;
+  /**
+     * Set for the fields that have a real column behind them. Those may be renamed but not removed.
+     * @nullable
+     */
+  columnName: string | null;
+}
+
+export interface StaffFieldValue {
+  fieldKey: string;
+  labelMn: string;
+  valueKind: string;
+  selfEditable: boolean;
+  /** @nullable */
+  value: string | null;
+}
+
+export interface StaffProfile {
+  teacherId: number;
+  userId: number;
+  displayName: string;
+  username: string;
+  teacherCode: string;
+  /** @nullable */
+  photoUrl: string | null;
+  subjects: string[];
+  classes: string[];
+  fields: StaffFieldValue[];
+}
+
+/**
+ * Field key to value. Null or an empty string clears it.
+ */
+export type StaffProfileInputFields = {[key: string]: string | null};
+
+export interface StaffProfileInput {
+  /** Field key to value. Null or an empty string clears it. */
+  fields: StaffProfileInputFields;
+}
+
+export type StaffFieldInputValueKind = typeof StaffFieldInputValueKind[keyof typeof StaffFieldInputValueKind];
+
+
+export const StaffFieldInputValueKind = {
+  TEXT: 'TEXT',
+  LONG_TEXT: 'LONG_TEXT',
+  DATE: 'DATE',
+  PHONE: 'PHONE',
+  EMAIL: 'EMAIL',
+} as const;
+
+export interface StaffFieldInput {
+  /** @maxLength 120 */
+  labelMn: string;
+  valueKind: StaffFieldInputValueKind;
+  selfEditable: boolean;
+}
+
+export interface StaffFieldPatch {
+  /** @maxLength 120 */
+  labelMn?: string;
+  sortOrder?: number;
+  selfEditable?: boolean;
+  isActive?: boolean;
+}
+
 export interface ClassDayBook {
   materialId: number;
   /** @nullable */
@@ -1927,6 +2013,10 @@ to?: string;
  * @maximum 200
  */
 limit?: number;
+};
+
+export type UploadStaffPhoto201 = {
+  photoUrl: string;
 };
 
 export type GetClassDayParams = {

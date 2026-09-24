@@ -246,6 +246,20 @@
       "when": 1790215200000,
       "tag": "0034_class_schedule_pages",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1790301600000,
+      "tag": "0035_teacher_profile",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1790388000000,
+      "tag": "0036_staff_fields",
+      "breakpoints": true
     }
   ]
 }
