@@ -590,10 +590,13 @@ describe("EJ Learning API", { concurrency: false }, () => {
     });
     after(async () => {
       if (slot) {
+        await harness.sql('DELETE FROM learning.class_lesson_coverage WHERE timetable_slot_id = $1', [slot.id]);
         await harness.sql('DELETE FROM learning.class_schedule WHERE timetable_slot_id = $1', [slot.id]);
         await harness.sql('DELETE FROM learning.timetable_slots WHERE id = $1', [slot.id]);
       }
       if (material) {
+        await harness.sql(`DELETE FROM learning.class_lesson_coverage WHERE daily_lesson_id IN
+          (SELECT id FROM learning.daily_lessons WHERE lesson_code LIKE 'TEST-REPLAN-%')`);
         await harness.sql(`DELETE FROM learning.class_schedule WHERE daily_lesson_id IN
           (SELECT id FROM learning.daily_lessons WHERE lesson_code LIKE 'TEST-REPLAN-%')`);
         await harness.sql("DELETE FROM learning.daily_lessons WHERE lesson_code LIKE 'TEST-REPLAN-%'");
@@ -630,16 +633,19 @@ describe("EJ Learning API", { concurrency: false }, () => {
       return row ?? null;
     };
 
-    it("carries the following sections forward, and moves them when the teacher corrects one", async () => {
-      assert.ok(days.length >= 3, `days=${days.length}`);
-
-      const setDay = (lessonId) => admin.request('/teacher/schedule/day', { method: 'PUT', body: {
+    const setDay = (lessonId, coveredLessonIds) =>
+      admin.request('/teacher/schedule/day', { method: 'PUT', body: {
         classId: klass, subjectId: subject, scheduledOn: days[0], lessonId,
         timetableSlotId: slot.id,
+        ...(coveredLessonIds ? { coveredLessonIds } : {}),
       } });
-      const approve = (lessonId) => admin.request('/teacher/schedule/replan', { method: 'POST', body: {
-        classId: klass, subjectId: subject, fromDate: days[0], lessonId,
+    const approve = () =>
+      admin.request('/teacher/schedule/replan', { method: 'POST', body: {
+        classId: klass, subjectId: subject, fromDate: days[0],
       } });
+
+    it("carries the following sections forward, and moves them when the teacher corrects one", async () => {
+      assert.ok(days.length >= 3, `days=${days.length}`);
 
       // Setting the first section offers to lay the rest of the term after it.
       const first = await setDay(lessons[0].id);
@@ -647,17 +653,21 @@ describe("EJ Learning API", { concurrency: false }, () => {
       assert.ok(first.payload.replan, 'no proposal came back');
       assert.equal(first.payload.replan.fromDate, days[0]);
       assert.ok(first.payload.replan.days.length > 0);
-      assert.equal((await approve(lessons[0].id)).status, 200);
+      assert.equal((await approve()).status, 200);
       assert.equal((await topicOn(days[1])).id, lessons[1].id, 'the next period did not follow on');
       assert.equal((await topicOn(days[2])).id, lessons[2].id);
       // Laid out, not chosen: that is what an empty created_by says.
       assert.equal((await topicOn(days[1])).created_by, null);
 
-      // The class went faster than the plan. Saying so is a proposal, not an
-      // act: the calendar the school is working from does not change until
-      // somebody reads which days move and says yes. A teacher opening a topic
-      // to see whether it fits used to rewrite their term by doing so.
-      const corrected = await setDay(lessons[1].id);
+      // The class went faster than the plan: section 1 done and section 2
+      // started in the same hour. Both are ticked, so the term carries on
+      // from section 3.
+      //
+      // Saying so is a proposal, not an act: the calendar the school is
+      // working from does not change until somebody reads which days move and
+      // says yes. A teacher opening a topic to see whether it fits used to
+      // rewrite their term by doing so.
+      const corrected = await setDay(lessons[1].id, [lessons[0].id, lessons[1].id]);
       assert.equal(corrected.status, 200, JSON.stringify(corrected.payload));
       const proposal = corrected.payload.replan;
       assert.ok(proposal, 'the correction proposed nothing');
@@ -672,12 +682,110 @@ describe("EJ Learning API", { concurrency: false }, () => {
       assert.equal((await topicOn(days[2])).id, lessons[2].id);
 
       // Approved, it moves - all of it at once.
-      assert.equal((await approve(lessons[1].id)).status, 200);
+      assert.equal((await approve()).status, 200);
       assert.equal((await topicOn(days[1])).id, lessons[2].id, 'the term did not move with the correction');
       assert.equal((await topicOn(days[2])).id, lessons[3].id);
 
       // What was taught stays taught: nothing before the corrected day moves.
       assert.equal((await topicOn(days[0])).id, lessons[1].id);
+    });
+
+    it("brings a section back round when the teacher skipped it rather than covering it", async () => {
+      // The other half of the same gesture, and the one the single column
+      // could never express. The day was to be section 1; the teacher taught
+      // section 2 instead and means to come back. Section 1 has not been
+      // taught, so it cannot simply fall off the end of the plan - which is
+      // what happened while "the day says 2" was the whole of the record.
+      assert.equal((await setDay(lessons[0].id)).status, 200);
+      assert.equal((await approve()).status, 200);
+      assert.equal((await topicOn(days[1])).id, lessons[1].id);
+
+      // No list of what was covered: the safe reading, just the one section.
+      const swapped = await setDay(lessons[1].id);
+      assert.equal(swapped.status, 200, JSON.stringify(swapped.payload));
+      assert.ok(swapped.payload.replan, 'the swap proposed nothing');
+      assert.equal((await approve()).status, 200);
+
+      assert.equal((await topicOn(days[0])).id, lessons[1].id, 'the day should hold what was taught');
+      assert.equal(
+        (await topicOn(days[1])).id,
+        lessons[0].id,
+        'the skipped section did not come back round',
+      );
+      assert.equal((await topicOn(days[2])).id, lessons[2].id);
+    });
+
+    it("puts a struck-off lesson's section back into the term, with its reason", async () => {
+      // UC05. A lesson that did not happen taught nothing, whatever the day
+      // says it was for. The section is still owed a day, so it has to fall
+      // back into the plan rather than sliding off the end of the book - and
+      // the day has to say why, because it is the thing a parent asks about.
+      assert.equal((await setDay(lessons[0].id)).status, 200);
+      assert.equal((await approve()).status, 200);
+      assert.equal((await topicOn(days[1])).id, lessons[1].id);
+
+      const struck = await admin.request('/teacher/schedule/day', { method: 'PUT', body: {
+        classId: klass, subjectId: subject, scheduledOn: days[0], lessonId: lessons[0].id,
+        timetableSlotId: slot.id, held: false, notHeldReason: 'Багш өвчтэй',
+      } });
+      assert.equal(struck.status, 200, JSON.stringify(struck.payload));
+      assert.ok(struck.payload.replan, 'striking the day off proposed nothing');
+
+      // While that struck-off period is the only place this section sits, the
+      // child cannot be asked about it: a quiz is reachable because the lesson
+      // is on their schedule, and an hour that did not happen is not an hour
+      // they were taught. Once the replan gives the section a real day back,
+      // it becomes theirs again - which is the next assertion but one.
+      const child = createClient(harness.baseUrl);
+      await child.signIn(accountsByRole.STUDENT);
+      const asked = await child.request(`/student/quiz/${lessons[0].id}`);
+      assert.equal(asked.status, 403, JSON.stringify(asked.payload));
+      assert.equal(asked.payload.code, 'LESSON_NOT_ASSIGNED');
+
+      assert.equal((await approve()).status, 200);
+      assert.equal((await child.request(`/student/quiz/${lessons[0].id}`)).status, 200);
+
+      // The section comes back round on the next period, pushing the rest on.
+      assert.equal(
+        (await topicOn(days[1])).id,
+        lessons[0].id,
+        'the section of a lesson that did not happen was treated as taught',
+      );
+      assert.equal((await topicOn(days[2])).id, lessons[1].id);
+
+      // The day itself keeps the section it was meant for, so a teacher
+      // looking back reads what was planned, and carries the reason.
+      const [row] = await harness.sql(
+        `SELECT held, not_held_reason FROM learning.class_schedule
+          WHERE class_id = $1 AND subject_id = $2 AND scheduled_on = $3::date`,
+        [klass, subject, days[0]]);
+      assert.equal(row.held, false);
+      assert.equal(row.not_held_reason, 'Багш өвчтэй');
+
+    });
+
+    it("will not strike a lesson off without saying why", async () => {
+      const res = await admin.request('/teacher/schedule/day', { method: 'PUT', body: {
+        classId: klass, subjectId: subject, scheduledOn: days[0], lessonId: lessons[0].id,
+        timetableSlotId: slot.id, held: false,
+      } });
+      assert.equal(res.status, 400, JSON.stringify(res.payload));
+      assert.equal(res.payload.code, 'REASON_REQUIRED');
+    });
+
+    it("refuses to mark a section covered that this class cannot be given", async () => {
+      // A section this class has no claim on. The list is checked against what
+      // the class can actually be given, because marking a section covered
+      // takes it out of a plan - and a stray id would take it out of somebody
+      // else's.
+      const [other] = await harness.sql(
+        'SELECT (max(id) + 1000)::int AS id FROM learning.daily_lessons');
+      const res = await admin.request('/teacher/schedule/day', { method: 'PUT', body: {
+        classId: klass, subjectId: subject, scheduledOn: days[0], lessonId: lessons[0].id,
+        timetableSlotId: slot.id, coveredLessonIds: [other.id],
+      } });
+      assert.equal(res.status, 400, JSON.stringify(res.payload));
+      assert.equal(res.payload.code, 'LESSON_NOT_SCHEDULABLE');
     });
 
     it("refuses to re-divide the term from a day already taught, or for a stranger", async () => {
@@ -688,7 +796,7 @@ describe("EJ Learning API", { concurrency: false }, () => {
 
       const [{ past }] = await harness.sql(
         "SELECT (CURRENT_DATE - interval '1 day')::date::text AS past");
-      const body = { classId: klass, subjectId: subject, fromDate: past, lessonId: lessons[0].id };
+      const body = { classId: klass, subjectId: subject, fromDate: past };
 
       // A teacher who does not hold this subject in this class has no business
       // re-laying its term.
@@ -1446,22 +1554,123 @@ describe("EJ Learning API", { concurrency: false }, () => {
       assert.ok(paper.questions[0].options.length > 1, "expected options to choose between");
     });
 
-    it("scores a wrong answer zero and only then reveals the key", async () => {
+    it("scores a wrong answer zero and holds the key back until the teacher releases it", async () => {
       const question = paper.questions[0];
       // "2" is the right answer to the seeded 1 + 1; pick anything else.
       const wrong = question.options.find((o) => o.text !== "2");
+      const right = question.options.find((o) => o.text === "2");
       assert.ok(wrong, "expected a wrong option to exist");
 
-      const res = await client.request("/student/quiz-attempts", {
+      const send = (optionId) => client.request("/student/quiz-attempts", {
         method: "POST",
-        body: { lessonId: paper.lessonId, answers: [{ itemId: question.itemId, optionId: wrong.optionId }] },
+        body: { lessonId: paper.lessonId, answers: [{ itemId: question.itemId, optionId }] },
       });
+
+      const res = await send(wrong.optionId);
       assert.equal(res.status, 201);
       assert.equal(res.payload.score, 0);
       assert.equal(res.payload.results[0].correct, false);
 
-      const right = question.options.find((o) => o.text === "2");
-      assert.equal(res.payload.results[0].correctOptionId, right.optionId);
+      // Being told they were wrong is the feedback, and it is what makes a
+      // second go worth taking. Being told which option was right ends the
+      // exercise - so it waits for the teacher, and a parent reading over a
+      // shoulder does not get there first either.
+      assert.equal(res.payload.answersOpen, false);
+      assert.equal(
+        res.payload.results[0].correctOptionId,
+        null,
+        "the key was handed over before the teacher released it",
+      );
+      assert.equal(res.payload.results[0].explanation, null);
+
+      // Released, and the same marking carries it.
+      await harness.sql(
+        `UPDATE learning.class_schedule SET answers_open_at = now()
+          WHERE daily_lesson_id = $1 AND scheduled_on = CURRENT_DATE`,
+        [paper.lessonId],
+      );
+      const opened = await send(wrong.optionId);
+      assert.equal(opened.status, 201, JSON.stringify(opened.payload));
+      assert.equal(opened.payload.answersOpen, true);
+      assert.equal(opened.payload.results[0].correctOptionId, right.optionId);
+
+      await harness.sql(
+        `UPDATE learning.class_schedule SET answers_open_at = NULL
+          WHERE daily_lesson_id = $1 AND scheduled_on = CURRENT_DATE`,
+        [paper.lessonId],
+      );
+    });
+
+    it("holds the check itself back until the hour the teacher set", async () => {
+      const [{ nowHm }] = await harness.sql(
+        "SELECT to_char((now() AT TIME ZONE 'Asia/Ulaanbaatar')::time, 'HH24:MI') AS \"nowHm\"",
+      );
+      // 23:59 is later than now at every moment of the day but one, and the
+      // one is not worth a clock-freezing harness.
+      if (nowHm < "23:59") {
+        await harness.sql(
+          `UPDATE learning.class_schedule SET quiz_opens_at = '23:59'
+            WHERE daily_lesson_id = $1 AND scheduled_on = CURRENT_DATE`,
+          [paper.lessonId],
+        );
+
+        // Told, not hidden: a page with nothing on it reads as broken, and a
+        // child who cannot see why would go looking for the fault in
+        // themselves.
+        const shut = await client.request(`/student/quiz/${paper.lessonId}`);
+        assert.equal(shut.status, 200);
+        assert.equal(shut.payload.isOpen, false);
+        assert.equal(shut.payload.opensAt, "23:59");
+        assert.deepEqual(shut.payload.questions, []);
+
+        const early = await client.request("/student/quiz-attempts", {
+          method: "POST",
+          body: {
+            lessonId: paper.lessonId,
+            answers: [{ itemId: paper.questions[0].itemId, optionId: paper.questions[0].options[0].optionId }],
+          },
+        });
+        assert.equal(early.status, 409, JSON.stringify(early.payload));
+        assert.equal(early.payload.code, "QUIZ_NOT_OPEN");
+      }
+
+      await harness.sql(
+        `UPDATE learning.class_schedule SET quiz_opens_at = NULL
+          WHERE daily_lesson_id = $1 AND scheduled_on = CURRENT_DATE`,
+        [paper.lessonId],
+      );
+      const open = await client.request(`/student/quiz/${paper.lessonId}`);
+      assert.equal(open.payload.isOpen, true);
+      assert.equal(open.payload.opensAt, null);
+    });
+
+    it("takes the number of questions and goes from the period, where the teacher set them", async () => {
+      await harness.sql(
+        `UPDATE learning.class_schedule SET quiz_question_count = 1, quiz_attempts = 1
+          WHERE daily_lesson_id = $1 AND scheduled_on = CURRENT_DATE`,
+        [paper.lessonId],
+      );
+      const short = await client.request(`/student/quiz/${paper.lessonId}`);
+      assert.equal(short.status, 200);
+      assert.equal(short.payload.questions.length, 1, "a one-question paper was asked for");
+      assert.equal(short.payload.attemptsAllowed, 1);
+
+      // Goes already spent above, so one allowed means none left.
+      const refused = await client.request("/student/quiz-attempts", {
+        method: "POST",
+        body: {
+          lessonId: paper.lessonId,
+          answers: [{ itemId: short.payload.questions[0].itemId, optionId: short.payload.questions[0].options[0].optionId }],
+        },
+      });
+      assert.equal(refused.status, 409, JSON.stringify(refused.payload));
+      assert.equal(refused.payload.code, "QUIZ_ATTEMPTS_SPENT");
+
+      await harness.sql(
+        `UPDATE learning.class_schedule SET quiz_question_count = NULL, quiz_attempts = NULL
+          WHERE daily_lesson_id = $1 AND scheduled_on = CURRENT_DATE`,
+        [paper.lessonId],
+      );
     });
 
     it("allows three goes a day and refuses the fourth", async () => {
@@ -1471,14 +1680,25 @@ describe("EJ Learning API", { concurrency: false }, () => {
         method: "POST",
         body: { lessonId: paper.lessonId, answers: [{ itemId: question.itemId, optionId: right.optionId }] },
       });
+      // Counted from nothing rather than from whatever the tests above left
+      // behind: the rule under test is three a day, and it should not be
+      // readable only in the light of another test's arithmetic.
+      await harness.sql(
+        "DELETE FROM learning.quiz_attempts WHERE daily_lesson_id = $1",
+        [paper.lessonId],
+      );
 
       // The daily check is practice: a child who gets one wrong thinks again
       // and tries. One sitting forbids that; three permit it without turning
-      // the check into an examination. The first go happened above.
+      // the check into an examination.
+      const first = await send();
+      assert.equal(first.status, 201, JSON.stringify(first.payload));
+      assert.equal(first.payload.attemptsUsed, 1);
+      assert.equal(first.payload.attemptsAllowed, 3);
+
       const second = await send();
       assert.equal(second.status, 201, JSON.stringify(second.payload));
       assert.equal(second.payload.attemptsUsed, 2);
-      assert.equal(second.payload.attemptsAllowed, 3);
 
       const third = await send();
       assert.equal(third.status, 201);
@@ -1488,7 +1708,10 @@ describe("EJ Learning API", { concurrency: false }, () => {
       assert.equal(fourth.status, 409, JSON.stringify(fourth.payload));
       assert.equal(fourth.payload.code, "QUIZ_ATTEMPTS_SPENT");
 
-      const rows = await harness.sql("SELECT count(*)::int AS n FROM learning.quiz_attempts");
+      const rows = await harness.sql(
+        "SELECT count(*)::int AS n FROM learning.quiz_attempts WHERE daily_lesson_id = $1",
+        [paper.lessonId],
+      );
       assert.equal(rows[0].n, 3, "the refused sitting must not be stored");
     });
 

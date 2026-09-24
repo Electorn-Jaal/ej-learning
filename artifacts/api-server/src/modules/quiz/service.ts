@@ -27,6 +27,42 @@ import * as repository from "./repository";
 const QUESTIONS_PER_QUIZ = 5;
 const ATTEMPTS_PER_DAY = 3;
 
+/**
+ * What this class has done with the defaults, for today.
+ *
+ * The three numbers belong to the period rather than to the section: the same
+ * section taught to two classes is two different afternoons. Null anywhere
+ * means the rule above, which is what nearly every period will say.
+ *
+ * answersOpen is the one with teeth. Until the teacher releases it, a child is
+ * told whether each answer was right and nothing more - which option was
+ * right, and why, is withheld. That is not secrecy for its own sake: three
+ * goes at a check are pointless if the first one hands over the key, and a
+ * parent reading over a shoulder is exactly how the key would travel.
+ */
+async function quizSettings(studentId: number, lessonId: number) {
+  const [row] = await repository.quizSettingsForStudent(
+    studentId,
+    lessonId,
+    todayInUlaanbaatar(),
+  );
+  return {
+    opensAt: row?.quizOpensAt ?? null,
+    questionCount: row?.quizQuestionCount ?? QUESTIONS_PER_QUIZ,
+    attemptsAllowed: row?.quizAttempts ?? ATTEMPTS_PER_DAY,
+    answersOpen: row?.answersOpen ?? false,
+  };
+}
+
+/** HH:MM in Ulaanbaatar, to compare against a period's opening time. */
+const clockInUlaanbaatar = () =>
+  new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Ulaanbaatar",
+  }).format(new Date());
+
 type QuizQuestion = {
   itemId: number;
   prompt: string;
@@ -67,10 +103,10 @@ async function requireReachableLesson(studentId: number, lessonId: number) {
  * first, and only when those run out does it fall back to repeating - which is
  * honest about a lesson that has five questions and a child on their third go.
  */
-function chooseQuestions(all: QuizQuestion[], seen: Set<number>) {
+function chooseQuestions(all: QuizQuestion[], seen: Set<number>, count: number) {
   const fresh = all.filter((question) => !seen.has(question.itemId));
   const rest = all.filter((question) => seen.has(question.itemId));
-  return [...fresh, ...rest].slice(0, QUESTIONS_PER_QUIZ);
+  return [...fresh, ...rest].slice(0, count);
 }
 
 export async function quizPaper(user: AuthenticatedUser, lessonId: number) {
@@ -87,16 +123,25 @@ export async function quizPaper(user: AuthenticatedUser, lessonId: number) {
   }
 
   const [latest] = attempts;
+  const settings = await quizSettings(studentId, lessonId);
+  // Held back rather than hidden: the child is told the check exists and when
+  // it opens, because a page that simply has nothing on it reads as broken.
+  const isOpen = settings.opensAt === null || clockInUlaanbaatar() >= settings.opensAt;
   return {
     lessonId,
     lessonCode: header?.lessonCode ?? "",
     skillName: header?.skillName ?? "",
-    questions: chooseQuestions(groupQuestions(rows), seen),
+    questions: isOpen
+      ? chooseQuestions(groupQuestions(rows), seen, settings.questionCount)
+      : [],
     kind: header?.assessmentKind ?? "LESSON",
     attemptsUsed: attempts.length,
-    attemptsAllowed: ATTEMPTS_PER_DAY,
+    attemptsAllowed: settings.attemptsAllowed,
     lastScore: latest?.score ?? null,
     lastMaxScore: latest?.maxScore ?? null,
+    opensAt: settings.opensAt,
+    isOpen,
+    answersOpen: settings.answersOpen,
   };
 }
 
@@ -108,10 +153,17 @@ export async function recordQuizAttemptScored(
   await requireReachableLesson(studentId, input.lessonId);
 
   const today = todayInUlaanbaatar();
-  const attempts = await repository.attemptsOnDate(studentId, input.lessonId, today);
-  if (attempts.length >= ATTEMPTS_PER_DAY) {
+  const settings = await quizSettings(studentId, input.lessonId);
+  if (settings.opensAt !== null && clockInUlaanbaatar() < settings.opensAt) {
     throw conflict(
-      `Энэ сорилыг өнөөдөр ${ATTEMPTS_PER_DAY} удаа өгсөн байна.`,
+      `Энэ сорил ${settings.opensAt}-аас нээгдэнэ.`,
+      "QUIZ_NOT_OPEN",
+    );
+  }
+  const attempts = await repository.attemptsOnDate(studentId, input.lessonId, today);
+  if (attempts.length >= settings.attemptsAllowed) {
+    throw conflict(
+      `Энэ сорилыг өнөөдөр ${settings.attemptsAllowed} удаа өгсөн байна.`,
       "QUIZ_ATTEMPTS_SPENT",
     );
   }
@@ -159,8 +211,10 @@ export async function recordQuizAttemptScored(
     results.push({
       itemId,
       correct,
-      correctOptionId: key?.optionId ?? null,
-      explanation: itemRows[0].explanation,
+      // Whether they were right is theirs at once; which option was right, and
+      // the note explaining it, is the teacher's to release.
+      correctOptionId: settings.answersOpen ? key?.optionId ?? null : null,
+      explanation: settings.answersOpen ? itemRows[0].explanation : null,
     });
   }
 
@@ -182,7 +236,8 @@ export async function recordQuizAttemptScored(
     ...attempt,
     results,
     attemptsUsed: attempts.length + 1,
-    attemptsAllowed: ATTEMPTS_PER_DAY,
+    attemptsAllowed: settings.attemptsAllowed,
+    answersOpen: settings.answersOpen,
   };
 }
 

@@ -862,6 +862,9 @@ export const GetStudentTodayResponse = zod.object({
   "endsAt": zod.string().nullable(),
   "teacherName": zod.string().nullable().describe('Who takes this period, from the school\'s own timetable.'),
   "groupLabel": zod.string().nullable().describe('Which half of a split class this slot is for, in the school\'s own words ("6а-1"). Null for a lesson the whole class attends.\n'),
+  "held": zod.boolean().optional().describe('False where the teacher struck this period off. The lesson then comes back null whatever was planned for it, and notHeldReason says why - there is nothing to study, and nothing to be checked on, in an hour that did not take place.\n'),
+  "notHeldReason": zod.string().nullish(),
+  "isContinuation": zod.boolean().optional().describe('This period carried the previous one on. The child is being told to pick the book up, not to open it.\n'),
   "lesson": zod.union([zod.object({
   "id": zod.number().int(),
   "lessonCode": zod.string(),
@@ -884,7 +887,7 @@ export const GetStudentTodayResponse = zod.object({
   "filePage": zod.number().int().nullable().describe('Which page of the file to open at. Not the same as pageFrom: a scanned book carries covers and front matter the printed numbering does not count, so printed page 3 can be file page 9. The student is shown the printed numbers and the viewer opens the file page.\n'),
   "fileUrl": zod.string().nullable()
 }).describe('Where in the book this lesson sits.'),zod.null()])
-}),zod.null()]).describe('What the class is scheduled to study in this subject today, or null where nobody has written the lesson yet - which is most periods. A timetable slot is owed to a child whether or not its content exists.\n'),
+}),zod.null()]).describe('What the class is scheduled to study in this subject today, or null where nobody has written the lesson yet - which is most periods. A timetable slot is owed to a child whether or not its content exists. Null too where the period was struck off.\n'),
   "extra": zod.union([zod.object({
   "lesson": zod.object({
   "id": zod.number().int(),
@@ -944,6 +947,9 @@ export const GetStudentScheduleResponse = zod.object({
   "endsAt": zod.string().nullable(),
   "teacherName": zod.string().nullable().describe('Who takes this period, from the school\'s own timetable.'),
   "groupLabel": zod.string().nullable().describe('Which half of a split class this slot is for, in the school\'s own words ("6а-1"). Null for a lesson the whole class attends.\n'),
+  "held": zod.boolean().optional().describe('False where the teacher struck this period off. The lesson then comes back null whatever was planned for it, and notHeldReason says why - there is nothing to study, and nothing to be checked on, in an hour that did not take place.\n'),
+  "notHeldReason": zod.string().nullish(),
+  "isContinuation": zod.boolean().optional().describe('This period carried the previous one on. The child is being told to pick the book up, not to open it.\n'),
   "lesson": zod.union([zod.object({
   "id": zod.number().int(),
   "lessonCode": zod.string(),
@@ -966,7 +972,7 @@ export const GetStudentScheduleResponse = zod.object({
   "filePage": zod.number().int().nullable().describe('Which page of the file to open at. Not the same as pageFrom: a scanned book carries covers and front matter the printed numbering does not count, so printed page 3 can be file page 9. The student is shown the printed numbers and the viewer opens the file page.\n'),
   "fileUrl": zod.string().nullable()
 }).describe('Where in the book this lesson sits.'),zod.null()])
-}),zod.null()]).describe('What the class is scheduled to study in this subject today, or null where nobody has written the lesson yet - which is most periods. A timetable slot is owed to a child whether or not its content exists.\n'),
+}),zod.null()]).describe('What the class is scheduled to study in this subject today, or null where nobody has written the lesson yet - which is most periods. A timetable slot is owed to a child whether or not its content exists. Null too where the period was struck off.\n'),
   "extra": zod.union([zod.object({
   "lesson": zod.object({
   "id": zod.number().int(),
@@ -1037,7 +1043,10 @@ export const GetTeacherScheduleResponse = zod.object({
   "lessonCode": zod.string().nullable(),
   "lessonType": zod.string().nullable(),
   "skillName": zod.string().nullable(),
-  "note": zod.string().nullable()
+  "note": zod.string().nullable(),
+  "held": zod.boolean().optional().describe('False where the teacher struck the period off. The section stays on the day so it can be read back, but nothing was taught: it falls into the plan again and the class gets it another day.\n'),
+  "notHeldReason": zod.string().nullish(),
+  "isContinuation": zod.boolean().optional().describe('The period carried the previous one on.')
 }))
 })
 
@@ -1096,9 +1105,10 @@ export const SubmitQuizAttemptResponse = zod.object({
   "correct": zod.boolean(),
   "correctOptionId": zod.number().int().nullable(),
   "explanation": zod.string().nullable()
-})).describe('Marking comes back with the attempt, which is the first time the key is disclosed.'),
+})).describe('Marking comes back with the attempt. Whether each answer was right is always here; the key and the note are filled in only once the teacher has released them.\n'),
   "attemptsUsed": zod.number().int().describe('Including this one.'),
-  "attemptsAllowed": zod.number().int()
+  "attemptsAllowed": zod.number().int(),
+  "answersOpen": zod.boolean().describe('Whether the teacher has released the key. False leaves correctOptionId and explanation null on every result.\n')
 })
 
 
@@ -1411,6 +1421,13 @@ export const GetClassDayQueryParams = zod.object({
   "on": zod.date().optional().describe('A school date. Omitted means today in Ulaanbaatar.')
 })
 
+export const getClassDayResponseLessonsItemQuizOpensAtRegExp = new RegExp('^\\d{2}:\\d{2}$');
+export const getClassDayResponseLessonsItemQuizQuestionCountMax = 50;
+
+export const getClassDayResponseLessonsItemQuizAttemptsMax = 10;
+
+
+
 export const GetClassDayResponse = zod.object({
   "classId": zod.number().int(),
   "className": zod.string(),
@@ -1432,6 +1449,14 @@ export const GetClassDayResponse = zod.object({
   "independentPractice": zod.string().nullable(),
   "studentMessage": zod.string().nullable(),
   "estimatedMinutes": zod.number().int().nullable(),
+  "held": zod.boolean().describe('False where the teacher struck the period off. The section stays on the day so it can be read back, but nothing was taught: it falls into the plan again and the class gets it another day.\n'),
+  "notHeldReason": zod.string().nullable(),
+  "isContinuation": zod.boolean().describe('The period carried the previous one on.'),
+  "quizOpensAt": zod.string().regex(getClassDayResponseLessonsItemQuizOpensAtRegExp).nullable().describe('HH:MM, in the school\'s own time, before which the day\'s check cannot be sat. Null - nearly always - means it is open as soon as the day is. A teacher holding it back until the practice is done sets a time here.\n'),
+  "quizQuestionCount": zod.number().int().min(1).max(getClassDayResponseLessonsItemQuizQuestionCountMax).nullable().describe('How many questions the check asks. Null means the system\'s five.\n'),
+  "quizAttempts": zod.number().int().min(1).max(getClassDayResponseLessonsItemQuizAttemptsMax).nullable().describe('How many goes a child gets in a day. Null means the system\'s three.\n'),
+  "answersOpenAt": zod.string().nullable().describe('When the key and the marking notes become the child\'s to see. Null is "not yet", and that is where a check sits while it is still being sat: three goes are pointless if the first hands over the answer, and a parent reading over a shoulder is how it would travel. Whether each answer was right is told at once regardless.\nAn ISO 8601 instant. Sending "now" is the ordinary case; a later one schedules the release.\n'),
+  "coveredLessonIds": zod.array(zod.number().int()).describe('The sections the teacher said this period got through. Empty where nobody has said - the day then speaks for itself, and lessonId is all that is known.\n'),
   "book": zod.union([zod.object({
   "materialId": zod.number().int(),
   "title": zod.string().nullable(),
@@ -1655,6 +1680,14 @@ export const GenerateScheduleResponse = zod.object({
  */
 
 export const setScheduleDayBodyScheduledOnRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const setScheduleDayBodyQuizOpensAtRegExp = new RegExp('^\\d{2}:\\d{2}$');
+export const setScheduleDayBodyQuizQuestionCountMax = 50;
+
+export const setScheduleDayBodyQuizAttemptsMax = 10;
+
+export const setScheduleDayBodyNotHeldReasonMax = 2000;
+
+
 export const setScheduleDayBodyNoteMax = 2000;
 
 
@@ -1667,6 +1700,14 @@ export const SetScheduleDayBody = zod.object({
   "subjectId": zod.number().int().nullish().describe('Which subject\'s day this is. Setting a lesson takes the subject from the lesson itself, so this only matters when clearing: without it, emptying Tuesday in the maths timetable would also empty Tuesday\'s physics. Null clears every subject the teacher holds in the class.\n'),
   "scheduledOn": zod.string().regex(setScheduleDayBodyScheduledOnRegExp),
   "lessonId": zod.number().int().nullable().describe('null clears the day.'),
+  "quizOpensAt": zod.string().regex(setScheduleDayBodyQuizOpensAtRegExp).nullish().describe('HH:MM, in the school\'s own time, before which the day\'s check cannot be sat. Null - nearly always - means it is open as soon as the day is. A teacher holding it back until the practice is done sets a time here.\n'),
+  "quizQuestionCount": zod.number().int().min(1).max(setScheduleDayBodyQuizQuestionCountMax).nullish().describe('How many questions the check asks. Null means the system\'s five.\n'),
+  "quizAttempts": zod.number().int().min(1).max(setScheduleDayBodyQuizAttemptsMax).nullish().describe('How many goes a child gets in a day. Null means the system\'s three.\n'),
+  "answersOpenAt": zod.string().nullish().describe('When the key and the marking notes become the child\'s to see. Null is "not yet", and that is where a check sits while it is still being sat: three goes are pointless if the first hands over the answer, and a parent reading over a shoulder is how it would travel. Whether each answer was right is told at once regardless.\nAn ISO 8601 instant. Sending "now" is the ordinary case; a later one schedules the release.\n'),
+  "held": zod.boolean().optional().describe('Whether the lesson actually happened. True unless said otherwise, and that default is the point: a teacher who marks nothing has not said the class was cancelled, and reading silence as cancellation would strike off every day nobody got round to entering. A false here needs notHeldReason, covers no section - so the section falls back into the plan and the class gets it another day - and leaves the child with no material and no check for that period.\n'),
+  "notHeldReason": zod.string().max(setScheduleDayBodyNotHeldReasonMax).nullish().describe('Why the lesson did not happen. Required when held is false; it is the thing a parent asks about, and "the system says nothing happened" is not an answer three weeks later.\n'),
+  "isContinuation": zod.boolean().optional().describe('The period carried the previous one on rather than opening a new section. It consumes no section from the plan, and reads differently to a child: pick the book up, do not start it.\n'),
+  "coveredLessonIds": zod.array(zod.number().int().min(1)).nullish().describe('Every section this period actually got through, including the one in lessonId. A teacher who moves the class on from section 4 to section 5 is saying one of two things and the day alone cannot tell them apart: we did 4 and started 5, or we skipped 4 and will come back to it. This is where they say which.\nLeft out, the answer is "just the one in lessonId". That is the safe reading: a section wrongly thought untaught comes back round, while one wrongly thought taught is never seen again. Clearing the day clears this with it.\n'),
   "note": zod.string().max(setScheduleDayBodyNoteMax).nullish().describe('What the teacher wants the class to know about this day - which pages to read, which exercises to do, what to watch out for. The student sees it. Leave the field out to keep whatever note is already there; send null or an empty string to remove it. Clearing the day removes the note with it.\n'),
   "pageFrom": zod.number().int().min(1).nullish().describe('The pages this class actually covered, when they are not the ones the book prints for the section. Leave both out to keep whatever is recorded; send null to fall back to the book\'s own range. A class that went further than the section is the reason this exists, and a teacher setting it changes nothing for any other class.\n'),
   "pageTo": zod.number().int().min(1).nullish()
@@ -1680,8 +1721,7 @@ export const SetScheduleDayResponse = zod.object({
   "replan": zod.union([zod.object({
   "classId": zod.number().int(),
   "subjectId": zod.number().int(),
-  "fromDate": zod.string().regex(setScheduleDayResponseReplanOneFromDateRegExp),
-  "lessonId": zod.number().int(),
+  "fromDate": zod.string().regex(setScheduleDayResponseReplanOneFromDateRegExp).describe('The day the class is now known to have reached. The plan is worked out from what this class has been through on or before it, not from any one section, so approving it needs nothing else.\n'),
   "days": zod.array(zod.object({
   "scheduledOn": zod.string().regex(setScheduleDayResponseReplanOneDaysItemScheduledOnRegExp),
   "periodNo": zod.number().int().nullish(),
@@ -1707,8 +1747,7 @@ export const applyReplanBodyFromDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$'
 export const ApplyReplanBody = zod.object({
   "classId": zod.number().int(),
   "subjectId": zod.number().int(),
-  "fromDate": zod.string().regex(applyReplanBodyFromDateRegExp),
-  "lessonId": zod.number().int()
+  "fromDate": zod.string().regex(applyReplanBodyFromDateRegExp)
 })
 
 export const ApplyReplanResponse = zod.object({
@@ -2051,6 +2090,9 @@ export const GetQuizPaperResponse = zod.object({
 })),
   "kind": zod.enum(['LESSON', 'UNIT', 'MONTHLY', 'DIAGNOSTIC']).describe('Which sort of assessment this is - the check at the end of a lesson, a unit test, a monthly one, a diagnostic. Recorded against the lesson that carries the questions; it is not yet an assessment of its own, with an owner and a window.\n'),
   "attemptsUsed": zod.number().int().describe('How many times this student has sat this quiz today. The daily check is practice rather than an examination: a child who gets one wrong should be able to think again and try, so there are three goes and a retry draws questions they have not seen where the lesson has enough of them.\n'),
+  "opensAt": zod.string().nullish().describe('HH:MM before which this check cannot be sat, or null where it is open all day. Told rather than hidden: a page with nothing on it reads as broken.\n'),
+  "isOpen": zod.boolean().optional().describe('False while the check is still waiting for its hour. The questions are then empty.'),
+  "answersOpen": zod.boolean().optional().describe('Whether the teacher has released the key. Until they have, a marked paper says which answers were right or wrong and no more.\n'),
   "attemptsAllowed": zod.number().int(),
   "lastScore": zod.number().int().nullable(),
   "lastMaxScore": zod.number().int().nullable()

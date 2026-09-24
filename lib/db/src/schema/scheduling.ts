@@ -141,6 +141,38 @@ export const classScheduleInLearning = learning.table(
     pageFrom: integer("page_from"),
     pageTo: integer("page_to"),
     note: text(),
+    // Whether the lesson actually happened.
+    //
+    // True by default, and that default is the whole point: a teacher who
+    // marks nothing has not said the class was cancelled, and a system that
+    // read silence as cancellation would empty the register of every school
+    // holiday nobody got round to entering. Only an explicit "it did not
+    // happen" is one, and it carries a reason, because a day struck off the
+    // record is something a parent will ask about.
+    held: boolean().default(true).notNull(),
+    notHeldReason: text("not_held_reason"),
+    // The same section, continued. A period that carries on where the last one
+    // stopped is not a new section and must not consume one from the plan; it
+    // also reads differently to a child, who is being told to pick the book up
+    // rather than open it.
+    isContinuation: boolean("is_continuation").default(false).notNull(),
+    // When the day's check may be sat, how long it is, and how many goes it
+    // allows. All three are null nearly always, and null means the rule the
+    // system runs on: open all day, five questions, three attempts. A teacher
+    // who wants the check held back until the practice is done sets a time,
+    // and one whose section carries three questions rather than five says so
+    // instead of having the paper silently padded.
+    quizOpensAt: time("quiz_opens_at"),
+    quizQuestionCount: smallint("quiz_question_count"),
+    quizAttempts: smallint("quiz_attempts"),
+    // When the key and the marking notes become the child's to see. Null is
+    // "not yet", which is the state a check is in while it is still being
+    // sat: a child on their second go must not have been handed the answer
+    // on their first, and a parent reading over their shoulder is exactly the
+    // route by which that happens. Whether each answer was right is told at
+    // once - that is the feedback - but which option was right, and why, waits
+    // for the teacher.
+    answersOpenAt: timestamp("answers_open_at", { withTimezone: true, mode: "string" }),
     createdBy: bigint("created_by", { mode: "number" }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
       .defaultNow()
@@ -150,6 +182,18 @@ export const classScheduleInLearning = learning.table(
     unique("class_schedule_class_day_key").on(
       table.classId, table.subjectId, table.scheduledOn, table.timetableSlotId,
     ).nullsNotDistinct(),
+    check(
+      "class_schedule_not_held_reason_check",
+      sql`held OR not_held_reason IS NOT NULL`,
+    ),
+    check(
+      "class_schedule_quiz_question_count_check",
+      sql`quiz_question_count IS NULL OR quiz_question_count BETWEEN 1 AND 50`,
+    ),
+    check(
+      "class_schedule_quiz_attempts_check",
+      sql`quiz_attempts IS NULL OR quiz_attempts BETWEEN 1 AND 10`,
+    ),
     check("class_schedule_page_from_check", sql`${table.pageFrom} > 0`),
     check("class_schedule_page_to_check", sql`${table.pageTo} > 0`),
     check(
@@ -190,6 +234,92 @@ export const classScheduleInLearning = learning.table(
       columns: [table.subjectId],
       foreignColumns: [subjectsInCore.id],
       name: "class_schedule_subject_id_fkey",
+    }),
+  ],
+);
+
+/**
+ * Which sections a class actually got through in one period.
+ *
+ * class_schedule holds one lesson per period - what the child opens, what the
+ * book pages and the note belong to. That is the right shape for the child and
+ * the wrong shape for the plan, because a period is not always one section.
+ *
+ * Two things happen in real teaching and they look identical in a single
+ * column. A class covers section 4 and starts section 5 in the same hour: the
+ * term afterwards should carry on from 6. A teacher skips section 4 and
+ * teaches 5 instead, meaning to come back: 4 has not been taught and must fall
+ * somewhere later. Both end with "the day says 5", and until now the second
+ * quietly lost section 4 - the plan moved on as though it had been covered.
+ *
+ * So the sections covered are recorded, all of them, and the plan for the rest
+ * of the term is what remains. The row in class_schedule stays the one the
+ * class ended on, because that is the one whose pages and instruction the
+ * child needs.
+ *
+ * Only what a teacher said is here. Days nobody has confirmed carry no rows
+ * and are read from class_schedule as before - the plan's own claim about what
+ * was taught, which is all anybody has for a day that went unremarked.
+ */
+export const classLessonCoverageInLearning = learning.table(
+  "class_lesson_coverage",
+  {
+    id: bigint({ mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity({
+        name: "learning.class_lesson_coverage_id_seq",
+        startWith: 1,
+        increment: 1,
+        minValue: 1,
+        cache: 1,
+      }),
+    classId: bigint("class_id", { mode: "number" }).notNull(),
+    subjectId: bigint("subject_id", { mode: "number" }).notNull(),
+    scheduledOn: date("scheduled_on").notNull(),
+    // Nullable for the same reason class_schedule's is: a school without a
+    // timetable still teaches, and the day is then the only address a lesson
+    // has.
+    timetableSlotId: bigint("timetable_slot_id", { mode: "number" }),
+    dailyLessonId: bigint("daily_lesson_id", { mode: "number" }).notNull(),
+    createdBy: bigint("created_by", { mode: "number" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("class_lesson_coverage_key").on(
+      table.classId, table.scheduledOn, table.timetableSlotId, table.dailyLessonId,
+    ).nullsNotDistinct(),
+    index("idx_class_lesson_coverage_day").using(
+      "btree",
+      table.classId.asc().nullsLast(),
+      table.subjectId.asc().nullsLast(),
+      table.scheduledOn.asc().nullsLast(),
+    ),
+    foreignKey({
+      columns: [table.classId],
+      foreignColumns: [classesInCore.id],
+      name: "class_lesson_coverage_class_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.subjectId],
+      foreignColumns: [subjectsInCore.id],
+      name: "class_lesson_coverage_subject_id_fkey",
+    }),
+    foreignKey({
+      columns: [table.dailyLessonId],
+      foreignColumns: [dailyLessonsInLearning.id],
+      name: "class_lesson_coverage_daily_lesson_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.timetableSlotId],
+      foreignColumns: [timetableSlotsInLearning.id],
+      name: "class_lesson_coverage_timetable_slot_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.createdBy],
+      foreignColumns: [usersInCore.id],
+      name: "class_lesson_coverage_created_by_fkey",
     }),
   ],
 );

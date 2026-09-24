@@ -81,8 +81,16 @@ export async function studentToday(user: AuthenticatedUser, date = todayInUlaanb
     groupLabel: row.groupLabel ?? null,
     selectionPending: row.selectionPending ?? false,
     timetableSlotId: row.timetableSlotId ?? null,
+    // Struck off the register. The child is told the lesson did not happen and
+    // why, and gets no material and no check for it - there is nothing to
+    // answer about an hour that did not take place.
+    held: row.held ?? true,
+    notHeldReason: row.notHeldReason ?? null,
+    // Carrying the last period on rather than opening a new section, which
+    // reads differently: pick the book up, do not start it.
+    isContinuation: row.isContinuation ?? false,
     // Null where nobody has written the lesson, which is most of them.
-    lesson: row.id === null ? null : toLessonView(row),
+    lesson: row.id === null || row.held === false ? null : toLessonView(row),
     extra: null as Extra | null,
   }));
 
@@ -106,6 +114,9 @@ export async function studentToday(user: AuthenticatedUser, date = todayInUlaanb
         groupLabel: null,
         selectionPending: false,
         timetableSlotId: null,
+        held: true,
+        notHeldReason: null,
+        isContinuation: false,
         lesson: null,
         extra,
       });

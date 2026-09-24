@@ -152,7 +152,6 @@ export type ReplanProposal = {
   classId: number;
   subjectId: number;
   fromDate: string;
-  lessonId: number;
   days: ReplanDay[];
 };
 
@@ -183,35 +182,48 @@ async function planForward(
   classId: number,
   subjectId: number,
   fromDate: string,
-  lessonId: number,
   termEndsOn: string,
 ) {
   const lessons = await repository.schedulableLessons(classId, [subjectId]);
   const ordered = lessons.filter((lesson) => lesson.sequenceNo !== null);
-  const at = ordered.findIndex((lesson) => lesson.id === lessonId);
-  // A subject whose lessons carry no place in a book has no "next", and
-  // shuffling them would be inventing an order the school never chose.
-  if (at < 0) return [];
-  // Nothing follows this section - it is the last the school has content for -
-  // so there is nothing to lay out. Leaving the calendar alone matters:
-  // clearing the rest of the term is what "no successors" would otherwise
-  // mean, and a teacher who reaches the end of the book has not asked for
-  // every day after it to be emptied.
-  if (at + 1 >= ordered.length) return [];
+  // A subject whose lessons carry no place in a book has no order to lay out,
+  // and shuffling them would be inventing one the school never chose.
+  if (ordered.length === 0) return null;
 
   const slots = await repository.subjectSlots(classId, subjectId);
-  if (slots.length === 0) return [];
+  if (slots.length === 0) return null;
 
+  // What is left to teach. Not "the sections after the one chosen today":
+  // that reading cannot tell a class which covered two sections in an hour
+  // from one which skipped a section and means to come back, because both end
+  // the day on the same section. Everything the class has been through is
+  // subtracted, and what remains is laid out in the book's order - so a
+  // skipped section falls back into the term instead of vanishing from it.
+  const done = new Set(await repository.coveredLessonIds(classId, subjectId, fromDate));
+
+  const pinnedRows = await repository.pinnedScheduleDays(classId, subjectId, fromDate, termEndsOn);
   const pinned = new Set(
-    (await repository.pinnedScheduleDays(classId, subjectId, fromDate, termEndsOn))
-      .map((row) => `${row.scheduledOn}:${row.timetableSlotId ?? ""}`),
+    pinnedRows.map((row) => `${row.scheduledOn}:${row.timetableSlotId ?? ""}`),
   );
+  // A section a teacher has already put on a later day is spoken for. Without
+  // this it would be dealt out again earlier and taught twice. A day struck
+  // off is not spoken for: its section was never taught and is owed a day.
+  for (const row of pinnedRows) {
+    if (row.dailyLessonId !== null && row.held) done.add(row.dailyLessonId);
+  }
+
+  const queue = ordered.filter((lesson) => !done.has(lesson.id));
+  // Nothing left: the class has been through everything the school has content
+  // for. Leaving the calendar alone matters here - laying out an empty plan
+  // would clear the rest of the term, and a teacher who reaches the end of the
+  // book has not asked for every day after it to be emptied.
+  if (queue.length === 0) return null;
 
   const rows: Array<{ lessonId: number; onDate: string; slotId: number | null; periodNo: number | null }> = [];
-  let next = at + 1;
+  let next = 0;
   for (
     let date = shiftDay(fromDate, 1);
-    date <= termEndsOn && next < ordered.length;
+    date <= termEndsOn && next < queue.length;
     date = shiftDay(date, 1)
   ) {
     const weekday = isoWeekday(date);
@@ -226,11 +238,11 @@ async function planForward(
     // are taught the same section.
     const periods = [...new Set(today.map((slot) => slot.periodNo))].sort((a, b) => a - b);
     for (const periodNo of periods) {
-      if (next >= ordered.length) break;
+      if (next >= queue.length) break;
       const here = today.filter((slot) => slot.periodNo === periodNo);
       if (here.some((slot) => pinned.has(`${date}:${slot.id}`))) continue;
       for (const slot of here) {
-        rows.push({ lessonId: ordered[next]!.id, onDate: date, slotId: slot.id, periodNo });
+        rows.push({ lessonId: queue[next]!.id, onDate: date, slotId: slot.id, periodNo });
       }
       next += 1;
     }
@@ -252,12 +264,11 @@ async function proposeReplan(
   classId: number,
   subjectId: number,
   fromDate: string,
-  lessonId: number,
   termEndsOn: string,
 ): Promise<ReplanProposal> {
-  const rows = await planForward(classId, subjectId, fromDate, lessonId, termEndsOn);
-  if (rows.length === 0) {
-    return { classId, subjectId, fromDate, lessonId, days: [] };
+  const rows = await planForward(classId, subjectId, fromDate, termEndsOn);
+  if (rows === null || rows.length === 0) {
+    return { classId, subjectId, fromDate, days: [] };
   }
 
   const lessons = new Map(
@@ -303,7 +314,7 @@ async function proposeReplan(
       currentSkillName: was?.skillName ?? null,
     });
   }
-  return { classId, subjectId, fromDate, lessonId, days };
+  return { classId, subjectId, fromDate, days };
 }
 
 /**
@@ -314,7 +325,7 @@ async function proposeReplan(
  */
 export async function applyReplan(
   user: AuthenticatedUser,
-  input: { classId: number; subjectId: number; fromDate: string; lessonId: number },
+  input: { classId: number; subjectId: number; fromDate: string },
 ) {
   const klass = await authorisedClass(user, input.classId);
   await editableSubjects(user, klass.classId, input.subjectId);
@@ -332,9 +343,11 @@ export async function applyReplan(
     klass.classId,
     input.subjectId,
     input.fromDate,
-    input.lessonId,
     termRow.endsOn,
   );
+  // Null is "there is nothing to lay out", which is not the same as "lay out
+  // nothing": writing an empty plan would clear the rest of the term.
+  if (rows === null) return { days: 0 };
   await repository.replanScheduleDays(
     klass.classId,
     input.subjectId,
@@ -356,6 +369,14 @@ export async function setScheduleDay(
     pageFrom?: number | null;
     pageTo?: number | null;
     timetableSlotId?: number | null;
+    coveredLessonIds?: number[] | null;
+    held?: boolean;
+    notHeldReason?: string | null;
+    isContinuation?: boolean;
+    quizOpensAt?: string | null;
+    quizQuestionCount?: number | null;
+    quizAttempts?: number | null;
+    answersOpenAt?: string | null;
   },
 ) {
   const klass = await authorisedClass(user, input.classId);
@@ -392,6 +413,44 @@ export async function setScheduleDay(
     throw badRequest(`Тайлбар ${MAX_NOTE_LENGTH} тэмдэгтээс урт байна.`, "NOTE_TOO_LONG");
   }
   const note = trimmed === "" ? null : trimmed;
+
+  // A day struck off the register needs a reason. It is the one thing a parent
+  // asks about, and "the system says nothing happened" is not an answer a
+  // class teacher can give three weeks later.
+  const held = input.held ?? true;
+  const reason = typeof input.notHeldReason === "string" ? input.notHeldReason.trim() : null;
+  if (!held && (reason === null || reason === "")) {
+    throw badRequest("Хичээл болоогүй шалтгаанаа бичнэ үү.", "REASON_REQUIRED");
+  }
+  if (reason !== null && reason.length > MAX_NOTE_LENGTH) {
+    throw badRequest(`Шалтгаан ${MAX_NOTE_LENGTH} тэмдэгтээс урт байна.`, "REASON_TOO_LONG");
+  }
+  const notHeldReason = held ? null : reason;
+
+  // The check's own settings. All four move together or not at all: a teacher
+  // correcting a topic has said nothing about when the check opens, and
+  // silently resetting their window would be worse than refusing to.
+  const replaceQuiz =
+    input.quizOpensAt !== undefined ||
+    input.quizQuestionCount !== undefined ||
+    input.quizAttempts !== undefined ||
+    input.answersOpenAt !== undefined;
+  const quizOpensAt = input.quizOpensAt ?? null;
+  if (quizOpensAt !== null && !/^\d{2}:\d{2}$/.test(quizOpensAt)) {
+    throw badRequest("Сорил нээгдэх цаг буруу байна.", "INVALID_TIME");
+  }
+  const quizQuestionCount = input.quizQuestionCount ?? null;
+  if (quizQuestionCount !== null && (quizQuestionCount < 1 || quizQuestionCount > 50)) {
+    throw badRequest("Асуултын тоо 1-50 хооронд байна.", "INVALID_QUESTION_COUNT");
+  }
+  const quizAttempts = input.quizAttempts ?? null;
+  if (quizAttempts !== null && (quizAttempts < 1 || quizAttempts > 10)) {
+    throw badRequest("Оролдлогын тоо 1-10 хооронд байна.", "INVALID_ATTEMPTS");
+  }
+  const answersOpenAt = input.answersOpenAt ?? null;
+  if (answersOpenAt !== null && Number.isNaN(Date.parse(answersOpenAt))) {
+    throw badRequest("Хариулт нээх хугацаа буруу байна.", "INVALID_TIMESTAMP");
+  }
 
   // Both or neither: half a range is not a range, and a teacher who means
   // "one page" sends the same number twice.
@@ -441,6 +500,7 @@ export async function setScheduleDay(
 
   if (input.lessonId === null) {
     await repository.clearScheduleDay(klass.classId, input.scheduledOn, subjectIds, slotId);
+    await repository.clearDayCoverage(klass.classId, subjectIds, input.scheduledOn, slotId);
     return { replan: null };
   }
 
@@ -474,6 +534,7 @@ export async function setScheduleDay(
     slotId,
   );
   const previousLessonId = existing?.dailyLessonId ?? null;
+  const previousHeld = existing?.held ?? null;
 
   await repository.setScheduleDay({
     classId: klass.classId,
@@ -488,20 +549,63 @@ export async function setScheduleDay(
     replacePages,
     timetableSlotId: slotId,
     periodNo,
+    held,
+    notHeldReason,
+    isContinuation: input.isContinuation ?? false,
+    quizOpensAt,
+    quizQuestionCount,
+    quizAttempts,
+    answersOpenAt,
+    replaceQuiz,
   });
 
+  // What the period actually got through.
+  //
+  // A teacher who moves the class on from section 4 to section 5 is saying one
+  // of two things, and the day alone cannot tell them apart: we did 4 and
+  // started 5, or we skipped 4 and will come back to it. So they are asked,
+  // and what they tick is recorded here.
+  //
+  // Left out, the answer is "just this one". That is the safe reading: a
+  // section is only counted as taught when it was on a day or a teacher said
+  // so, and a section wrongly thought untaught comes back round, while one
+  // wrongly thought taught is never seen again.
+  // A day that did not happen covered nothing, whatever section it names. The
+  // section stays on the day - a teacher looking back wants to see what was
+  // meant to happen - but it is not marked as taught, so it falls back into
+  // the plan and the class gets it another day.
+  const covered = held
+    ? [...new Set([input.lessonId, ...(input.coveredLessonIds ?? [])])]
+    : [];
+  if (covered.some((id) => !lessons.some((row) => row.id === id))) {
+    throw badRequest("Үзсэн гэж тэмдэглэсэн сэдэв энэ ангид байхгүй байна.", "LESSON_NOT_SCHEDULABLE");
+  }
+  await repository.setDayCoverage(
+    klass.classId,
+    lesson.subjectId,
+    input.scheduledOn,
+    slotId,
+    covered,
+    user.id,
+  );
+
   // The day is saved; the rest of the term is offered, not taken. Only when
-  // the lesson itself changed - writing a note says nothing about where the
-  // class is, and proposing to re-lay the term every time somebody edits a
-  // sentence would train teachers to dismiss the question without reading it.
-  if (input.lessonId !== previousLessonId) {
+  // where the class stands changed - writing a note says nothing about that,
+  // and proposing to re-lay the term every time somebody edits a sentence
+  // would train teachers to dismiss the question without reading it.
+  const moved =
+    input.lessonId !== previousLessonId ||
+    (input.coveredLessonIds !== undefined && input.coveredLessonIds !== null) ||
+    // Striking a day off, or putting one back, changes what is left to teach
+    // by exactly one section - which is a day's worth of the term.
+    held !== (previousHeld ?? true);
+  if (moved) {
     const [termRow] = await repository.termById(term.id);
     if (termRow) {
       const proposal = await proposeReplan(
         klass.classId,
         lesson.subjectId,
         input.scheduledOn,
-        input.lessonId,
         termRow.endsOn,
       );
       if (proposal.days.length > 0) return { replan: proposal };

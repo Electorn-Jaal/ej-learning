@@ -31,6 +31,9 @@ export const scheduleForClass = (
     lessonType: string | null;
     skillName: string | null;
     note: string | null;
+    held: boolean;
+    notHeldReason: string | null;
+    isContinuation: boolean;
   }>(
     `WITH visible_subjects AS (
        SELECT sub.id, sub.name_mn FROM core.subjects sub
@@ -49,7 +52,9 @@ export const scheduleForClass = (
        JOIN visible_subjects sub ON sub.id = ts.subject_id
      ), rows AS (
        SELECT w.day, w.subject_id, w.id AS slot_id, w.period_no, w.group_label, w.teacher_id,
-              cs.daily_lesson_id, cs.note
+              cs.daily_lesson_id, cs.note,
+              COALESCE(cs.held, true) AS held, cs.not_held_reason,
+              COALESCE(cs.is_continuation, false) AS is_continuation
        FROM weekly w
        LEFT JOIN learning.class_schedule cs ON cs.class_id = $1 AND cs.scheduled_on = w.day
          AND cs.subject_id = w.subject_id
@@ -57,7 +62,9 @@ export const scheduleForClass = (
               (cs.timetable_slot_id IS NULL AND cs.period_no = w.period_no))
        UNION ALL
        SELECT d.day::date, sub.id, NULL::bigint, cs.period_no, NULL::varchar, NULL::bigint,
-              cs.daily_lesson_id, cs.note
+              cs.daily_lesson_id, cs.note,
+              COALESCE(cs.held, true), cs.not_held_reason,
+              COALESCE(cs.is_continuation, false)
        FROM generate_series($2::date, $3::date, interval '1 day') d(day)
        LEFT JOIN visible_subjects sub ON true
        LEFT JOIN learning.class_schedule cs ON cs.class_id = $1 AND cs.scheduled_on = d.day::date
@@ -70,7 +77,9 @@ export const scheduleForClass = (
        to_char(p.starts_at, 'HH24:MI') AS "startsAt", u.display_name AS "teacherName",
        sub.id::int AS "subjectId", sub.name_mn AS subject,
        dl.id::int AS "lessonId", dl.lesson_code AS "lessonCode",
-       dl.lesson_type AS "lessonType", sk.name_mn AS "skillName", rows.note
+       dl.lesson_type AS "lessonType", sk.name_mn AS "skillName", rows.note,
+       rows.held, rows.not_held_reason AS "notHeldReason",
+       rows.is_continuation AS "isContinuation"
      FROM rows
      LEFT JOIN core.subjects sub ON sub.id = rows.subject_id
      JOIN core.classes c ON c.id = $1
@@ -186,14 +195,26 @@ export async function setScheduleDay(row: {
   replacePages: boolean;
   timetableSlotId: number | null;
   periodNo: number | null;
+  held: boolean;
+  notHeldReason: string | null;
+  isContinuation: boolean;
+  quizOpensAt: string | null;
+  quizQuestionCount: number | null;
+  quizAttempts: number | null;
+  answersOpenAt: string | null;
+  replaceQuiz: boolean;
 }) {
   await db.execute(sql`
     INSERT INTO learning.class_schedule
       (class_id, term_id, daily_lesson_id, scheduled_on, subject_id, created_by, note,
-       page_from, page_to, timetable_slot_id, period_no)
+       page_from, page_to, timetable_slot_id, period_no, held, not_held_reason,
+       is_continuation, quiz_opens_at, quiz_question_count, quiz_attempts,
+       answers_open_at)
     SELECT ${row.classId}, ${row.termId}, ${row.dailyLessonId}, ${row.scheduledOn}::date,
       sk.subject_id, ${row.createdBy}, ${row.note}, ${row.pageFrom}, ${row.pageTo},
-      ${row.timetableSlotId}, ${row.periodNo}
+      ${row.timetableSlotId}, ${row.periodNo}, ${row.held}, ${row.notHeldReason},
+      ${row.isContinuation}, ${row.quizOpensAt}::time, ${row.quizQuestionCount},
+      ${row.quizAttempts}, ${row.answersOpenAt}::timestamptz
     FROM learning.daily_lessons dl
     JOIN content.skills sk ON sk.id = dl.core_skill_id
     WHERE dl.id = ${row.dailyLessonId}
@@ -202,6 +223,20 @@ export async function setScheduleDay(row: {
       period_no = EXCLUDED.period_no,
       term_id = EXCLUDED.term_id,
       created_by = EXCLUDED.created_by,
+      held = EXCLUDED.held,
+      not_held_reason = EXCLUDED.not_held_reason,
+      is_continuation = EXCLUDED.is_continuation,
+      -- Left out, left alone. The quiz settings belong to the period rather
+      -- than to the section, and a teacher correcting a topic or a note has
+      -- said nothing about when the check opens.
+      quiz_opens_at = CASE WHEN ${row.replaceQuiz} THEN EXCLUDED.quiz_opens_at
+                           ELSE learning.class_schedule.quiz_opens_at END,
+      quiz_question_count = CASE WHEN ${row.replaceQuiz} THEN EXCLUDED.quiz_question_count
+                                 ELSE learning.class_schedule.quiz_question_count END,
+      quiz_attempts = CASE WHEN ${row.replaceQuiz} THEN EXCLUDED.quiz_attempts
+                           ELSE learning.class_schedule.quiz_attempts END,
+      answers_open_at = CASE WHEN ${row.replaceQuiz} THEN EXCLUDED.answers_open_at
+                             ELSE learning.class_schedule.answers_open_at END,
       note = CASE WHEN ${row.replaceNote} THEN EXCLUDED.note
                   ELSE learning.class_schedule.note END,
       -- A page range belongs to the section that was taught. Changing the
@@ -252,8 +287,8 @@ export const scheduledLessonOn = (
   onDate: string,
   slotId: number | null,
 ) =>
-  readRows<{ dailyLessonId: number | null }>(
-    `SELECT daily_lesson_id::int AS "dailyLessonId"
+  readRows<{ dailyLessonId: number | null; held: boolean }>(
+    `SELECT daily_lesson_id::int AS "dailyLessonId", held
      FROM learning.class_schedule
      WHERE class_id = $1::bigint AND subject_id = $2::bigint AND scheduled_on = $3::date
        AND timetable_slot_id IS NOT DISTINCT FROM $4::bigint
@@ -278,15 +313,28 @@ export const subjectSlots = (classId: number, subjectId: number) =>
     [classId, subjectId],
   );
 
-/** Days a person chose, which a replan must step around rather than over. */
+/**
+ * Days a person chose, which a replan must step around rather than over.
+ *
+ * The lesson comes back with them because stepping around a day is not enough:
+ * a section a teacher has already pinned to the 14th must not also be dealt
+ * out to the 3rd, which is what laying the remaining sections out in order
+ * without looking at the pinned ones would do.
+ */
 export const pinnedScheduleDays = (
   classId: number,
   subjectId: number,
   after: string,
   until: string,
 ) =>
-  readRows<{ scheduledOn: string; timetableSlotId: number | null }>(
-    `SELECT scheduled_on::text AS "scheduledOn", timetable_slot_id::int AS "timetableSlotId"
+  readRows<{
+    scheduledOn: string;
+    timetableSlotId: number | null;
+    dailyLessonId: number | null;
+    held: boolean;
+  }>(
+    `SELECT scheduled_on::text AS "scheduledOn", timetable_slot_id::int AS "timetableSlotId",
+       daily_lesson_id::int AS "dailyLessonId", held
      FROM learning.class_schedule
      WHERE class_id = $1::bigint AND subject_id = $2::bigint AND created_by IS NOT NULL
        AND scheduled_on > $3::date AND scheduled_on <= $4::date`,
@@ -294,7 +342,108 @@ export const pinnedScheduleDays = (
   );
 
 /**
- * Lay the rest of the term out again, in one statement.
+ * Every section this class has already been through, on or before a date.
+ *
+ * Two sources, because there are two kinds of claim. class_schedule says what
+ * each day was for - the plan's own account, and all anybody has for a day
+ * that went by unremarked. class_lesson_coverage says what a teacher told us
+ * actually got covered in a period, which is the only way a day that took two
+ * sections, or a day that skipped one, can be told apart from the plan.
+ *
+ * Union, not preference: a section counts as taught if either says so.
+ */
+export const coveredLessonIds = (classId: number, subjectId: number, until: string) =>
+  readRows<{ id: number }>(
+    `SELECT DISTINCT daily_lesson_id::int AS id FROM (
+       -- held: a day struck off taught nothing, whatever section it named,
+       -- so its section is still owed a day and must fall back into the plan.
+       SELECT daily_lesson_id FROM learning.class_schedule
+        WHERE class_id = $1::bigint AND subject_id = $2::bigint
+          AND scheduled_on <= $3::date AND daily_lesson_id IS NOT NULL AND held
+       UNION
+       SELECT daily_lesson_id FROM learning.class_lesson_coverage
+        WHERE class_id = $1::bigint AND subject_id = $2::bigint
+          AND scheduled_on <= $3::date
+     ) covered`,
+    [classId, subjectId, until],
+  ).then((rows) => rows.map((row) => row.id));
+
+/** What a teacher said was covered in one period, for the screen to show back. */
+export const dayCoverage = (
+  classId: number,
+  subjectId: number,
+  scheduledOn: string,
+  slotId: number | null,
+) =>
+  readRows<{ id: number }>(
+    `SELECT daily_lesson_id::int AS id
+       FROM learning.class_lesson_coverage
+      WHERE class_id = $1::bigint AND subject_id = $2::bigint
+        AND scheduled_on = $3::date AND timetable_slot_id IS NOT DISTINCT FROM $4::bigint
+      ORDER BY daily_lesson_id`,
+    [classId, subjectId, scheduledOn, slotId],
+  ).then((rows) => rows.map((row) => row.id));
+
+/**
+ * Replace what one period says it covered.
+ *
+ * Replace rather than add: the teacher is correcting a single period, and the
+ * list on their screen is the whole of their answer. One transaction, so a
+ * period is never left saying it covered nothing at all.
+ */
+export async function setDayCoverage(
+  classId: number,
+  subjectId: number,
+  scheduledOn: string,
+  slotId: number | null,
+  lessonIds: number[],
+  createdBy: number,
+) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `DELETE FROM learning.class_lesson_coverage
+        WHERE class_id = $1::bigint AND subject_id = $2::bigint
+          AND scheduled_on = $3::date AND timetable_slot_id IS NOT DISTINCT FROM $4::bigint`,
+      [classId, subjectId, scheduledOn, slotId],
+    );
+    if (lessonIds.length > 0) {
+      await client.query(
+        `INSERT INTO learning.class_lesson_coverage
+           (class_id, subject_id, scheduled_on, timetable_slot_id, daily_lesson_id, created_by)
+         SELECT $1::bigint, $2::bigint, $3::date, $4::bigint, x.lesson_id, $6::bigint
+           FROM unnest($5::bigint[]) AS x(lesson_id)
+         ON CONFLICT ON CONSTRAINT class_lesson_coverage_key DO NOTHING`,
+        [classId, subjectId, scheduledOn, slotId, lessonIds, createdBy],
+      );
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/** Coverage goes with the day it describes when the day is emptied. */
+export const clearDayCoverage = (
+  classId: number,
+  subjectIds: number[] | null,
+  scheduledOn: string,
+  slotId: number | null,
+) =>
+  pool.query(
+    `DELETE FROM learning.class_lesson_coverage
+      WHERE class_id = $1::bigint AND scheduled_on = $3::date
+        AND ($2::bigint[] IS NULL OR subject_id = ANY($2::bigint[]))
+        AND timetable_slot_id IS NOT DISTINCT FROM $4::bigint`,
+    [classId, subjectIds, scheduledOn, slotId],
+  );
+
+/**
+ * Lay the rest of the term out again, all of it or none of it.
  *
  * Every row it writes carries created_by null, which is how this system says
  * "nobody decided this, it follows from the order of the book". The rows it
@@ -302,7 +451,12 @@ export const pinnedScheduleDays = (
  * at all, because the caller leaves them out.
  *
  * The delete goes first so that a plan which now needs fewer days does not
- * leave the tail of the old one lying in the calendar.
+ * leave the tail of the old one lying in the calendar - and that is exactly
+ * why the two statements share one transaction. Between them the rest of the
+ * term is empty. A connection dropped there, or an insert that fails on a row
+ * near the end, would leave a class with no plan at all: not the old one, not
+ * the new one, and nothing on the screen to say so. A teacher approved a
+ * change, so they get the change or they get what they had.
  */
 export async function replanScheduleDays(
   classId: number,
@@ -311,42 +465,54 @@ export async function replanScheduleDays(
   until: string,
   rows: Array<{ lessonId: number; onDate: string; slotId: number | null; periodNo: number | null }>,
 ) {
-  // The pool directly, with plain parameters. readRows opens a READ ONLY
-  // transaction, and a drizzle template expands a JS array into a list of
-  // parameters - which turns unnest($3::bigint[]) into unnest(1, 2, 3::bigint[]).
-  await pool.query(
-    `DELETE FROM learning.class_schedule
-      WHERE class_id = $1::bigint AND subject_id = $2::bigint AND created_by IS NULL
-        AND scheduled_on > $3::date AND scheduled_on <= $4::date`,
-    [classId, subjectId, after, until],
-  );
-  if (rows.length === 0) return;
-  await pool.query(
-    `INSERT INTO learning.class_schedule
-       (class_id, term_id, daily_lesson_id, scheduled_on, subject_id, created_by,
-        timetable_slot_id, period_no)
-     SELECT $1::bigint, t.id, x.lesson_id, x.on_date, $2::bigint, NULL, x.slot_id, x.period_no
-       FROM unnest($3::bigint[], $4::date[], $5::bigint[], $6::int[])
-              AS x(lesson_id, on_date, slot_id, period_no)
-       JOIN LATERAL (
-         SELECT id FROM learning.terms
-          WHERE x.on_date BETWEEN starts_on AND ends_on
-          ORDER BY term_number LIMIT 1
-       ) t ON true
-     ON CONFLICT ON CONSTRAINT class_schedule_class_day_key DO UPDATE SET
-       daily_lesson_id = EXCLUDED.daily_lesson_id,
-       period_no = EXCLUDED.period_no,
-       term_id = EXCLUDED.term_id,
-       created_by = EXCLUDED.created_by`,
-    [
-      classId,
-      subjectId,
-      rows.map((row) => row.lessonId),
-      rows.map((row) => row.onDate),
-      rows.map((row) => row.slotId),
-      rows.map((row) => row.periodNo),
-    ],
-  );
+  // One client, held for both statements. readRows would not do: it opens a
+  // READ ONLY transaction. Nor would a drizzle template: it expands a JS array
+  // into a list of parameters, which turns unnest($3::bigint[]) into
+  // unnest(1, 2, 3::bigint[]).
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `DELETE FROM learning.class_schedule
+        WHERE class_id = $1::bigint AND subject_id = $2::bigint AND created_by IS NULL
+          AND scheduled_on > $3::date AND scheduled_on <= $4::date`,
+      [classId, subjectId, after, until],
+    );
+    if (rows.length > 0) {
+      await client.query(
+        `INSERT INTO learning.class_schedule
+           (class_id, term_id, daily_lesson_id, scheduled_on, subject_id, created_by,
+            timetable_slot_id, period_no)
+         SELECT $1::bigint, t.id, x.lesson_id, x.on_date, $2::bigint, NULL, x.slot_id, x.period_no
+           FROM unnest($3::bigint[], $4::date[], $5::bigint[], $6::int[])
+                  AS x(lesson_id, on_date, slot_id, period_no)
+           JOIN LATERAL (
+             SELECT id FROM learning.terms
+              WHERE x.on_date BETWEEN starts_on AND ends_on
+              ORDER BY term_number LIMIT 1
+           ) t ON true
+         ON CONFLICT ON CONSTRAINT class_schedule_class_day_key DO UPDATE SET
+           daily_lesson_id = EXCLUDED.daily_lesson_id,
+           period_no = EXCLUDED.period_no,
+           term_id = EXCLUDED.term_id,
+           created_by = EXCLUDED.created_by`,
+        [
+          classId,
+          subjectId,
+          rows.map((row) => row.lessonId),
+          rows.map((row) => row.onDate),
+          rows.map((row) => row.slotId),
+          rows.map((row) => row.periodNo),
+        ],
+      );
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export const timetableSlot = (id: number) => readRows<{

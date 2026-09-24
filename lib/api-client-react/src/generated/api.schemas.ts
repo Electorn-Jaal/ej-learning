@@ -339,9 +339,11 @@ export interface ReplanDay {
 export interface ReplanProposal {
   classId: number;
   subjectId: number;
-  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  /**
+     * The day the class is now known to have reached. The plan is worked out from what this class has been through on or before it, not from any one section, so approving it needs nothing else.
+     * @pattern ^\d{4}-\d{2}-\d{2}$
+     */
   fromDate: string;
-  lessonId: number;
   days: ReplanDay[];
 }
 
@@ -355,7 +357,6 @@ export interface ReplanInput {
   subjectId: number;
   /** @pattern ^\d{4}-\d{2}-\d{2}$ */
   fromDate: string;
-  lessonId: number;
 }
 
 export interface ReplanResult {
@@ -382,6 +383,49 @@ export interface ScheduleDayInput {
      * @nullable
      */
   lessonId: number | null;
+  /**
+     * HH:MM, in the school's own time, before which the day's check cannot be sat. Null - nearly always - means it is open as soon as the day is. A teacher holding it back until the practice is done sets a time here.
+     * @nullable
+     * @pattern ^\d{2}:\d{2}$
+     */
+  quizOpensAt?: string | null;
+  /**
+     * How many questions the check asks. Null means the system's five.
+     * @minimum 1
+     * @maximum 50
+     * @nullable
+     */
+  quizQuestionCount?: number | null;
+  /**
+     * How many goes a child gets in a day. Null means the system's three.
+     * @minimum 1
+     * @maximum 10
+     * @nullable
+     */
+  quizAttempts?: number | null;
+  /**
+     * When the key and the marking notes become the child's to see. Null is "not yet", and that is where a check sits while it is still being sat: three goes are pointless if the first hands over the answer, and a parent reading over a shoulder is how it would travel. Whether each answer was right is told at once regardless.
+     * An ISO 8601 instant. Sending "now" is the ordinary case; a later one schedules the release.
+     * @nullable
+     */
+  answersOpenAt?: string | null;
+  /** Whether the lesson actually happened. True unless said otherwise, and that default is the point: a teacher who marks nothing has not said the class was cancelled, and reading silence as cancellation would strike off every day nobody got round to entering. A false here needs notHeldReason, covers no section - so the section falls back into the plan and the class gets it another day - and leaves the child with no material and no check for that period. */
+  held?: boolean;
+  /**
+     * Why the lesson did not happen. Required when held is false; it is the thing a parent asks about, and "the system says nothing happened" is not an answer three weeks later.
+     * @maxLength 2000
+     * @nullable
+     */
+  notHeldReason?: string | null;
+  /** The period carried the previous one on rather than opening a new section. It consumes no section from the plan, and reads differently to a child: pick the book up, do not start it. */
+  isContinuation?: boolean;
+  /**
+     * Every section this period actually got through, including the one in lessonId. A teacher who moves the class on from section 4 to section 5 is saying one of two things and the day alone cannot tell them apart: we did 4 and started 5, or we skipped 4 and will come back to it. This is where they say which.
+     * Left out, the answer is "just the one in lessonId". That is the safe reading: a section wrongly thought untaught comes back round, while one wrongly thought taught is never seen again. Clearing the day clears this with it.
+     * @nullable
+     * @items.minimum 1
+     */
+  coveredLessonIds?: number[] | null;
   /**
      * What the teacher wants the class to know about this day - which pages to read, which exercises to do, what to watch out for. The student sees it. Leave the field out to keep whatever note is already there; send null or an empty string to remove it. Clearing the day removes the note with it.
      * @maxLength 2000
@@ -458,6 +502,15 @@ export interface QuizPaper {
   kind: QuizPaperKind;
   /** How many times this student has sat this quiz today. The daily check is practice rather than an examination: a child who gets one wrong should be able to think again and try, so there are three goes and a retry draws questions they have not seen where the lesson has enough of them. */
   attemptsUsed: number;
+  /**
+     * HH:MM before which this check cannot be sat, or null where it is open all day. Told rather than hidden: a page with nothing on it reads as broken.
+     * @nullable
+     */
+  opensAt?: string | null;
+  /** False while the check is still waiting for its hour. The questions are then empty. */
+  isOpen?: boolean;
+  /** Whether the teacher has released the key. Until they have, a marked paper says which answers were right or wrong and no more. */
+  answersOpen?: boolean;
   attemptsAllowed: number;
   /** @nullable */
   lastScore: number | null;
@@ -633,6 +686,40 @@ export interface ClassDayLesson {
   studentMessage: string | null;
   /** @nullable */
   estimatedMinutes: number | null;
+  /** False where the teacher struck the period off. The section stays on the day so it can be read back, but nothing was taught: it falls into the plan again and the class gets it another day. */
+  held: boolean;
+  /** @nullable */
+  notHeldReason: string | null;
+  /** The period carried the previous one on. */
+  isContinuation: boolean;
+  /**
+     * HH:MM, in the school's own time, before which the day's check cannot be sat. Null - nearly always - means it is open as soon as the day is. A teacher holding it back until the practice is done sets a time here.
+     * @nullable
+     * @pattern ^\d{2}:\d{2}$
+     */
+  quizOpensAt: string | null;
+  /**
+     * How many questions the check asks. Null means the system's five.
+     * @minimum 1
+     * @maximum 50
+     * @nullable
+     */
+  quizQuestionCount: number | null;
+  /**
+     * How many goes a child gets in a day. Null means the system's three.
+     * @minimum 1
+     * @maximum 10
+     * @nullable
+     */
+  quizAttempts: number | null;
+  /**
+     * When the key and the marking notes become the child's to see. Null is "not yet", and that is where a check sits while it is still being sat: three goes are pointless if the first hands over the answer, and a parent reading over a shoulder is how it would travel. Whether each answer was right is told at once regardless.
+     * An ISO 8601 instant. Sending "now" is the ordinary case; a later one schedules the release.
+     * @nullable
+     */
+  answersOpenAt: string | null;
+  /** The sections the teacher said this period got through. Empty where nobody has said - the day then speaks for itself, and lessonId is all that is known. */
+  coveredLessonIds: number[];
   book: ClassDayBook | null;
 }
 
@@ -747,11 +834,13 @@ export interface QuizAttempt {
   score: number;
   maxScore: number;
   submittedAt: string;
-  /** Marking comes back with the attempt, which is the first time the key is disclosed. */
+  /** Marking comes back with the attempt. Whether each answer was right is always here; the key and the note are filled in only once the teacher has released them. */
   results: QuizResult[];
   /** Including this one. */
   attemptsUsed: number;
   attemptsAllowed: number;
+  /** Whether the teacher has released the key. False leaves correctOptionId and explanation null on every result. */
+  answersOpen: boolean;
 }
 
 /**
@@ -832,7 +921,13 @@ export interface SubjectDay {
      * @nullable
      */
   groupLabel: string | null;
-  /** What the class is scheduled to study in this subject today, or null where nobody has written the lesson yet - which is most periods. A timetable slot is owed to a child whether or not its content exists. */
+  /** False where the teacher struck this period off. The lesson then comes back null whatever was planned for it, and notHeldReason says why - there is nothing to study, and nothing to be checked on, in an hour that did not take place. */
+  held?: boolean;
+  /** @nullable */
+  notHeldReason?: string | null;
+  /** This period carried the previous one on. The child is being told to pick the book up, not to open it. */
+  isContinuation?: boolean;
+  /** What the class is scheduled to study in this subject today, or null where nobody has written the lesson yet - which is most periods. A timetable slot is owed to a child whether or not its content exists. Null too where the period was struck off. */
   lesson: DailyLessonView | null;
   /** Work assigned to this student personally in this subject. Where the class works through one book it is remediation on top; where the subject places students by level it is the whole of the day's work. */
   extra: ExtraWork | null;
@@ -950,6 +1045,12 @@ export interface ScheduledDay {
   skillName: string | null;
   /** @nullable */
   note: string | null;
+  /** False where the teacher struck the period off. The section stays on the day so it can be read back, but nothing was taught: it falls into the plan again and the class gets it another day. */
+  held?: boolean;
+  /** @nullable */
+  notHeldReason?: string | null;
+  /** The period carried the previous one on. */
+  isContinuation?: boolean;
 }
 
 /**

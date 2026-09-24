@@ -23,10 +23,21 @@ export async function classDay(
   const subjectIds = await viewableSubjects(user, klass.classId, query.subjectId);
   const date = isIsoDate(query.on) ? query.on : todayInUlaanbaatar();
 
-  const [lessonRows, answerRows] = await Promise.all([
+  const [lessonRows, answerRows, coverageRows] = await Promise.all([
     repository.lessonsForClassDay(klass.classId, subjectIds, date),
     repository.answersForClassDay(klass.classId, subjectIds, date),
+    repository.coverageForClassDay(klass.classId, subjectIds, date),
   ]);
+
+  // What a teacher said each period got through, so the screen can show their
+  // own answer back rather than asking it again from scratch. Keyed by period
+  // rather than by slot: where a class splits into two groups the register
+  // holds two rows for one period and both halves were taught the same thing.
+  const covered = new Map<string, number[]>();
+  for (const row of coverageRows) {
+    const key = `${row.subjectId}:${row.timetableSlotId ?? ""}`;
+    covered.set(key, [...(covered.get(key) ?? []), row.dailyLessonId]);
+  }
 
   const lessons = lessonRows.map((row) => ({
     timetableSlotId: row.timetableSlotId,
@@ -45,6 +56,14 @@ export async function classDay(
     independentPractice: row.independentPractice,
     studentMessage: row.studentMessage,
     estimatedMinutes: row.estimatedMinutes,
+    coveredLessonIds: covered.get(`${row.subjectId}:${row.timetableSlotId ?? ""}`) ?? [],
+    held: row.held,
+    notHeldReason: row.notHeldReason,
+    isContinuation: row.isContinuation,
+    quizOpensAt: row.quizOpensAt,
+    quizQuestionCount: row.quizQuestionCount,
+    quizAttempts: row.quizAttempts,
+    answersOpenAt: row.answersOpenAt,
     book:
       row.materialId === null
         ? null

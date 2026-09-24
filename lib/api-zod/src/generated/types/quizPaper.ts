@@ -17,6 +17,15 @@ export interface QuizPaper {
   kind: QuizPaperKind;
   /** How many times this student has sat this quiz today. The daily check is practice rather than an examination: a child who gets one wrong should be able to think again and try, so there are three goes and a retry draws questions they have not seen where the lesson has enough of them. */
   attemptsUsed: number;
+  /**
+     * HH:MM before which this check cannot be sat, or null where it is open all day. Told rather than hidden: a page with nothing on it reads as broken.
+     * @nullable
+     */
+  opensAt?: string | null;
+  /** False while the check is still waiting for its hour. The questions are then empty. */
+  isOpen?: boolean;
+  /** Whether the teacher has released the key. Until they have, a marked paper says which answers were right or wrong and no more. */
+  answersOpen?: boolean;
   attemptsAllowed: number;
   /** @nullable */
   lastScore: number | null;

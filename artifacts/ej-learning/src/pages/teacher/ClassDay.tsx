@@ -79,6 +79,19 @@ function LessonCard({ classId, date, lesson, editable, onSaved }: {
     pageFrom: lesson.book?.pageFrom == null ? '' : String(lesson.book.pageFrom),
     pageTo: lesson.book?.pageTo == null ? '' : String(lesson.book.pageTo),
     note: lesson.note ?? '',
+    // The sections beyond this one the teacher has said were also covered,
+    // as a sorted, comma-joined string so the dirty check compares by value.
+    alsoCovered: lesson.coveredLessonIds
+      .filter((id) => id !== lesson.lessonId)
+      .sort((a, b) => a - b)
+      .join(','),
+    held: lesson.held ? '1' : '',
+    notHeldReason: lesson.notHeldReason ?? '',
+    isContinuation: lesson.isContinuation ? '1' : '',
+    quizOpensAt: lesson.quizOpensAt ?? '',
+    quizQuestionCount: lesson.quizQuestionCount == null ? '' : String(lesson.quizQuestionCount),
+    quizAttempts: lesson.quizAttempts == null ? '' : String(lesson.quizAttempts),
+    answersOpenAt: lesson.answersOpenAt ?? '',
   }
   const [draft, setDraft] = useState(server)
   const [saved, setSaved] = useState(false)
@@ -87,7 +100,11 @@ function LessonCard({ classId, date, lesson, editable, onSaved }: {
 
   // Re-seeded whenever the day comes back different, so a save elsewhere or a
   // replan does not leave the boxes showing something no longer true.
-  const key = [server.lessonId, server.pageFrom, server.pageTo, server.note].join('\u0000')
+  const key = [
+    server.lessonId, server.pageFrom, server.pageTo, server.note, server.alsoCovered,
+    server.held, server.notHeldReason, server.isContinuation,
+    server.quizOpensAt, server.quizQuestionCount, server.quizAttempts, server.answersOpenAt,
+  ].join('\u0000')
   const [seed, setSeed] = useState(key)
   if (seed !== key) {
     setSeed(key)
@@ -105,7 +122,17 @@ function LessonCard({ classId, date, lesson, editable, onSaved }: {
         timetableSlotId: lesson.timetableSlotId,
         subjectId: lesson.subjectId,
         lessonId: draft.lessonId ? Number(draft.lessonId) : null,
+        coveredLessonIds: draft.lessonId
+          ? [Number(draft.lessonId), ...alsoCovered]
+          : null,
         note: draft.note.trim() === '' ? null : draft.note,
+        held: draft.held !== '',
+        notHeldReason: draft.notHeldReason.trim() === '' ? null : draft.notHeldReason,
+        isContinuation: draft.isContinuation !== '',
+        quizOpensAt: draft.quizOpensAt === '' ? null : draft.quizOpensAt,
+        quizQuestionCount: draft.quizQuestionCount === '' ? null : Number(draft.quizQuestionCount),
+        quizAttempts: draft.quizAttempts === '' ? null : Number(draft.quizAttempts),
+        answersOpenAt: draft.answersOpenAt === '' ? null : draft.answersOpenAt,
         // A range needs both ends or neither; the server says so too.
         pageFrom: draft.pageFrom === '' ? null : Number(draft.pageFrom),
         pageTo: draft.pageTo === '' ? null : Number(draft.pageTo),
@@ -117,6 +144,34 @@ function LessonCard({ classId, date, lesson, editable, onSaved }: {
         onSaved()
       },
     })
+  }
+
+  const alsoCovered = draft.alsoCovered === ''
+    ? []
+    : draft.alsoCovered.split(',').map(Number)
+
+  // The sections the class has gone past but not been marked as having done.
+  //
+  // A teacher who moves the day on from section 4 to section 5 means one of
+  // two things, and the day alone cannot tell them apart: we did 4 and started
+  // 5, or we skipped 4 and will come back to it. The system assumes the
+  // second, because a section wrongly thought untaught comes back round while
+  // one wrongly thought taught is never seen again - so this is where they say
+  // otherwise. Only what lies between the day's own section and the chosen one
+  // is offered; going back in the book asks nothing.
+  const ordered = lessons ?? []
+  const chosenAt = ordered.findIndex((row) => String(row.id) === draft.lessonId)
+  const wasAt = ordered.findIndex((row) => row.id === lesson.lessonId)
+  const held = draft.held !== ''
+  const skipped = held && chosenAt > 0 && wasAt >= 0 && chosenAt > wasAt
+    ? ordered.slice(wasAt, chosenAt)
+    : []
+
+  const toggle = (id: number) => {
+    const next = alsoCovered.includes(id)
+      ? alsoCovered.filter((row) => row !== id)
+      : [...alsoCovered, id]
+    setDraft({ ...draft, alsoCovered: next.sort((a, b) => a - b).join(',') })
   }
 
   const printed = lesson.book && lesson.book.bookPageFrom !== null
@@ -187,6 +242,160 @@ function LessonCard({ classId, date, lesson, editable, onSaved }: {
           </div>
         </div>
       </div>
+
+      {editable ? (
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          {/* Struck off, with a reason. The default is that the lesson
+              happened, and it stays that way unless a teacher says otherwise -
+              a register that read silence as cancellation would empty itself
+              of every day nobody got round to marking. */}
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="h-3.5 w-3.5"
+              disabled={saving}
+              checked={!held}
+              onChange={(event) => setDraft({
+                ...draft,
+                held: event.target.checked ? '' : '1',
+                isContinuation: event.target.checked ? '' : draft.isContinuation,
+              })}
+            />
+            <span>Хичээл болоогүй</span>
+          </label>
+          {held ? (
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5"
+                disabled={saving}
+                checked={draft.isContinuation !== ''}
+                onChange={(event) =>
+                  setDraft({ ...draft, isContinuation: event.target.checked ? '1' : '' })}
+              />
+              <span>Өмнөх сэдвийн үргэлжлэл</span>
+            </label>
+          ) : null}
+        </div>
+      ) : null}
+
+      {editable && !held ? (
+        <div className="max-w-3xl space-y-0.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Шалтгаан
+          </p>
+          <input
+            type="text"
+            className={NATIVE_INPUT}
+            placeholder="Яагаад болоогүй — сурагч, эцэг эх харна"
+            aria-label="Хичээл болоогүй шалтгаан"
+            maxLength={2000}
+            disabled={saving}
+            value={draft.notHeldReason}
+            onChange={(event) => setDraft({ ...draft, notHeldReason: event.target.value })}
+          />
+          <p className="text-xs text-muted-foreground">
+            Энэ цагийн сэдэв үзэгдээгүйд тооцогдож улирлын үлдсэн хэсэгт эргэж орно.
+          </p>
+        </div>
+      ) : null}
+
+      {!editable && !lesson.held ? (
+        <p className="text-sm text-muted-foreground">
+          Хичээл болоогүй{lesson.notHeldReason ? ' — ' + lesson.notHeldReason : ''}
+        </p>
+      ) : null}
+
+      {editable && skipped.length > 0 ? (
+        <div className="max-w-3xl space-y-1 rounded-[2px] border border-border bg-sidebar-active/40 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Эдгээрийг өнөөдөр бас үзсэн үү?
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Тэмдэглээгүй сэдэв улирлын дараагийн өдрүүдэд эргэж орно.
+          </p>
+          {skipped.map((row) => (
+            <label key={row.id} className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5"
+                disabled={saving}
+                checked={alsoCovered.includes(row.id)}
+                onChange={() => toggle(row.id)}
+              />
+              <span>{row.skillName}{row.chapterTitle ? ' · ' + row.chapterTitle : ''}</span>
+            </label>
+          ))}
+        </div>
+      ) : null}
+
+      {editable && held ? (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-0.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Сорил нээгдэх
+              </p>
+              <input
+                type="time"
+                className={cn(NATIVE_INPUT, 'w-28')}
+                aria-label="Сорил нээгдэх цаг"
+                disabled={saving}
+                value={draft.quizOpensAt}
+                onChange={(event) => setDraft({ ...draft, quizOpensAt: event.target.value })}
+              />
+            </div>
+            {/* Blank is not "none": it is the school's own rule, five and
+                three, which is what almost every period wants. The
+                placeholder says so rather than leaving a teacher to guess
+                what an empty box does. */}
+            <div className="space-y-0.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Асуулт
+              </p>
+              <input
+                type="number" min={1} max={50} inputMode="numeric"
+                className={cn(NATIVE_INPUT, 'w-20')}
+                placeholder="5"
+                aria-label="Сорилын асуултын тоо"
+                disabled={saving}
+                value={draft.quizQuestionCount}
+                onChange={(event) => setDraft({ ...draft, quizQuestionCount: event.target.value })}
+              />
+            </div>
+            <div className="space-y-0.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Оролдлого
+              </p>
+              <input
+                type="number" min={1} max={10} inputMode="numeric"
+                className={cn(NATIVE_INPUT, 'w-20')}
+                placeholder="3"
+                aria-label="Сорилын оролдлогын тоо"
+                disabled={saving}
+                value={draft.quizAttempts}
+                onChange={(event) => setDraft({ ...draft, quizAttempts: event.target.value })}
+              />
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="h-3.5 w-3.5"
+              disabled={saving}
+              checked={draft.answersOpenAt !== ''}
+              onChange={(event) => setDraft({
+                ...draft,
+                answersOpenAt: event.target.checked ? new Date().toISOString() : '',
+              })}
+            />
+            <span>Зөв хариулт, тайлбарыг сурагчид нээх</span>
+          </label>
+          <p className="text-xs text-muted-foreground">
+            Нээх хүртэл сурагч зөвхөн зөв бурууг нь мэдэнэ, аль нь зөв болохыг мэдэхгүй.
+          </p>
+        </div>
+      ) : null}
 
       <div className="max-w-3xl space-y-0.5">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">

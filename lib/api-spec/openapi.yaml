@@ -2276,17 +2276,19 @@ components:
         What the rest of the term would become. Nothing has been written: these
         are the days that would move if the teacher approves, and only the ones
         that would actually change.
-      required: [classId, subjectId, fromDate, lessonId, days]
+      required: [classId, subjectId, fromDate, days]
       properties:
         classId:
           type: integer
         subjectId:
           type: integer
         fromDate:
+          description: >
+            The day the class is now known to have reached. The plan is worked
+            out from what this class has been through on or before it, not from
+            any one section, so approving it needs nothing else.
           type: string
           pattern: '^\d{4}-\d{2}-\d{2}$'
-        lessonId:
-          type: integer
         days:
           type: array
           items:
@@ -2302,7 +2304,7 @@ components:
             - type: "null"
     ReplanInput:
       type: object
-      required: [classId, subjectId, fromDate, lessonId]
+      required: [classId, subjectId, fromDate]
       properties:
         classId:
           type: integer
@@ -2311,8 +2313,6 @@ components:
         fromDate:
           type: string
           pattern: '^\d{4}-\d{2}-\d{2}$'
-        lessonId:
-          type: integer
     ReplanResult:
       type: object
       required: [days]
@@ -2343,6 +2343,76 @@ components:
         lessonId:
           description: null clears the day.
           type: ["integer", "null"]
+        quizOpensAt:
+          description: >
+            HH:MM, in the school's own time, before which the day's check
+            cannot be sat. Null - nearly always - means it is open as soon as
+            the day is. A teacher holding it back until the practice is done
+            sets a time here.
+          type: ["string", "null"]
+          pattern: '^\d{2}:\d{2}$'
+        quizQuestionCount:
+          description: >
+            How many questions the check asks. Null means the system's five.
+          type: ["integer", "null"]
+          minimum: 1
+          maximum: 50
+        quizAttempts:
+          description: >
+            How many goes a child gets in a day. Null means the system's three.
+          type: ["integer", "null"]
+          minimum: 1
+          maximum: 10
+        answersOpenAt:
+          description: >
+            When the key and the marking notes become the child's to see. Null
+            is "not yet", and that is where a check sits while it is still
+            being sat: three goes are pointless if the first hands over the
+            answer, and a parent reading over a shoulder is how it would
+            travel. Whether each answer was right is told at once regardless.
+
+            An ISO 8601 instant. Sending "now" is the ordinary case; a later
+            one schedules the release.
+          type: ["string", "null"]
+        held:
+          description: >
+            Whether the lesson actually happened. True unless said otherwise,
+            and that default is the point: a teacher who marks nothing has not
+            said the class was cancelled, and reading silence as cancellation
+            would strike off every day nobody got round to entering. A false
+            here needs notHeldReason, covers no section - so the section falls
+            back into the plan and the class gets it another day - and leaves
+            the child with no material and no check for that period.
+          type: boolean
+        notHeldReason:
+          description: >
+            Why the lesson did not happen. Required when held is false; it is
+            the thing a parent asks about, and "the system says nothing
+            happened" is not an answer three weeks later.
+          type: ["string", "null"]
+          maxLength: 2000
+        isContinuation:
+          description: >
+            The period carried the previous one on rather than opening a new
+            section. It consumes no section from the plan, and reads
+            differently to a child: pick the book up, do not start it.
+          type: boolean
+        coveredLessonIds:
+          description: >
+            Every section this period actually got through, including the one
+            in lessonId. A teacher who moves the class on from section 4 to
+            section 5 is saying one of two things and the day alone cannot tell
+            them apart: we did 4 and started 5, or we skipped 4 and will come
+            back to it. This is where they say which.
+
+            Left out, the answer is "just the one in lessonId". That is the
+            safe reading: a section wrongly thought untaught comes back round,
+            while one wrongly thought taught is never seen again. Clearing the
+            day clears this with it.
+          type: ["array", "null"]
+          items:
+            type: integer
+            minimum: 1
         note:
           description: >
             What the teacher wants the class to know about this day - which
@@ -2448,6 +2518,20 @@ components:
             goes and a retry draws questions they have not seen where the
             lesson has enough of them.
           type: integer
+        opensAt:
+          description: >
+            HH:MM before which this check cannot be sat, or null where it is
+            open all day. Told rather than hidden: a page with nothing on it
+            reads as broken.
+          type: ["string", "null"]
+        isOpen:
+          description: False while the check is still waiting for its hour. The questions are then empty.
+          type: boolean
+        answersOpen:
+          description: >
+            Whether the teacher has released the key. Until they have, a marked
+            paper says which answers were right or wrong and no more.
+          type: boolean
         attemptsAllowed:
           type: integer
         lastScore:
@@ -2667,11 +2751,69 @@ components:
           type: ["string", "null"]
         estimatedMinutes:
           type: ["integer", "null"]
+        held:
+          description: >
+            False where the teacher struck the period off. The section stays on
+            the day so it can be read back, but nothing was taught: it falls
+            into the plan again and the class gets it another day.
+          type: boolean
+        notHeldReason:
+          type: ["string", "null"]
+        isContinuation:
+          description: The period carried the previous one on.
+          type: boolean
+        quizOpensAt:
+          description: >
+            HH:MM, in the school's own time, before which the day's check
+            cannot be sat. Null - nearly always - means it is open as soon as
+            the day is. A teacher holding it back until the practice is done
+            sets a time here.
+          type: ["string", "null"]
+          pattern: '^\d{2}:\d{2}$'
+        quizQuestionCount:
+          description: >
+            How many questions the check asks. Null means the system's five.
+          type: ["integer", "null"]
+          minimum: 1
+          maximum: 50
+        quizAttempts:
+          description: >
+            How many goes a child gets in a day. Null means the system's three.
+          type: ["integer", "null"]
+          minimum: 1
+          maximum: 10
+        answersOpenAt:
+          description: >
+            When the key and the marking notes become the child's to see. Null
+            is "not yet", and that is where a check sits while it is still
+            being sat: three goes are pointless if the first hands over the
+            answer, and a parent reading over a shoulder is how it would
+            travel. Whether each answer was right is told at once regardless.
+
+            An ISO 8601 instant. Sending "now" is the ordinary case; a later
+            one schedules the release.
+          type: ["string", "null"]
+        coveredLessonIds:
+          description: >
+            The sections the teacher said this period got through. Empty where
+            nobody has said - the day then speaks for itself, and lessonId is
+            all that is known.
+          type: array
+          items:
+            type: integer
         book:
           oneOf:
             - $ref: "#/components/schemas/ClassDayBook"
             - type: "null"
       required:
+        - coveredLessonIds
+        - held
+        - notHeldReason
+        - isContinuation
+        - quizOpensAt
+        - quizQuestionCount
+        - quizAttempts
+        - answersOpenAt
         - timetableSlotId
         - periodNo
         - startsAt
@@ -2866,7 +3008,10 @@ components:
         submittedAt:
           type: string
         results:
-          description: Marking comes back with the attempt, which is the first time the key is disclosed.
+          description: >
+            Marking comes back with the attempt. Whether each answer was right
+            is always here; the key and the note are filled in only once the
+            teacher has released them.
           type: array
           items:
             $ref: "#/components/schemas/QuizResult"
@@ -2875,7 +3020,12 @@ components:
           type: integer
         attemptsAllowed:
           type: integer
-      required: [id, lessonCode, score, maxScore, submittedAt, results, attemptsUsed, attemptsAllowed]
+        answersOpen:
+          description: >
+            Whether the teacher has released the key. False leaves
+            correctOptionId and explanation null on every result.
+          type: boolean
+      required: [id, lessonCode, score, maxScore, submittedAt, results, attemptsUsed, attemptsAllowed, answersOpen]
     TeacherQuizAttemptRow:
       type: object
       properties:
@@ -3081,11 +3231,26 @@ components:
             Which half of a split class this slot is for, in the school's own
             words ("6а-1"). Null for a lesson the whole class attends.
           type: [string, "null"]
+        held:
+          description: >
+            False where the teacher struck this period off. The lesson then
+            comes back null whatever was planned for it, and notHeldReason says
+            why - there is nothing to study, and nothing to be checked on, in
+            an hour that did not take place.
+          type: boolean
+        notHeldReason:
+          type: ["string", "null"]
+        isContinuation:
+          description: >
+            This period carried the previous one on. The child is being told to
+            pick the book up, not to open it.
+          type: boolean
         lesson:
           description: >
             What the class is scheduled to study in this subject today, or null
             where nobody has written the lesson yet - which is most periods. A
             timetable slot is owed to a child whether or not its content exists.
+            Null too where the period was struck off.
           oneOf:
             - $ref: "#/components/schemas/DailyLessonView"
             - type: "null"
@@ -3213,6 +3378,17 @@ components:
           type: ["string", "null"]
         note:
           type: ["string", "null"]
+        held:
+          description: >
+            False where the teacher struck the period off. The section stays on
+            the day so it can be read back, but nothing was taught: it falls
+            into the plan again and the class gets it another day.
+          type: boolean
+        notHeldReason:
+          type: ["string", "null"]
+        isContinuation:
+          description: The period carried the previous one on.
+          type: boolean
       required:
         [scheduledOn, isToday, subjectId, subject, lessonId, lessonCode,
          lessonType, skillName, note]
