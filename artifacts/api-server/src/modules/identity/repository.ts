@@ -20,6 +20,8 @@ export type AuthenticatedUser = {
   teacherId: number | null;
   /** Whether this account takes any lesson at all. See the API description. */
   takesLessons: boolean;
+  /** Where to fetch this person's own photograph, or null when they have none. */
+  photoUrl: string | null;
 };
 
 async function decorate(row: {
@@ -27,6 +29,7 @@ async function decorate(row: {
   username: string;
   displayName: string;
   studentId: number | null;
+  photoKey: string | null;
 }): Promise<AuthenticatedUser> {
   const [roles, teacher] = await Promise.all([
     db
@@ -60,11 +63,16 @@ async function decorate(row: {
             .limit(1)
         ).length > 0;
 
+  // A URL rather than the storage key. The shell draws the avatar from the
+  // session it already has, so carrying it here saves every screen a second
+  // request for a picture that never changes between page loads.
+  const { photoKey, ...rest } = row;
   return {
-    ...row,
+    ...rest,
     roles: roles.map((entry) => entry.role),
     teacherId,
     takesLessons,
+    photoUrl: photoKey === null ? null : "/api/me/photo",
   };
 }
 
@@ -92,6 +100,7 @@ export async function loadUser(id: number): Promise<AuthenticatedUser | null> {
       username: usersInCore.username,
       displayName: usersInCore.displayName,
       studentId: usersInCore.studentId,
+      photoKey: usersInCore.photoKey,
     })
     .from(usersInCore)
     .where(and(eq(usersInCore.id, id), eq(usersInCore.isActive, true)))
@@ -124,6 +133,7 @@ export async function findLiveSession(tokenHash: string) {
       username: usersInCore.username,
       displayName: usersInCore.displayName,
       studentId: usersInCore.studentId,
+      photoKey: usersInCore.photoKey,
     })
     .from(sessionsInCore)
     .innerJoin(usersInCore, eq(usersInCore.id, sessionsInCore.userId))

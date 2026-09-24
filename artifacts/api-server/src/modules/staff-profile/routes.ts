@@ -14,6 +14,7 @@ import {
   addField,
   editField,
   fieldList,
+  ownPhotoFile,
   teacherCard,
   photoFile,
   profile,
@@ -156,6 +157,32 @@ router.post("/staff/:teacherId/photo", asStaff, photoBody, async (req, res, next
     next(error);
   }
 });
+
+/**
+ * The signed-in person's own photograph.
+ *
+ * Addressed by the session rather than by an id, because the shell draws this
+ * for whoever is looking - a child included - and a child has no teacher row
+ * to name in a URL.
+ */
+router.get(
+  "/me/photo",
+  requireRole("STUDENT", "TEACHER", "ADMIN"),
+  async (req, res, next) => {
+    try {
+      const found = await ownPhotoFile(req.user!);
+      if (!found) {
+        res.status(404).json({ error: "Зураг алга." });
+        return;
+      }
+      res.type(found.mimeType);
+      res.setHeader("Cache-Control", "private, max-age=300");
+      res.sendFile(found.filePath);
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 /**
  * Served to any signed-in member of the school. A face is not a secret inside

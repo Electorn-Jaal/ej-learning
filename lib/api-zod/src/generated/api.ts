@@ -813,6 +813,7 @@ export const LoginResponse = zod.object({
   "displayName": zod.string(),
   "studentId": zod.number().int().nullable(),
   "teacherId": zod.number().int().nullable(),
+  "photoUrl": zod.string().nullable().describe('Where to fetch this person\'s own photograph, or null when they have none. Carried on the session because the shell draws the avatar on every screen and would otherwise ask separately each time.\n'),
   "takesLessons": zod.boolean().describe('Whether this account actually takes any lesson anywhere. A class teacher who takes none of their class\'s subjects still sees the class, but the screens for entering things - the register, the review queue - have nothing in them for such an account, so the navigation leaves them out rather than offering a page that refuses.\n'),
   "roles": zod.array(zod.enum(['STUDENT', 'TEACHER', 'ADMIN']))
 }).describe('Roles are a list: one account can hold TEACHER and ADMIN at once. studentId and teacherId are the linked core.students / core.teachers rows, null when the account has none.\n')
@@ -835,6 +836,7 @@ export const GetSessionResponse = zod.object({
   "displayName": zod.string(),
   "studentId": zod.number().int().nullable(),
   "teacherId": zod.number().int().nullable(),
+  "photoUrl": zod.string().nullable().describe('Where to fetch this person\'s own photograph, or null when they have none. Carried on the session because the shell draws the avatar on every screen and would otherwise ask separately each time.\n'),
   "takesLessons": zod.boolean().describe('Whether this account actually takes any lesson anywhere. A class teacher who takes none of their class\'s subjects still sees the class, but the screens for entering things - the register, the review queue - have nothing in them for such an account, so the navigation leaves them out rather than offering a page that refuses.\n'),
   "roles": zod.array(zod.enum(['STUDENT', 'TEACHER', 'ADMIN']))
 }).describe('Roles are a list: one account can hold TEACHER and ADMIN at once. studentId and teacherId are the linked core.students / core.teachers rows, null when the account has none.\n')
@@ -1310,6 +1312,12 @@ export const UploadStaffPhotoParams = zod.object({
 export const UploadStaffPhotoResponse = zod.object({
   "photoUrl": zod.string()
 })
+
+
+/**
+ * @summary The signed-in person's own photograph
+ */
+export const GetMyPhotoResponse = zod.unknown()
 
 
 /**

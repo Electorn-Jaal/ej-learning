@@ -5,7 +5,7 @@ import {
   CalendarDays, Sun, KeyRound, ClipboardCheck, Library, PenLine, Network, BarChart3,
   BookMarked, Bell, Users,
 } from "lucide-react"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,6 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { appPath } from "@/lib/app-path"
 import { cn } from "@/lib/utils"
 import { hasRole, useSession } from "@/lib/session"
 
@@ -153,6 +154,7 @@ function NotificationBox() {
 function AccountMenu({
   name,
   roleLabel,
+  photoUrl,
   profileHref,
   passwordHref,
   onSignOut,
@@ -160,14 +162,15 @@ function AccountMenu({
 }: {
   name: string
   roleLabel: string
+  photoUrl: string | null
   profileHref: string | null
   passwordHref: string
   onSignOut: () => void
   signingOut: boolean
 }) {
-  // Two letters of the display name. A photo would be better and there is
-  // nowhere to put one yet: no upload, no column, no file. Initials are honest
-  // about that; a stock silhouette pretends there is a picture missing.
+  // Two letters of the display name, for whoever has not uploaded a picture.
+  // Initials are honest about that; a stock silhouette pretends there is a
+  // photograph missing.
   const initials = name
     .split(/\s+/)
     .filter(Boolean)
@@ -183,6 +186,7 @@ function AccountMenu({
           className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-sidebar-active focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Avatar className="h-7 w-7">
+            {photoUrl ? <AvatarImage src={appPath(photoUrl)} alt={name} /> : null}
             <AvatarFallback className="text-[10px] font-semibold">{initials}</AvatarFallback>
           </Avatar>
           <span className="hidden sm:block">
@@ -370,6 +374,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <AccountMenu
               name={user.displayName}
               roleLabel={roleLabel}
+              photoUrl={user.photoUrl}
               profileHref={staff ? "/teacher/profile" : "/profile"}
               passwordHref={staff ? "/teacher/password" : "/password"}
               onSignOut={signOut}

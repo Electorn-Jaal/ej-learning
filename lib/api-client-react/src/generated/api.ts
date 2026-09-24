@@ -3918,6 +3918,83 @@ export const useUploadStaffPhoto = <TError = ErrorType<ApiError>,
       return useMutation(getUploadStaffPhotoMutationOptions(options));
     }
 
+export const getGetMyPhotoUrl = () => {
+
+
+
+
+  return `/api/me/photo`
+}
+
+/**
+ * @summary The signed-in person's own photograph
+ */
+export const getMyPhoto = async ( options?: Parameters<typeof customFetch>[1]): Promise<Blob> => {
+
+  return customFetch<Blob>(getGetMyPhotoUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMyPhotoQueryKey = () => {
+    return [
+    `/api/me/photo`
+    ] as const;
+    }
+
+
+export const getGetMyPhotoQueryOptions = <TData = Awaited<ReturnType<typeof getMyPhoto>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMyPhoto>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMyPhotoQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMyPhoto>>> = ({ signal }) => getMyPhoto({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMyPhoto>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMyPhotoQueryResult = NonNullable<Awaited<ReturnType<typeof getMyPhoto>>>
+export type GetMyPhotoQueryError = ErrorType<void>
+
+
+/**
+ * @summary The signed-in person's own photograph
+ */
+
+export function useGetMyPhoto<TData = Awaited<ReturnType<typeof getMyPhoto>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMyPhoto>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMyPhotoQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getGetTeacherCardUrl = (teacherId: number,) => {
 
 

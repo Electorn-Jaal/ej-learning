@@ -973,6 +973,21 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /me/photo:
+    get:
+      operationId: getMyPhoto
+      tags: [staff]
+      summary: The signed-in person's own photograph
+      responses:
+        "200":
+          description: The image
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: No photograph
   /staff/{teacherId}/card:
     parameters:
       - name: teacherId
@@ -3111,6 +3126,13 @@ components:
           type: ["integer", "null"]
         teacherId:
           type: ["integer", "null"]
+        photoUrl:
+          description: >
+            Where to fetch this person's own photograph, or null when they
+            have none. Carried on the session because the shell draws the
+            avatar on every screen and would otherwise ask separately each
+            time.
+          type: ["string", "null"]
         takesLessons:
           type: boolean
           description: >
@@ -3130,6 +3152,7 @@ components:
         - displayName
         - studentId
         - teacherId
+        - photoUrl
         - takesLessons
         - roles
     SessionEnvelope:
