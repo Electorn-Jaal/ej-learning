@@ -2320,15 +2320,19 @@ components:
             of its own, with an owner and a window.
           type: string
           enum: [LESSON, UNIT, MONTHLY, DIAGNOSTIC]
-        takenToday:
+        attemptsUsed:
           description: >
-            Whether this student has already sat this quiz today. A quiz may be
-            taken once a day, so the paper says so up front rather than letting
-            a child answer everything again and be refused at the end.
-          type: boolean
-        previousScore:
+            How many times this student has sat this quiz today. The daily
+            check is practice rather than an examination: a child who gets one
+            wrong should be able to think again and try, so there are three
+            goes and a retry draws questions they have not seen where the
+            lesson has enough of them.
+          type: integer
+        attemptsAllowed:
+          type: integer
+        lastScore:
           type: ["integer", "null"]
-        previousMaxScore:
+        lastMaxScore:
           type: ["integer", "null"]
       required:
         - lessonId
@@ -2336,9 +2340,10 @@ components:
         - skillName
         - questions
         - kind
-        - takenToday
-        - previousScore
-        - previousMaxScore
+        - attemptsUsed
+        - attemptsAllowed
+        - lastScore
+        - lastMaxScore
     TeacherCard:
       type: object
       properties:
@@ -2745,7 +2750,12 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/QuizResult"
-      required: [id, lessonCode, score, maxScore, submittedAt, results]
+        attemptsUsed:
+          description: Including this one.
+          type: integer
+        attemptsAllowed:
+          type: integer
+      required: [id, lessonCode, score, maxScore, submittedAt, results, attemptsUsed, attemptsAllowed]
     TeacherQuizAttemptRow:
       type: object
       properties:
@@ -3097,7 +3107,7 @@ components:
           type: integer
         stage:
           type: string
-          enum: [PRIMARY, SECONDARY]
+          enum: [PRIMARY, LOWER_SECONDARY, UPPER_SECONDARY]
           description: >
             Derived from the class's grade, not stored on the teacher: the two
             workflows differ per class, and one teacher may hold both.
@@ -3621,7 +3631,7 @@ components:
           type: integer
         stage:
           type: string
-          enum: [PRIMARY, SECONDARY]
+          enum: [PRIMARY, LOWER_SECONDARY, UPPER_SECONDARY]
         skills:
           type: array
           items:
