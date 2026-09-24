@@ -267,6 +267,13 @@
       "when": 1790474400000,
       "tag": "0037_lesson_coverage",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1790560800000,
+      "tag": "0038_lesson_not_held",
+      "breakpoints": true
     }
   ]
 }

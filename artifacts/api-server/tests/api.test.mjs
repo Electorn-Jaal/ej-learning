@@ -715,6 +715,64 @@ describe("EJ Learning API", { concurrency: false }, () => {
       assert.equal((await topicOn(days[2])).id, lessons[2].id);
     });
 
+    it("puts a struck-off lesson's section back into the term, with its reason", async () => {
+      // UC05. A lesson that did not happen taught nothing, whatever the day
+      // says it was for. The section is still owed a day, so it has to fall
+      // back into the plan rather than sliding off the end of the book - and
+      // the day has to say why, because it is the thing a parent asks about.
+      assert.equal((await setDay(lessons[0].id)).status, 200);
+      assert.equal((await approve()).status, 200);
+      assert.equal((await topicOn(days[1])).id, lessons[1].id);
+
+      const struck = await admin.request('/teacher/schedule/day', { method: 'PUT', body: {
+        classId: klass, subjectId: subject, scheduledOn: days[0], lessonId: lessons[0].id,
+        timetableSlotId: slot.id, held: false, notHeldReason: 'Багш өвчтэй',
+      } });
+      assert.equal(struck.status, 200, JSON.stringify(struck.payload));
+      assert.ok(struck.payload.replan, 'striking the day off proposed nothing');
+
+      // While that struck-off period is the only place this section sits, the
+      // child cannot be asked about it: a quiz is reachable because the lesson
+      // is on their schedule, and an hour that did not happen is not an hour
+      // they were taught. Once the replan gives the section a real day back,
+      // it becomes theirs again - which is the next assertion but one.
+      const child = createClient(harness.baseUrl);
+      await child.signIn(accountsByRole.STUDENT);
+      const asked = await child.request(`/student/quiz/${lessons[0].id}`);
+      assert.equal(asked.status, 403, JSON.stringify(asked.payload));
+      assert.equal(asked.payload.code, 'LESSON_NOT_ASSIGNED');
+
+      assert.equal((await approve()).status, 200);
+      assert.equal((await child.request(`/student/quiz/${lessons[0].id}`)).status, 200);
+
+      // The section comes back round on the next period, pushing the rest on.
+      assert.equal(
+        (await topicOn(days[1])).id,
+        lessons[0].id,
+        'the section of a lesson that did not happen was treated as taught',
+      );
+      assert.equal((await topicOn(days[2])).id, lessons[1].id);
+
+      // The day itself keeps the section it was meant for, so a teacher
+      // looking back reads what was planned, and carries the reason.
+      const [row] = await harness.sql(
+        `SELECT held, not_held_reason FROM learning.class_schedule
+          WHERE class_id = $1 AND subject_id = $2 AND scheduled_on = $3::date`,
+        [klass, subject, days[0]]);
+      assert.equal(row.held, false);
+      assert.equal(row.not_held_reason, 'Багш өвчтэй');
+
+    });
+
+    it("will not strike a lesson off without saying why", async () => {
+      const res = await admin.request('/teacher/schedule/day', { method: 'PUT', body: {
+        classId: klass, subjectId: subject, scheduledOn: days[0], lessonId: lessons[0].id,
+        timetableSlotId: slot.id, held: false,
+      } });
+      assert.equal(res.status, 400, JSON.stringify(res.payload));
+      assert.equal(res.payload.code, 'REASON_REQUIRED');
+    });
+
     it("refuses to mark a section covered that this class cannot be given", async () => {
       // A section this class has no claim on. The list is checked against what
       // the class can actually be given, because marking a section covered

@@ -25,6 +25,16 @@ export interface ScheduleDayInput {
      * @nullable
      */
   lessonId: number | null;
+  /** Whether the lesson actually happened. True unless said otherwise, and that default is the point: a teacher who marks nothing has not said the class was cancelled, and reading silence as cancellation would strike off every day nobody got round to entering. A false here needs notHeldReason, covers no section - so the section falls back into the plan and the class gets it another day - and leaves the child with no material and no check for that period. */
+  held?: boolean;
+  /**
+     * Why the lesson did not happen. Required when held is false; it is the thing a parent asks about, and "the system says nothing happened" is not an answer three weeks later.
+     * @maxLength 2000
+     * @nullable
+     */
+  notHeldReason?: string | null;
+  /** The period carried the previous one on rather than opening a new section. It consumes no section from the plan, and reads differently to a child: pick the book up, do not start it. */
+  isContinuation?: boolean;
   /**
      * Every section this period actually got through, including the one in lessonId. A teacher who moves the class on from section 4 to section 5 is saying one of two things and the day alone cannot tell them apart: we did 4 and started 5, or we skipped 4 and will come back to it. This is where they say which.
      * Left out, the answer is "just the one in lessonId". That is the safe reading: a section wrongly thought untaught comes back round, while one wrongly thought taught is never seen again. Clearing the day clears this with it.

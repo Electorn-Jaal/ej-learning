@@ -85,6 +85,9 @@ function LessonCard({ classId, date, lesson, editable, onSaved }: {
       .filter((id) => id !== lesson.lessonId)
       .sort((a, b) => a - b)
       .join(','),
+    held: lesson.held ? '1' : '',
+    notHeldReason: lesson.notHeldReason ?? '',
+    isContinuation: lesson.isContinuation ? '1' : '',
   }
   const [draft, setDraft] = useState(server)
   const [saved, setSaved] = useState(false)
@@ -93,8 +96,10 @@ function LessonCard({ classId, date, lesson, editable, onSaved }: {
 
   // Re-seeded whenever the day comes back different, so a save elsewhere or a
   // replan does not leave the boxes showing something no longer true.
-  const key = [server.lessonId, server.pageFrom, server.pageTo, server.note, server.alsoCovered]
-    .join('\u0000')
+  const key = [
+    server.lessonId, server.pageFrom, server.pageTo, server.note, server.alsoCovered,
+    server.held, server.notHeldReason, server.isContinuation,
+  ].join('\u0000')
   const [seed, setSeed] = useState(key)
   if (seed !== key) {
     setSeed(key)
@@ -116,6 +121,9 @@ function LessonCard({ classId, date, lesson, editable, onSaved }: {
           ? [Number(draft.lessonId), ...alsoCovered]
           : null,
         note: draft.note.trim() === '' ? null : draft.note,
+        held: draft.held !== '',
+        notHeldReason: draft.notHeldReason.trim() === '' ? null : draft.notHeldReason,
+        isContinuation: draft.isContinuation !== '',
         // A range needs both ends or neither; the server says so too.
         pageFrom: draft.pageFrom === '' ? null : Number(draft.pageFrom),
         pageTo: draft.pageTo === '' ? null : Number(draft.pageTo),
@@ -145,7 +153,8 @@ function LessonCard({ classId, date, lesson, editable, onSaved }: {
   const ordered = lessons ?? []
   const chosenAt = ordered.findIndex((row) => String(row.id) === draft.lessonId)
   const wasAt = ordered.findIndex((row) => row.id === lesson.lessonId)
-  const skipped = chosenAt > 0 && wasAt >= 0 && chosenAt > wasAt
+  const held = draft.held !== ''
+  const skipped = held && chosenAt > 0 && wasAt >= 0 && chosenAt > wasAt
     ? ordered.slice(wasAt, chosenAt)
     : []
 
@@ -224,6 +233,69 @@ function LessonCard({ classId, date, lesson, editable, onSaved }: {
           </div>
         </div>
       </div>
+
+      {editable ? (
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          {/* Struck off, with a reason. The default is that the lesson
+              happened, and it stays that way unless a teacher says otherwise -
+              a register that read silence as cancellation would empty itself
+              of every day nobody got round to marking. */}
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="h-3.5 w-3.5"
+              disabled={saving}
+              checked={!held}
+              onChange={(event) => setDraft({
+                ...draft,
+                held: event.target.checked ? '' : '1',
+                isContinuation: event.target.checked ? '' : draft.isContinuation,
+              })}
+            />
+            <span>Хичээл болоогүй</span>
+          </label>
+          {held ? (
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5"
+                disabled={saving}
+                checked={draft.isContinuation !== ''}
+                onChange={(event) =>
+                  setDraft({ ...draft, isContinuation: event.target.checked ? '1' : '' })}
+              />
+              <span>Өмнөх сэдвийн үргэлжлэл</span>
+            </label>
+          ) : null}
+        </div>
+      ) : null}
+
+      {editable && !held ? (
+        <div className="max-w-3xl space-y-0.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Шалтгаан
+          </p>
+          <input
+            type="text"
+            className={NATIVE_INPUT}
+            placeholder="Яагаад болоогүй — сурагч, эцэг эх харна"
+            aria-label="Хичээл болоогүй шалтгаан"
+            maxLength={2000}
+            disabled={saving}
+            value={draft.notHeldReason}
+            onChange={(event) => setDraft({ ...draft, notHeldReason: event.target.value })}
+          />
+          <p className="text-xs text-muted-foreground">
+            Энэ цагийн сэдэв үзэгдээгүйд тооцогдож улирлын үлдсэн хэсэгт эргэж орно.
+          </p>
+        </div>
+      ) : null}
+
+      {!editable && !lesson.held ? (
+        <p className="text-sm text-muted-foreground">
+          Хичээл болоогүй{lesson.notHeldReason ? ' — ' + lesson.notHeldReason : ''}
+        </p>
+      ) : null}
 
       {editable && skipped.length > 0 ? (
         <div className="max-w-3xl space-y-1 rounded-[2px] border border-border bg-sidebar-active/40 p-3">

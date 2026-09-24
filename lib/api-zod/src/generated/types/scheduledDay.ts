@@ -46,4 +46,10 @@ export interface ScheduledDay {
   skillName: string | null;
   /** @nullable */
   note: string | null;
+  /** False where the teacher struck the period off. The section stays on the day so it can be read back, but nothing was taught: it falls into the plan again and the class gets it another day. */
+  held?: boolean;
+  /** @nullable */
+  notHeldReason?: string | null;
+  /** The period carried the previous one on. */
+  isContinuation?: boolean;
 }

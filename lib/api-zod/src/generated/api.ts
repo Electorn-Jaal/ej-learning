@@ -862,6 +862,9 @@ export const GetStudentTodayResponse = zod.object({
   "endsAt": zod.string().nullable(),
   "teacherName": zod.string().nullable().describe('Who takes this period, from the school\'s own timetable.'),
   "groupLabel": zod.string().nullable().describe('Which half of a split class this slot is for, in the school\'s own words ("6а-1"). Null for a lesson the whole class attends.\n'),
+  "held": zod.boolean().optional().describe('False where the teacher struck this period off. The lesson then comes back null whatever was planned for it, and notHeldReason says why - there is nothing to study, and nothing to be checked on, in an hour that did not take place.\n'),
+  "notHeldReason": zod.string().nullish(),
+  "isContinuation": zod.boolean().optional().describe('This period carried the previous one on. The child is being told to pick the book up, not to open it.\n'),
   "lesson": zod.union([zod.object({
   "id": zod.number().int(),
   "lessonCode": zod.string(),
@@ -884,7 +887,7 @@ export const GetStudentTodayResponse = zod.object({
   "filePage": zod.number().int().nullable().describe('Which page of the file to open at. Not the same as pageFrom: a scanned book carries covers and front matter the printed numbering does not count, so printed page 3 can be file page 9. The student is shown the printed numbers and the viewer opens the file page.\n'),
   "fileUrl": zod.string().nullable()
 }).describe('Where in the book this lesson sits.'),zod.null()])
-}),zod.null()]).describe('What the class is scheduled to study in this subject today, or null where nobody has written the lesson yet - which is most periods. A timetable slot is owed to a child whether or not its content exists.\n'),
+}),zod.null()]).describe('What the class is scheduled to study in this subject today, or null where nobody has written the lesson yet - which is most periods. A timetable slot is owed to a child whether or not its content exists. Null too where the period was struck off.\n'),
   "extra": zod.union([zod.object({
   "lesson": zod.object({
   "id": zod.number().int(),
@@ -944,6 +947,9 @@ export const GetStudentScheduleResponse = zod.object({
   "endsAt": zod.string().nullable(),
   "teacherName": zod.string().nullable().describe('Who takes this period, from the school\'s own timetable.'),
   "groupLabel": zod.string().nullable().describe('Which half of a split class this slot is for, in the school\'s own words ("6а-1"). Null for a lesson the whole class attends.\n'),
+  "held": zod.boolean().optional().describe('False where the teacher struck this period off. The lesson then comes back null whatever was planned for it, and notHeldReason says why - there is nothing to study, and nothing to be checked on, in an hour that did not take place.\n'),
+  "notHeldReason": zod.string().nullish(),
+  "isContinuation": zod.boolean().optional().describe('This period carried the previous one on. The child is being told to pick the book up, not to open it.\n'),
   "lesson": zod.union([zod.object({
   "id": zod.number().int(),
   "lessonCode": zod.string(),
@@ -966,7 +972,7 @@ export const GetStudentScheduleResponse = zod.object({
   "filePage": zod.number().int().nullable().describe('Which page of the file to open at. Not the same as pageFrom: a scanned book carries covers and front matter the printed numbering does not count, so printed page 3 can be file page 9. The student is shown the printed numbers and the viewer opens the file page.\n'),
   "fileUrl": zod.string().nullable()
 }).describe('Where in the book this lesson sits.'),zod.null()])
-}),zod.null()]).describe('What the class is scheduled to study in this subject today, or null where nobody has written the lesson yet - which is most periods. A timetable slot is owed to a child whether or not its content exists.\n'),
+}),zod.null()]).describe('What the class is scheduled to study in this subject today, or null where nobody has written the lesson yet - which is most periods. A timetable slot is owed to a child whether or not its content exists. Null too where the period was struck off.\n'),
   "extra": zod.union([zod.object({
   "lesson": zod.object({
   "id": zod.number().int(),
@@ -1037,7 +1043,10 @@ export const GetTeacherScheduleResponse = zod.object({
   "lessonCode": zod.string().nullable(),
   "lessonType": zod.string().nullable(),
   "skillName": zod.string().nullable(),
-  "note": zod.string().nullable()
+  "note": zod.string().nullable(),
+  "held": zod.boolean().optional().describe('False where the teacher struck the period off. The section stays on the day so it can be read back, but nothing was taught: it falls into the plan again and the class gets it another day.\n'),
+  "notHeldReason": zod.string().nullish(),
+  "isContinuation": zod.boolean().optional().describe('The period carried the previous one on.')
 }))
 })
 
@@ -1432,6 +1441,9 @@ export const GetClassDayResponse = zod.object({
   "independentPractice": zod.string().nullable(),
   "studentMessage": zod.string().nullable(),
   "estimatedMinutes": zod.number().int().nullable(),
+  "held": zod.boolean().describe('False where the teacher struck the period off. The section stays on the day so it can be read back, but nothing was taught: it falls into the plan again and the class gets it another day.\n'),
+  "notHeldReason": zod.string().nullable(),
+  "isContinuation": zod.boolean().describe('The period carried the previous one on.'),
   "coveredLessonIds": zod.array(zod.number().int()).describe('The sections the teacher said this period got through. Empty where nobody has said - the day then speaks for itself, and lessonId is all that is known.\n'),
   "book": zod.union([zod.object({
   "materialId": zod.number().int(),
@@ -1656,6 +1668,8 @@ export const GenerateScheduleResponse = zod.object({
  */
 
 export const setScheduleDayBodyScheduledOnRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const setScheduleDayBodyNotHeldReasonMax = 2000;
+
 
 export const setScheduleDayBodyNoteMax = 2000;
 
@@ -1669,6 +1683,9 @@ export const SetScheduleDayBody = zod.object({
   "subjectId": zod.number().int().nullish().describe('Which subject\'s day this is. Setting a lesson takes the subject from the lesson itself, so this only matters when clearing: without it, emptying Tuesday in the maths timetable would also empty Tuesday\'s physics. Null clears every subject the teacher holds in the class.\n'),
   "scheduledOn": zod.string().regex(setScheduleDayBodyScheduledOnRegExp),
   "lessonId": zod.number().int().nullable().describe('null clears the day.'),
+  "held": zod.boolean().optional().describe('Whether the lesson actually happened. True unless said otherwise, and that default is the point: a teacher who marks nothing has not said the class was cancelled, and reading silence as cancellation would strike off every day nobody got round to entering. A false here needs notHeldReason, covers no section - so the section falls back into the plan and the class gets it another day - and leaves the child with no material and no check for that period.\n'),
+  "notHeldReason": zod.string().max(setScheduleDayBodyNotHeldReasonMax).nullish().describe('Why the lesson did not happen. Required when held is false; it is the thing a parent asks about, and "the system says nothing happened" is not an answer three weeks later.\n'),
+  "isContinuation": zod.boolean().optional().describe('The period carried the previous one on rather than opening a new section. It consumes no section from the plan, and reads differently to a child: pick the book up, do not start it.\n'),
   "coveredLessonIds": zod.array(zod.number().int().min(1)).nullish().describe('Every section this period actually got through, including the one in lessonId. A teacher who moves the class on from section 4 to section 5 is saying one of two things and the day alone cannot tell them apart: we did 4 and started 5, or we skipped 4 and will come back to it. This is where they say which.\nLeft out, the answer is "just the one in lessonId". That is the safe reading: a section wrongly thought untaught comes back round, while one wrongly thought taught is never seen again. Clearing the day clears this with it.\n'),
   "note": zod.string().max(setScheduleDayBodyNoteMax).nullish().describe('What the teacher wants the class to know about this day - which pages to read, which exercises to do, what to watch out for. The student sees it. Leave the field out to keep whatever note is already there; send null or an empty string to remove it. Clearing the day removes the note with it.\n'),
   "pageFrom": zod.number().int().min(1).nullish().describe('The pages this class actually covered, when they are not the ones the book prints for the section. Leave both out to keep whatever is recorded; send null to fall back to the book\'s own range. A class that went further than the section is the reason this exists, and a teacher setting it changes nothing for any other class.\n'),

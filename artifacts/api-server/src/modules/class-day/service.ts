@@ -57,6 +57,9 @@ export async function classDay(
     studentMessage: row.studentMessage,
     estimatedMinutes: row.estimatedMinutes,
     coveredLessonIds: covered.get(`${row.subjectId}:${row.timetableSlotId ?? ""}`) ?? [],
+    held: row.held,
+    notHeldReason: row.notHeldReason,
+    isContinuation: row.isContinuation,
     book:
       row.materialId === null
         ? null

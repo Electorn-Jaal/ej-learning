@@ -141,6 +141,21 @@ export const classScheduleInLearning = learning.table(
     pageFrom: integer("page_from"),
     pageTo: integer("page_to"),
     note: text(),
+    // Whether the lesson actually happened.
+    //
+    // True by default, and that default is the whole point: a teacher who
+    // marks nothing has not said the class was cancelled, and a system that
+    // read silence as cancellation would empty the register of every school
+    // holiday nobody got round to entering. Only an explicit "it did not
+    // happen" is one, and it carries a reason, because a day struck off the
+    // record is something a parent will ask about.
+    held: boolean().default(true).notNull(),
+    notHeldReason: text("not_held_reason"),
+    // The same section, continued. A period that carries on where the last one
+    // stopped is not a new section and must not consume one from the plan; it
+    // also reads differently to a child, who is being told to pick the book up
+    // rather than open it.
+    isContinuation: boolean("is_continuation").default(false).notNull(),
     createdBy: bigint("created_by", { mode: "number" }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
       .defaultNow()
@@ -150,6 +165,10 @@ export const classScheduleInLearning = learning.table(
     unique("class_schedule_class_day_key").on(
       table.classId, table.subjectId, table.scheduledOn, table.timetableSlotId,
     ).nullsNotDistinct(),
+    check(
+      "class_schedule_not_held_reason_check",
+      sql`held OR not_held_reason IS NOT NULL`,
+    ),
     check("class_schedule_page_from_check", sql`${table.pageFrom} > 0`),
     check("class_schedule_page_to_check", sql`${table.pageTo} > 0`),
     check(
