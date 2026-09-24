@@ -90,6 +90,7 @@ import type {
   SubjectOverview,
   SubmissionResult,
   SubmitAssessmentResult,
+  TeacherCard,
   TeacherClass,
   TeacherDashboard,
   TeacherQuizAttempts,
@@ -3916,6 +3917,84 @@ export const useUploadStaffPhoto = <TError = ErrorType<ApiError>,
       > => {
       return useMutation(getUploadStaffPhotoMutationOptions(options));
     }
+
+export const getGetTeacherCardUrl = (teacherId: number,) => {
+
+
+
+
+  return `/api/staff/${teacherId}/card`
+}
+
+/**
+ * Narrower than the staff record on purpose. A profile carries a telephone number and whatever else the school records, and a class of twelve-year-olds is not the audience for any of it. This is the name, the face, what they are employed as, and what they teach.
+ * @summary The teacher as their class sees them
+ */
+export const getTeacherCard = async (teacherId: number, options?: Parameters<typeof customFetch>[1]): Promise<TeacherCard> => {
+
+  return customFetch<TeacherCard>(getGetTeacherCardUrl(teacherId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTeacherCardQueryKey = (teacherId: number,) => {
+    return [
+    `/api/staff/${teacherId}/card`
+    ] as const;
+    }
+
+
+export const getGetTeacherCardQueryOptions = <TData = Awaited<ReturnType<typeof getTeacherCard>>, TError = ErrorType<ApiError>>(teacherId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTeacherCard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTeacherCardQueryKey(teacherId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTeacherCard>>> = ({ signal }) => getTeacherCard(teacherId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: teacherId !== null && teacherId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTeacherCard>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTeacherCardQueryResult = NonNullable<Awaited<ReturnType<typeof getTeacherCard>>>
+export type GetTeacherCardQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary The teacher as their class sees them
+ */
+
+export function useGetTeacherCard<TData = Awaited<ReturnType<typeof getTeacherCard>>, TError = ErrorType<ApiError>>(
+ teacherId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTeacherCard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTeacherCardQueryOptions(teacherId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getAddStaffFieldUrl = () => {
 

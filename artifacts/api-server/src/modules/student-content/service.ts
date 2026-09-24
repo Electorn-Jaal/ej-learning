@@ -22,9 +22,13 @@ export async function studentSubjectOutline(user: AuthenticatedUser, rawSubject:
       totalSections: 0,
       currentPosition: null,
       sections: [],
+      teachers: [],
     };
   }
-  const sections = await repository.subjectOutline(user.studentId, subjectCode);
+  const [sections, teachers] = await Promise.all([
+    repository.subjectOutline(user.studentId, subjectCode),
+    repository.subjectTeachers(user.studentId, subjectCode),
+  ]);
   return {
     subjectCode,
     subjectName: book.subjectName,
@@ -34,5 +38,13 @@ export async function studentSubjectOutline(user: AuthenticatedUser, rawSubject:
     totalSections: sections.length,
     currentPosition: sections.find((row) => row.isCurrent)?.position ?? null,
     sections,
+    // A name and a face, and the id behind them. The rest of what the school
+    // knows about a teacher is not a child's to read, so the card the id
+    // opens is narrower than the staff record.
+    teachers: teachers.map((teacher) => ({
+      teacherId: teacher.teacherId,
+      name: teacher.name,
+      photoUrl: teacher.hasPhoto ? `/api/staff/${teacher.teacherId}/photo` : null,
+    })),
   };
 }

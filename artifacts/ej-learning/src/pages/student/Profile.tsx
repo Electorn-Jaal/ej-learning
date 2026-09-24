@@ -128,17 +128,12 @@ export default function StudentProfile() {
         </div>
       </Section>
 
-      {record && (record.personalFile || record.attendance || record.notes) ? (
-        <Section title="Бүртгэлийн байдал">
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {record.personalFile ? (
-              <Field label="Хувийн хэрэг" value={record.personalFile} />
-            ) : null}
-            {record.attendance ? <Field label="Ирц" value={record.attendance} /> : null}
-            {record.notes ? <Field label="Тайлбар" value={record.notes} /> : null}
-          </div>
-        </Section>
-      ) : null}
+      {/* "Бүртгэлийн байдал" is gone. It printed two words off the school's
+          register - Хувийн хэрэг: Байгаа, Ирц: Ирсэн - which say the same
+          thing about every child on the roll and so distinguish nobody. A
+          block that reads identically on 292 pages is furniture. The columns
+          remain; when the register starts recording something that varies,
+          the block can come back. */}
 
       {record && record.guardians.length > 0 ? (
         <Section title="Холбоо барих">

@@ -412,6 +412,30 @@ export interface QuizPaper {
   previousMaxScore: number | null;
 }
 
+export type TeacherCardFieldsItem = {
+  labelMn: string;
+  /** @nullable */
+  value: string | null;
+};
+
+export interface TeacherCard {
+  teacherId: number;
+  displayName: string;
+  /** @nullable */
+  photoUrl: string | null;
+  subjects: string[];
+  classes: string[];
+  /** Only the parts a child may read, and only those filled in. */
+  fields: TeacherCardFieldsItem[];
+}
+
+export interface SubjectTeacher {
+  teacherId: number;
+  name: string;
+  /** @nullable */
+  photoUrl: string | null;
+}
+
 export type StaffFieldValueKind = typeof StaffFieldValueKind[keyof typeof StaffFieldValueKind];
 
 
@@ -814,6 +838,8 @@ export interface SubjectOutline {
   /** @nullable */
   currentPosition: number | null;
   sections: SubjectOutlineSection[];
+  /** Who teaches this child this subject, for the card. */
+  teachers: SubjectTeacher[];
 }
 
 /**

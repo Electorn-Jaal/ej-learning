@@ -1313,6 +1313,27 @@ export const UploadStaffPhotoResponse = zod.object({
 
 
 /**
+ * Narrower than the staff record on purpose. A profile carries a telephone number and whatever else the school records, and a class of twelve-year-olds is not the audience for any of it. This is the name, the face, what they are employed as, and what they teach.
+ * @summary The teacher as their class sees them
+ */
+export const GetTeacherCardParams = zod.object({
+  "teacherId": zod.coerce.number().int()
+})
+
+export const GetTeacherCardResponse = zod.object({
+  "teacherId": zod.number().int(),
+  "displayName": zod.string(),
+  "photoUrl": zod.string().nullable(),
+  "subjects": zod.array(zod.string()),
+  "classes": zod.array(zod.string()),
+  "fields": zod.array(zod.object({
+  "labelMn": zod.string(),
+  "value": zod.string().nullable()
+})).describe('Only the parts a child may read, and only those filled in.')
+})
+
+
+/**
  * @summary Add a field of the school's own
  */
 export const addStaffFieldBodyLabelMnMax = 120;
@@ -1900,7 +1921,12 @@ export const GetStudentSubjectOutlineResponse = zod.object({
   "position": zod.number().int().describe('Place in book order, counting from one.'),
   "isCurrent": zod.boolean().describe('The section the teacher says the class is on right now.'),
   "isPast": zod.boolean().describe('Earlier in the book than the class\'s current section.')
-}))
+})),
+  "teachers": zod.array(zod.object({
+  "teacherId": zod.number().int(),
+  "name": zod.string(),
+  "photoUrl": zod.string().nullable()
+})).describe('Who teaches this child this subject, for the card.')
 }).describe('currentPosition is the CLASS\'s place in the book, not the reader\'s own progress. Nothing here measures the individual: no skill has been mapped to a section yet, and no child has been assessed against one.')
 
 

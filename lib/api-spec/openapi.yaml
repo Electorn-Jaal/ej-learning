@@ -973,6 +973,35 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /staff/{teacherId}/card:
+    parameters:
+      - name: teacherId
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      operationId: getTeacherCard
+      tags: [staff]
+      summary: The teacher as their class sees them
+      description: >
+        Narrower than the staff record on purpose. A profile carries a
+        telephone number and whatever else the school records, and a class of
+        twelve-year-olds is not the audience for any of it. This is the name,
+        the face, what they are employed as, and what they teach.
+      responses:
+        "200":
+          description: The card
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeacherCard"
+        "404":
+          description: No such teacher
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /admin/staff/fields:
     post:
       operationId: addStaffField
@@ -2295,6 +2324,45 @@ components:
         - takenToday
         - previousScore
         - previousMaxScore
+    TeacherCard:
+      type: object
+      properties:
+        teacherId:
+          type: integer
+        displayName:
+          type: string
+        photoUrl:
+          type: ["string", "null"]
+        subjects:
+          type: array
+          items:
+            type: string
+        classes:
+          type: array
+          items:
+            type: string
+        fields:
+          description: Only the parts a child may read, and only those filled in.
+          type: array
+          items:
+            type: object
+            properties:
+              labelMn:
+                type: string
+              value:
+                type: ["string", "null"]
+            required: [labelMn, value]
+      required: [teacherId, displayName, photoUrl, subjects, classes, fields]
+    SubjectTeacher:
+      type: object
+      properties:
+        teacherId:
+          type: integer
+        name:
+          type: string
+        photoUrl:
+          type: ["string", "null"]
+      required: [teacherId, name, photoUrl]
     StaffField:
       type: object
       properties:
@@ -2939,8 +3007,13 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SubjectOutlineSection"
+        teachers:
+          description: Who teaches this child this subject, for the card.
+          type: array
+          items:
+            $ref: "#/components/schemas/SubjectTeacher"
       required:
-        [subjectCode, subjectName, bookTitle, materialId, pageOffset,
+        [subjectCode, subjectName, bookTitle, materialId, pageOffset, teachers,
          totalSections, currentPosition, sections]
     SchoolPeriod:
       type: object

@@ -2,6 +2,7 @@ import express, { Router, type IRouter } from "express";
 import {
   AddStaffFieldBody,
   GetStaffFieldsResponse,
+  GetTeacherCardResponse,
   GetStaffListResponse,
   GetStaffProfileResponse,
   SaveStaffProfileBody,
@@ -13,6 +14,7 @@ import {
   addField,
   editField,
   fieldList,
+  teacherCard,
   photoFile,
   profile,
   saveProfile,
@@ -68,6 +70,23 @@ router.patch("/staff/me", asStaff, async (req, res, next) => {
     next(error);
   }
 });
+
+/**
+ * The teacher as their class sees them, which any signed-in member of the
+ * school may read. Declared before /staff/:teacherId so the narrower route
+ * wins: a child asking for a card must not fall through to the full record.
+ */
+router.get(
+  "/staff/:teacherId/card",
+  requireRole("STUDENT", "TEACHER", "ADMIN"),
+  async (req, res, next) => {
+    try {
+      res.json(GetTeacherCardResponse.parse(await teacherCard(teacherId(req.params.teacherId))));
+    } catch (error) {
+      next(error);
+    }
+  },
+);
 
 router.get("/staff/:teacherId", asStaff, async (req, res, next) => {
   try {
