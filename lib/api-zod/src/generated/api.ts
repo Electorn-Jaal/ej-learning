@@ -1672,7 +1672,48 @@ export const SetScheduleDayBody = zod.object({
   "pageTo": zod.number().int().min(1).nullish()
 })
 
-export const SetScheduleDayResponse = zod.void()
+export const setScheduleDayResponseReplanOneFromDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const setScheduleDayResponseReplanOneDaysItemScheduledOnRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const SetScheduleDayResponse = zod.object({
+  "replan": zod.union([zod.object({
+  "classId": zod.number().int(),
+  "subjectId": zod.number().int(),
+  "fromDate": zod.string().regex(setScheduleDayResponseReplanOneFromDateRegExp),
+  "lessonId": zod.number().int(),
+  "days": zod.array(zod.object({
+  "scheduledOn": zod.string().regex(setScheduleDayResponseReplanOneDaysItemScheduledOnRegExp),
+  "periodNo": zod.number().int().nullish(),
+  "lessonId": zod.number().int(),
+  "lessonCode": zod.string(),
+  "skillName": zod.string(),
+  "chapterTitle": zod.string().nullish(),
+  "currentLessonCode": zod.string().nullish().describe('What stands there now; null where the day is empty.'),
+  "currentSkillName": zod.string().nullish()
+}).describe('One day the re-division would change, and what it holds now.'))
+}).describe('What the rest of the term would become. Nothing has been written: these are the days that would move if the teacher approves, and only the ones that would actually change.\n'),zod.null()]).describe('Null when nothing later would change.')
+})
+
+
+/**
+ * The second half of a topic change. Setting a day's section says where the class is; this says that the days after it should follow from it. Until it is called the old plan stands, which is why the two are separate: a teacher who opens a topic to see whether it fits has not thereby rewritten their term.
+ * The plan is recomputed here from the same day and section rather than taken from the browser, so a tab left open overnight writes the plan that follows from the day as it now stands.
+ * @summary Approve the re-division of the rest of the term
+ */
+export const applyReplanBodyFromDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const ApplyReplanBody = zod.object({
+  "classId": zod.number().int(),
+  "subjectId": zod.number().int(),
+  "fromDate": zod.string().regex(applyReplanBodyFromDateRegExp),
+  "lessonId": zod.number().int()
+})
+
+export const ApplyReplanResponse = zod.object({
+  "days": zod.number().int().describe('How many periods were written.')
+})
 
 
 /**

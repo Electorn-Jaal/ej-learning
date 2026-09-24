@@ -64,11 +64,14 @@ import type {
   QuizAttempt,
   QuizAttemptInput,
   QuizPaper,
+  ReplanInput,
+  ReplanResult,
   ReviewInput,
   ReviewItem,
   ReviewResult,
   SchedulableLesson,
   ScheduleDayInput,
+  ScheduleDayResult,
   SchoolPeriod,
   SessionEnvelope,
   SkillChain,
@@ -4950,7 +4953,7 @@ export const getSetScheduleDayUrl = () => {
  * The teacher's correction surface. A null lessonId clears the day, which is how a holiday or a school event is recorded. Weekend lessons may only be assigned, changed, or cleared by an administrator.
  * @summary Set, replace or clear one day's lesson
  */
-export const setScheduleDay = async (scheduleDayInput: ScheduleDayInput, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+export const setScheduleDay = async (scheduleDayInput: ScheduleDayInput, options?: Parameters<typeof customFetch>[1]): Promise<ScheduleDayResult> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -4966,7 +4969,7 @@ export const setScheduleDay = async (scheduleDayInput: ScheduleDayInput, options
     }
     return headers;
   };
-return customFetch<void>(getSetScheduleDayUrl(),
+return customFetch<ScheduleDayResult>(getSetScheduleDayUrl(),
   {
     ...options,
     method: 'PUT',
@@ -5025,6 +5028,96 @@ export const useSetScheduleDay = <TError = ErrorType<ApiError>,
         TContext
       > => {
       return useMutation(getSetScheduleDayMutationOptions(options));
+    }
+
+export const getApplyReplanUrl = () => {
+
+
+
+
+  return `/api/teacher/schedule/replan`
+}
+
+/**
+ * The second half of a topic change. Setting a day's section says where the class is; this says that the days after it should follow from it. Until it is called the old plan stands, which is why the two are separate: a teacher who opens a topic to see whether it fits has not thereby rewritten their term.
+ * The plan is recomputed here from the same day and section rather than taken from the browser, so a tab left open overnight writes the plan that follows from the day as it now stands.
+ * @summary Approve the re-division of the rest of the term
+ */
+export const applyReplan = async (replanInput: ReplanInput, options?: Parameters<typeof customFetch>[1]): Promise<ReplanResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<ReplanResult>(getApplyReplanUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(replanInput)
+  }
+);}
+
+
+
+
+
+export const getApplyReplanMutationKey = () => ['applyReplan'] as const;
+
+export const getApplyReplanMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyReplan>>, TError,ApplyReplanMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof applyReplan>>, TError,ApplyReplanMutationVariables, TContext> => {
+
+const mutationKey = getApplyReplanMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof applyReplan>>, ApplyReplanMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  applyReplan(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApplyReplanMutationResult = NonNullable<Awaited<ReturnType<typeof applyReplan>>>
+    export type ApplyReplanMutationBody = BodyType<ReplanInput>
+    export type ApplyReplanMutationError = ErrorType<ApiError>
+    export type ApplyReplanMutationVariables = {data: BodyType<ReplanInput>}
+
+    /**
+ * @summary Approve the re-division of the rest of the term
+ */
+export const useApplyReplan = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyReplan>>, TError,ApplyReplanMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof applyReplan>>,
+        TError,
+        ApplyReplanMutationVariables,
+        TContext
+      > => {
+      return useMutation(getApplyReplanMutationOptions(options));
     }
 
 export const getGetAdminMaterialsUrl = () => {

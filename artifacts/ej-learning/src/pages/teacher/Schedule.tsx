@@ -9,12 +9,14 @@ import {
   useSetScheduleDay,
   type ScheduledDay,
   type SchedulableLesson,
+  type ReplanProposal,
 } from '@workspace/api-client-react'
 import { CalendarRange, List, X } from 'lucide-react'
 import { DatePicker } from '@/components/DatePicker'
 import { NATIVE_SELECT } from '@/components/ui/native-select'
 import { TimetableStudents } from '@/components/TimetableStudents'
 import { TeacherWeek } from '@/components/teacher/TeacherWeek'
+import { ReplanPrompt } from '@/components/schedule/ReplanPrompt'
 import { DayNavigation } from '@/components/DayNavigation'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -154,6 +156,10 @@ function ScheduleTable({ classId, subjectId, canEdit, admin, date, onDateChange,
   })
   const { mutate: setDay, isPending: saving, error: saveError } = useSetScheduleDay()
   const [notice, setNotice] = useState<string | null>(null)
+  // The rest of the term, proposed rather than written. One at a time: a
+  // teacher correcting two days in a row answers the first question before
+  // the second is asked, because the second one's answer depends on it.
+  const [replan, setReplan] = useState<ReplanProposal | null>(null)
   const refresh = () => queryClient.invalidateQueries({ predicate: (query) => typeof query.queryKey[0] === 'string' && (
     query.queryKey[0].includes('/teacher/schedule') || query.queryKey[0].includes('/student/schedule') || query.queryKey[0].includes('/student/today')
   ) })
@@ -190,6 +196,11 @@ function ScheduleTable({ classId, subjectId, canEdit, admin, date, onDateChange,
             lesson for a period is the only version of this that is true. */}
         {notice ? <p role="status" className="px-3 pb-2 text-xs text-muted-foreground">{notice}</p> : null}
         {saveError ? <p role="alert" className="px-3 pb-2 text-xs text-destructive">{saveError?.data?.error ?? 'Хадгалж чадсангүй.'}</p> : null}
+        {replan ? (
+          <div className="px-3 pb-3">
+            <ReplanPrompt proposal={replan} onDone={() => { setReplan(null); refresh() }} />
+          </div>
+        ) : null}
         {view === 'week' ? (
           <TeacherWeek subjectId={subjectId} />
         ) : (
@@ -198,7 +209,9 @@ function ScheduleTable({ classId, subjectId, canEdit, admin, date, onDateChange,
               day={day} firstOfDay={index === 0 || rows[index - 1]!.scheduledOn !== day.scheduledOn}
               combined={combined} timetabled={timetabled} classId={classId} admin={admin} canEdit={canEdit}
               lessons={lessons ?? []} saving={saving} onChange={(row, lessonId) => {
-                setDay({ data: { classId, scheduledOn: row.scheduledOn, timetableSlotId: row.timetableSlotId, lessonId, ...subjectParam(row.subjectId) } }, { onSuccess: refresh })
+                setDay({ data: { classId, scheduledOn: row.scheduledOn, timetableSlotId: row.timetableSlotId, lessonId, ...subjectParam(row.subjectId) } }, {
+                  onSuccess: (result) => { setReplan(result.replan); refresh() },
+                })
               }} />)}
           </ul>
         )}

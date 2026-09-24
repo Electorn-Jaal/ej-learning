@@ -1383,8 +1383,15 @@ paths:
             schema:
               $ref: "#/components/schemas/ScheduleDayInput"
       responses:
-        "204":
-          description: Day updated
+        "200":
+          description: >
+            Day updated. The rest of the term is not: where changing this day's
+            section would move later days, they come back as a proposal for the
+            teacher to approve.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleDayResult"
         "400":
           description: Malformed day or a lesson that is not schedulable here
           content:
@@ -1393,6 +1400,46 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "403":
           description: Not a teacher of that class
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /teacher/schedule/replan:
+    post:
+      operationId: applyReplan
+      tags: [teacher]
+      summary: Approve the re-division of the rest of the term
+      description: >
+        The second half of a topic change. Setting a day's section says where
+        the class is; this says that the days after it should follow from it.
+        Until it is called the old plan stands, which is why the two are
+        separate: a teacher who opens a topic to see whether it fits has not
+        thereby rewritten their term.
+
+        The plan is recomputed here from the same day and section rather than
+        taken from the browser, so a tab left open overnight writes the plan
+        that follows from the day as it now stands.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReplanInput"
+      responses:
+        "200":
+          description: Applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReplanResult"
+        "400":
+          description: Malformed day, or a date outside every term
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Not a teacher of that class, or a day already taught
           content:
             application/json:
               schema:
@@ -2200,6 +2247,79 @@ components:
         notice:
           type: string
       required: [created, skipped, lessonsAvailable, firstDay, lastDay, notice]
+    ReplanDay:
+      type: object
+      description: One day the re-division would change, and what it holds now.
+      required: [scheduledOn, lessonId, lessonCode, skillName]
+      properties:
+        scheduledOn:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+        periodNo:
+          type: [integer, "null"]
+        lessonId:
+          type: integer
+        lessonCode:
+          type: string
+        skillName:
+          type: string
+        chapterTitle:
+          type: [string, "null"]
+        currentLessonCode:
+          description: What stands there now; null where the day is empty.
+          type: [string, "null"]
+        currentSkillName:
+          type: [string, "null"]
+    ReplanProposal:
+      type: object
+      description: >
+        What the rest of the term would become. Nothing has been written: these
+        are the days that would move if the teacher approves, and only the ones
+        that would actually change.
+      required: [classId, subjectId, fromDate, lessonId, days]
+      properties:
+        classId:
+          type: integer
+        subjectId:
+          type: integer
+        fromDate:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+        lessonId:
+          type: integer
+        days:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReplanDay"
+    ScheduleDayResult:
+      type: object
+      required: [replan]
+      properties:
+        replan:
+          description: Null when nothing later would change.
+          oneOf:
+            - $ref: "#/components/schemas/ReplanProposal"
+            - type: "null"
+    ReplanInput:
+      type: object
+      required: [classId, subjectId, fromDate, lessonId]
+      properties:
+        classId:
+          type: integer
+        subjectId:
+          type: integer
+        fromDate:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+        lessonId:
+          type: integer
+    ReplanResult:
+      type: object
+      required: [days]
+      properties:
+        days:
+          description: How many periods were written.
+          type: integer
     ScheduleDayInput:
       type: object
       properties:

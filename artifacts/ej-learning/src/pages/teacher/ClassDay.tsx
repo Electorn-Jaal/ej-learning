@@ -8,11 +8,13 @@ import {
   useSetScheduleDay,
   type ClassDayLesson,
   type ClassDayStudent,
+  type ReplanProposal,
 } from '@workspace/api-client-react'
 import { ArrowLeft, Check, ChevronDown, ChevronUp, ClipboardList, Users, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { NATIVE_INPUT, NATIVE_SELECT } from '@/components/ui/native-select'
 import { BookViewer } from '@/components/book/BookViewer'
+import { ReplanPrompt } from '@/components/schedule/ReplanPrompt'
 import { Skeleton } from '@/components/ui/skeleton'
 import { subjectParam } from '@/lib/teacher-class'
 import { hasRole, useSession } from '@/lib/session'
@@ -80,6 +82,8 @@ function LessonCard({ classId, date, lesson, editable, onSaved }: {
   }
   const [draft, setDraft] = useState(server)
   const [saved, setSaved] = useState(false)
+  // Raised by a save that would move later days, and answered before it does.
+  const [replan, setReplan] = useState<ReplanProposal | null>(null)
 
   // Re-seeded whenever the day comes back different, so a save elsewhere or a
   // replan does not leave the boxes showing something no longer true.
@@ -107,8 +111,9 @@ function LessonCard({ classId, date, lesson, editable, onSaved }: {
         pageTo: draft.pageTo === '' ? null : Number(draft.pageTo),
       },
     }, {
-      onSuccess: () => {
+      onSuccess: (result) => {
         setSaved(true)
+        setReplan(result.replan)
         onSaved()
       },
     })
@@ -221,6 +226,16 @@ function LessonCard({ classId, date, lesson, editable, onSaved }: {
             </span>
           ) : null}
         </div>
+      ) : null}
+
+      {replan ? (
+        <ReplanPrompt
+          proposal={replan}
+          onDone={() => {
+            setReplan(null)
+            onSaved()
+          }}
+        />
       ) : null}
 
       {lesson.lessonId === null ? (
