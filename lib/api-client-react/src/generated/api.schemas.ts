@@ -412,6 +412,30 @@ export interface QuizPaper {
   previousMaxScore: number | null;
 }
 
+export type TeacherCardFieldsItem = {
+  labelMn: string;
+  /** @nullable */
+  value: string | null;
+};
+
+export interface TeacherCard {
+  teacherId: number;
+  displayName: string;
+  /** @nullable */
+  photoUrl: string | null;
+  subjects: string[];
+  classes: string[];
+  /** Only the parts a child may read, and only those filled in. */
+  fields: TeacherCardFieldsItem[];
+}
+
+export interface SubjectTeacher {
+  teacherId: number;
+  name: string;
+  /** @nullable */
+  photoUrl: string | null;
+}
+
 export type StaffFieldValueKind = typeof StaffFieldValueKind[keyof typeof StaffFieldValueKind];
 
 
@@ -814,6 +838,8 @@ export interface SubjectOutline {
   /** @nullable */
   currentPosition: number | null;
   sections: SubjectOutlineSection[];
+  /** Who teaches this child this subject, for the card. */
+  teachers: SubjectTeacher[];
 }
 
 /**
@@ -910,6 +936,11 @@ export interface AuthenticatedUser {
   studentId: number | null;
   /** @nullable */
   teacherId: number | null;
+  /**
+     * Where to fetch this person's own photograph, or null when they have none. Carried on the session because the shell draws the avatar on every screen and would otherwise ask separately each time.
+     * @nullable
+     */
+  photoUrl: string | null;
   /** Whether this account actually takes any lesson anywhere. A class teacher who takes none of their class's subjects still sees the class, but the screens for entering things - the register, the review queue - have nothing in them for such an account, so the navigation leaves them out rather than offering a page that refuses. */
   takesLessons: boolean;
   roles: UserRole[];

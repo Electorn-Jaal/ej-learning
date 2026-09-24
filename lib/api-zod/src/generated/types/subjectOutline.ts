@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { SubjectOutlineSection } from './subjectOutlineSection';
+import type { SubjectTeacher } from './subjectTeacher';
 
 /**
  * currentPosition is the CLASS's place in the book, not the reader's own progress. Nothing here measures the individual: no skill has been mapped to a section yet, and no child has been assessed against one.
@@ -26,4 +27,6 @@ export interface SubjectOutline {
   /** @nullable */
   currentPosition: number | null;
   sections: SubjectOutlineSection[];
+  /** Who teaches this child this subject, for the card. */
+  teachers: SubjectTeacher[];
 }

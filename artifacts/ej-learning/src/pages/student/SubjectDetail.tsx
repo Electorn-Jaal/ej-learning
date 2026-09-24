@@ -11,6 +11,7 @@ import { dayName, schoolToday, scheduleWindow } from '@/lib/schedule-window'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { TeacherCard } from '@/components/student/TeacherCard'
 import { cn } from '@/lib/utils'
 
 const ROMAN = ['', 'I', 'II', 'III', 'IV']
@@ -255,6 +256,23 @@ export default function StudentSubjectDetail() {
         </Card>
 
         <div className="space-y-3">
+          {/* Who takes it, before when it falls: a child looking up a
+              subject is at least as likely to be asking whose lesson it is. */}
+          {data.teachers.length > 0 ? (
+            <Card>
+              <CardContent className="space-y-1 p-3">
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Багш
+                </h2>
+                <div className="flex flex-col gap-0.5">
+                  {data.teachers.map((teacher) => (
+                    <TeacherCard key={teacher.teacherId} teacher={teacher} />
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
+
           <Card>
             <CardContent className="space-y-2 p-3">
               <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">

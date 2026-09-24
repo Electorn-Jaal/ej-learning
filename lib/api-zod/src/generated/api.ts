@@ -813,6 +813,7 @@ export const LoginResponse = zod.object({
   "displayName": zod.string(),
   "studentId": zod.number().int().nullable(),
   "teacherId": zod.number().int().nullable(),
+  "photoUrl": zod.string().nullable().describe('Where to fetch this person\'s own photograph, or null when they have none. Carried on the session because the shell draws the avatar on every screen and would otherwise ask separately each time.\n'),
   "takesLessons": zod.boolean().describe('Whether this account actually takes any lesson anywhere. A class teacher who takes none of their class\'s subjects still sees the class, but the screens for entering things - the register, the review queue - have nothing in them for such an account, so the navigation leaves them out rather than offering a page that refuses.\n'),
   "roles": zod.array(zod.enum(['STUDENT', 'TEACHER', 'ADMIN']))
 }).describe('Roles are a list: one account can hold TEACHER and ADMIN at once. studentId and teacherId are the linked core.students / core.teachers rows, null when the account has none.\n')
@@ -835,6 +836,7 @@ export const GetSessionResponse = zod.object({
   "displayName": zod.string(),
   "studentId": zod.number().int().nullable(),
   "teacherId": zod.number().int().nullable(),
+  "photoUrl": zod.string().nullable().describe('Where to fetch this person\'s own photograph, or null when they have none. Carried on the session because the shell draws the avatar on every screen and would otherwise ask separately each time.\n'),
   "takesLessons": zod.boolean().describe('Whether this account actually takes any lesson anywhere. A class teacher who takes none of their class\'s subjects still sees the class, but the screens for entering things - the register, the review queue - have nothing in them for such an account, so the navigation leaves them out rather than offering a page that refuses.\n'),
   "roles": zod.array(zod.enum(['STUDENT', 'TEACHER', 'ADMIN']))
 }).describe('Roles are a list: one account can hold TEACHER and ADMIN at once. studentId and teacherId are the linked core.students / core.teachers rows, null when the account has none.\n')
@@ -1309,6 +1311,33 @@ export const UploadStaffPhotoParams = zod.object({
 
 export const UploadStaffPhotoResponse = zod.object({
   "photoUrl": zod.string()
+})
+
+
+/**
+ * @summary The signed-in person's own photograph
+ */
+export const GetMyPhotoResponse = zod.unknown()
+
+
+/**
+ * Narrower than the staff record on purpose. A profile carries a telephone number and whatever else the school records, and a class of twelve-year-olds is not the audience for any of it. This is the name, the face, what they are employed as, and what they teach.
+ * @summary The teacher as their class sees them
+ */
+export const GetTeacherCardParams = zod.object({
+  "teacherId": zod.coerce.number().int()
+})
+
+export const GetTeacherCardResponse = zod.object({
+  "teacherId": zod.number().int(),
+  "displayName": zod.string(),
+  "photoUrl": zod.string().nullable(),
+  "subjects": zod.array(zod.string()),
+  "classes": zod.array(zod.string()),
+  "fields": zod.array(zod.object({
+  "labelMn": zod.string(),
+  "value": zod.string().nullable()
+})).describe('Only the parts a child may read, and only those filled in.')
 })
 
 
@@ -1900,7 +1929,12 @@ export const GetStudentSubjectOutlineResponse = zod.object({
   "position": zod.number().int().describe('Place in book order, counting from one.'),
   "isCurrent": zod.boolean().describe('The section the teacher says the class is on right now.'),
   "isPast": zod.boolean().describe('Earlier in the book than the class\'s current section.')
-}))
+})),
+  "teachers": zod.array(zod.object({
+  "teacherId": zod.number().int(),
+  "name": zod.string(),
+  "photoUrl": zod.string().nullable()
+})).describe('Who teaches this child this subject, for the card.')
 }).describe('currentPosition is the CLASS\'s place in the book, not the reader\'s own progress. Nothing here measures the individual: no skill has been mapped to a section yet, and no child has been assessed against one.')
 
 

@@ -24,13 +24,17 @@ const apply = process.argv.includes("--apply");
 if (apply && !process.argv.includes("--yes")) throw new Error("Refusing apply without --yes.");
 
 const SCHOOL_YEAR = "2026-2027";
-const PROVISIONAL = "(түр огноо)";
 
+// The dates were taken from the ministry's usual calendar rather than from a
+// document this school issued, and the names used to say so - "I улирал (түр
+// огноо)". The qualifier belonged in this file, not on a child's screen: it
+// appeared in the shell's header beside the school year, where it read as
+// part of the term's name. The uncertainty is recorded here instead.
 const terms = [
-  { termNumber: 1, nameMn: `I улирал ${PROVISIONAL}`, startsOn: "2026-09-01", endsOn: "2026-10-31" },
-  { termNumber: 2, nameMn: `II улирал ${PROVISIONAL}`, startsOn: "2026-11-09", endsOn: "2026-12-31" },
-  { termNumber: 3, nameMn: `III улирал ${PROVISIONAL}`, startsOn: "2027-01-11", endsOn: "2027-03-20" },
-  { termNumber: 4, nameMn: `IV улирал ${PROVISIONAL}`, startsOn: "2027-03-29", endsOn: "2027-06-05" },
+  { termNumber: 1, nameMn: "I улирал", startsOn: "2026-09-01", endsOn: "2026-10-31" },
+  { termNumber: 2, nameMn: "II улирал", startsOn: "2026-11-09", endsOn: "2026-12-31" },
+  { termNumber: 3, nameMn: "III улирал", startsOn: "2027-01-11", endsOn: "2027-03-20" },
+  { termNumber: 4, nameMn: "IV улирал", startsOn: "2027-03-29", endsOn: "2027-06-05" },
 ];
 
 const client = await pool.connect();

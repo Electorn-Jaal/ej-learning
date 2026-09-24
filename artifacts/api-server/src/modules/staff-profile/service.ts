@@ -222,14 +222,9 @@ export async function savePhoto(
  * rather than user input, but serving arbitrary files off the host is not a
  * failure worth risking on trust alone.
  */
-export async function photoFile(teacherId: number) {
-  const [person] = await repository.staff(teacherId);
-  if (!person) return null;
-  const [row] = await repository.photoKey(person.userId);
-  if (!row?.photoKey) return null;
-
+async function resolvePhoto(key: string) {
   const root = storageRoot();
-  const resolved = path.resolve(root, row.photoKey);
+  const resolved = path.resolve(root, key);
   if (resolved !== root && !resolved.startsWith(root + path.sep)) return null;
   try {
     const info = await stat(resolved);
@@ -241,4 +236,60 @@ export async function photoFile(teacherId: number) {
   const mimeType = Object.entries(PHOTO_TYPES).find(([, ext]) => ext === extension)?.[0]
     ?? "application/octet-stream";
   return { filePath: resolved, mimeType };
+}
+
+export async function photoFile(teacherId: number) {
+  const [person] = await repository.staff(teacherId);
+  if (!person) return null;
+  const [row] = await repository.photoKey(person.userId);
+  if (!row?.photoKey) return null;
+  return resolvePhoto(row.photoKey);
+}
+
+/**
+ * What a child may read about their teacher.
+ *
+ * Narrower than the staff record on purpose. A profile carries a telephone
+ * number, an address and whatever else the school has chosen to record, and a
+ * class of twelve-year-olds is not the audience for any of it. This is the
+ * card: the name, the face, and what the person is employed as.
+ *
+ * An allowlist rather than a flag on each field, because the school adds
+ * fields without being asked and the safe default for a field nobody has
+ * thought about is that a child does not see it.
+ */
+const CHILD_VISIBLE = ["job_title", "speciality", "department", "rank"];
+
+export async function teacherCard(teacherId: number) {
+  const [person] = await repository.staff(teacherId);
+  if (!person) throw notFound("Багшийн бүртгэл олдсонгүй.", "NO_STAFF_RECORD");
+
+  const [definitions, cells] = await Promise.all([
+    repository.fields(false),
+    repository.values(teacherId),
+  ]);
+  const byKey = new Map(cells.map((cell) => [cell.fieldKey, cell.value]));
+
+  return {
+    teacherId: person.teacherId,
+    displayName: person.displayName,
+    photoUrl: person.hasPhoto ? `/api/staff/${person.teacherId}/photo` : null,
+    subjects: person.subjects,
+    classes: person.classes,
+    fields: definitions
+      .filter((field) => CHILD_VISIBLE.includes(field.fieldKey))
+      .map((field) => ({ labelMn: field.labelMn, value: byKey.get(field.fieldKey) ?? null }))
+      .filter((field) => field.value !== null),
+  };
+}
+
+/**
+ * The signed-in person's own photograph, found from their account rather than
+ * from a staff row - so this works for a child as soon as children have
+ * pictures, without a second endpoint.
+ */
+export async function ownPhotoFile(user: AuthenticatedUser) {
+  const [row] = await repository.photoKey(user.id);
+  if (!row?.photoKey) return null;
+  return resolvePhoto(row.photoKey);
 }

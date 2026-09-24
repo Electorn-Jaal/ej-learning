@@ -397,6 +397,34 @@ describe("EJ Learning API", { concurrency: false }, () => {
       }
     });
 
+    it("shows a child their teacher's card and nothing more", async () => {
+      // A telephone number and a department are for the people who ring each
+      // other. What a class is owed is a name, a face and what the person is
+      // employed as.
+      await teacher.request("/staff/me", {
+        method: "PATCH", body: { fields: { phone: "99887766" } },
+      });
+
+      const card = await student.request(`/staff/${teacherId}/card`);
+      assert.equal(card.status, 200, JSON.stringify(card.payload));
+      assert.equal(typeof card.payload.displayName, "string");
+      assert.ok(Array.isArray(card.payload.subjects));
+
+      const shown = JSON.stringify(card.payload);
+      assert.ok(!shown.includes("99887766"), "the card leaked a telephone number");
+      for (const field of card.payload.fields) {
+        assert.ok(
+          ["Албан тушаал", "Ажлын байрны ангилал", "Газар, хэлтэс", "Мэргэжлийн зэрэг"]
+            .includes(field.labelMn),
+          `unexpected field on a child's card: ${field.labelMn}`,
+        );
+      }
+
+      // The full record stays out of reach, which is the whole point of the
+      // card being a different endpoint.
+      assert.equal((await student.request(`/staff/${teacherId}`)).status, 403);
+    });
+
     it("adds a field the school names, and shows it on every profile at once", async () => {
       const created = await admin.request("/admin/staff/fields", {
         method: "POST",

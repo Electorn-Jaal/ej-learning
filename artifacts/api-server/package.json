@@ -42,7 +42,8 @@
     "schedule-book-lessons": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/schedule-book-lessons.ts",
     "clear-placeholder-lessons": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/clear-placeholder-lessons.ts",
     "reset-roster-passwords": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/reset-roster-passwords.ts",
-    "import-teacher-details": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/import-teacher-details.ts"
+    "import-teacher-details": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/import-teacher-details.ts",
+    "import-teacher-photos": "node --env-file-if-exists=../../.env scripts/run-ts.mjs scripts/import-teacher-photos.ts"
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",
