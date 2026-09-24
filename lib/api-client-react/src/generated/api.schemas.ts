@@ -383,6 +383,16 @@ export interface ScheduleDayInput {
      * @nullable
      */
   lessonId: number | null;
+  /** Whether the lesson actually happened. True unless said otherwise, and that default is the point: a teacher who marks nothing has not said the class was cancelled, and reading silence as cancellation would strike off every day nobody got round to entering. A false here needs notHeldReason, covers no section - so the section falls back into the plan and the class gets it another day - and leaves the child with no material and no check for that period. */
+  held?: boolean;
+  /**
+     * Why the lesson did not happen. Required when held is false; it is the thing a parent asks about, and "the system says nothing happened" is not an answer three weeks later.
+     * @maxLength 2000
+     * @nullable
+     */
+  notHeldReason?: string | null;
+  /** The period carried the previous one on rather than opening a new section. It consumes no section from the plan, and reads differently to a child: pick the book up, do not start it. */
+  isContinuation?: boolean;
   /**
      * Every section this period actually got through, including the one in lessonId. A teacher who moves the class on from section 4 to section 5 is saying one of two things and the day alone cannot tell them apart: we did 4 and started 5, or we skipped 4 and will come back to it. This is where they say which.
      * Left out, the answer is "just the one in lessonId". That is the safe reading: a section wrongly thought untaught comes back round, while one wrongly thought taught is never seen again. Clearing the day clears this with it.
@@ -641,6 +651,12 @@ export interface ClassDayLesson {
   studentMessage: string | null;
   /** @nullable */
   estimatedMinutes: number | null;
+  /** False where the teacher struck the period off. The section stays on the day so it can be read back, but nothing was taught: it falls into the plan again and the class gets it another day. */
+  held: boolean;
+  /** @nullable */
+  notHeldReason: string | null;
+  /** The period carried the previous one on. */
+  isContinuation: boolean;
   /** The sections the teacher said this period got through. Empty where nobody has said - the day then speaks for itself, and lessonId is all that is known. */
   coveredLessonIds: number[];
   book: ClassDayBook | null;
@@ -842,7 +858,13 @@ export interface SubjectDay {
      * @nullable
      */
   groupLabel: string | null;
-  /** What the class is scheduled to study in this subject today, or null where nobody has written the lesson yet - which is most periods. A timetable slot is owed to a child whether or not its content exists. */
+  /** False where the teacher struck this period off. The lesson then comes back null whatever was planned for it, and notHeldReason says why - there is nothing to study, and nothing to be checked on, in an hour that did not take place. */
+  held?: boolean;
+  /** @nullable */
+  notHeldReason?: string | null;
+  /** This period carried the previous one on. The child is being told to pick the book up, not to open it. */
+  isContinuation?: boolean;
+  /** What the class is scheduled to study in this subject today, or null where nobody has written the lesson yet - which is most periods. A timetable slot is owed to a child whether or not its content exists. Null too where the period was struck off. */
   lesson: DailyLessonView | null;
   /** Work assigned to this student personally in this subject. Where the class works through one book it is remediation on top; where the subject places students by level it is the whole of the day's work. */
   extra: ExtraWork | null;
@@ -960,6 +982,12 @@ export interface ScheduledDay {
   skillName: string | null;
   /** @nullable */
   note: string | null;
+  /** False where the teacher struck the period off. The section stays on the day so it can be read back, but nothing was taught: it falls into the plan again and the class gets it another day. */
+  held?: boolean;
+  /** @nullable */
+  notHeldReason?: string | null;
+  /** The period carried the previous one on. */
+  isContinuation?: boolean;
 }
 
 /**

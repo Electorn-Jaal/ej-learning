@@ -206,9 +206,10 @@ async function planForward(
     pinnedRows.map((row) => `${row.scheduledOn}:${row.timetableSlotId ?? ""}`),
   );
   // A section a teacher has already put on a later day is spoken for. Without
-  // this it would be dealt out again earlier and taught twice.
+  // this it would be dealt out again earlier and taught twice. A day struck
+  // off is not spoken for: its section was never taught and is owed a day.
   for (const row of pinnedRows) {
-    if (row.dailyLessonId !== null) done.add(row.dailyLessonId);
+    if (row.dailyLessonId !== null && row.held) done.add(row.dailyLessonId);
   }
 
   const queue = ordered.filter((lesson) => !done.has(lesson.id));
@@ -369,6 +370,9 @@ export async function setScheduleDay(
     pageTo?: number | null;
     timetableSlotId?: number | null;
     coveredLessonIds?: number[] | null;
+    held?: boolean;
+    notHeldReason?: string | null;
+    isContinuation?: boolean;
   },
 ) {
   const klass = await authorisedClass(user, input.classId);
@@ -405,6 +409,19 @@ export async function setScheduleDay(
     throw badRequest(`Тайлбар ${MAX_NOTE_LENGTH} тэмдэгтээс урт байна.`, "NOTE_TOO_LONG");
   }
   const note = trimmed === "" ? null : trimmed;
+
+  // A day struck off the register needs a reason. It is the one thing a parent
+  // asks about, and "the system says nothing happened" is not an answer a
+  // class teacher can give three weeks later.
+  const held = input.held ?? true;
+  const reason = typeof input.notHeldReason === "string" ? input.notHeldReason.trim() : null;
+  if (!held && (reason === null || reason === "")) {
+    throw badRequest("Хичээл болоогүй шалтгаанаа бичнэ үү.", "REASON_REQUIRED");
+  }
+  if (reason !== null && reason.length > MAX_NOTE_LENGTH) {
+    throw badRequest(`Шалтгаан ${MAX_NOTE_LENGTH} тэмдэгтээс урт байна.`, "REASON_TOO_LONG");
+  }
+  const notHeldReason = held ? null : reason;
 
   // Both or neither: half a range is not a range, and a teacher who means
   // "one page" sends the same number twice.
@@ -488,6 +505,7 @@ export async function setScheduleDay(
     slotId,
   );
   const previousLessonId = existing?.dailyLessonId ?? null;
+  const previousHeld = existing?.held ?? null;
 
   await repository.setScheduleDay({
     classId: klass.classId,
@@ -502,6 +520,9 @@ export async function setScheduleDay(
     replacePages,
     timetableSlotId: slotId,
     periodNo,
+    held,
+    notHeldReason,
+    isContinuation: input.isContinuation ?? false,
   });
 
   // What the period actually got through.
@@ -515,10 +536,13 @@ export async function setScheduleDay(
   // section is only counted as taught when it was on a day or a teacher said
   // so, and a section wrongly thought untaught comes back round, while one
   // wrongly thought taught is never seen again.
-  const covered = [...new Set([
-    input.lessonId,
-    ...(input.coveredLessonIds ?? []),
-  ])];
+  // A day that did not happen covered nothing, whatever section it names. The
+  // section stays on the day - a teacher looking back wants to see what was
+  // meant to happen - but it is not marked as taught, so it falls back into
+  // the plan and the class gets it another day.
+  const covered = held
+    ? [...new Set([input.lessonId, ...(input.coveredLessonIds ?? [])])]
+    : [];
   if (covered.some((id) => !lessons.some((row) => row.id === id))) {
     throw badRequest("Үзсэн гэж тэмдэглэсэн сэдэв энэ ангид байхгүй байна.", "LESSON_NOT_SCHEDULABLE");
   }
@@ -537,7 +561,10 @@ export async function setScheduleDay(
   // would train teachers to dismiss the question without reading it.
   const moved =
     input.lessonId !== previousLessonId ||
-    (input.coveredLessonIds !== undefined && input.coveredLessonIds !== null);
+    (input.coveredLessonIds !== undefined && input.coveredLessonIds !== null) ||
+    // Striking a day off, or putting one back, changes what is left to teach
+    // by exactly one section - which is a day's worth of the term.
+    held !== (previousHeld ?? true);
   if (moved) {
     const [termRow] = await repository.termById(term.id);
     if (termRow) {

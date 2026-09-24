@@ -103,6 +103,10 @@ export const lessonReachableByStudent = async (lessonId: number, studentId: numb
          EXISTS (SELECT 1 FROM core.student_enrollments e
                  JOIN learning.class_schedule cs ON cs.class_id = e.class_id
                  WHERE e.student_id = $1::bigint AND e.is_active AND cs.daily_lesson_id = dl.id
+                   -- A period struck off the register reaches nobody. There is
+                   -- nothing to be checked on in an hour that did not happen,
+                   -- and the section will come round again on its own day.
+                   AND cs.held
                    AND NOT EXISTS (
                      SELECT 1 FROM learning.timetable_slots ts
                      WHERE ts.id = cs.timetable_slot_id AND ts.audience_assigned

@@ -5,6 +5,9 @@ export type ClassDayLessonRow = {
   periodNo: number | null;
   startsAt: string | null;
   note: string | null;
+  held: boolean;
+  notHeldReason: string | null;
+  isContinuation: boolean;
   subjectId: number;
   subjectName: string;
   lessonId: number | null;
@@ -51,7 +54,8 @@ export const lessonsForClassDay = (
           AND ($2::bigint[] IS NULL OR ts.subject_id = ANY($2::bigint[]))
      ), combined AS (
        SELECT p.slot_id, p.period_no, p.subject_id, cs.daily_lesson_id, cs.note,
-              cs.page_from, cs.page_to
+              cs.page_from, cs.page_to, COALESCE(cs.held, true) AS held,
+              cs.not_held_reason, COALESCE(cs.is_continuation, false) AS is_continuation
          FROM pattern p
          LEFT JOIN learning.class_schedule cs
            ON cs.class_id = $1::bigint AND cs.scheduled_on = $3::date
@@ -62,7 +66,7 @@ export const lessonsForClassDay = (
        -- A lesson put on a day that the timetable does not carry: a makeup
        -- lesson, or one moved. It belongs on the page as much as the rest.
        SELECT NULL::bigint, cs.period_no, cs.subject_id, cs.daily_lesson_id, cs.note,
-              cs.page_from, cs.page_to
+              cs.page_from, cs.page_to, cs.held, cs.not_held_reason, cs.is_continuation
          FROM learning.class_schedule cs
         WHERE cs.class_id = $1::bigint AND cs.scheduled_on = $3::date
           AND ($2::bigint[] IS NULL OR cs.subject_id = ANY($2::bigint[]))
@@ -87,7 +91,9 @@ export const lessonsForClassDay = (
        COALESCE(combined.page_from, book.page_from)::int AS "pageFrom",
        COALESCE(combined.page_to, book.page_to)::int AS "pageTo",
        book.page_from::int AS "bookPageFrom", book.page_to::int AS "bookPageTo",
-       COALESCE(book.page_offset, 0)::int AS "pageOffset"
+       COALESCE(book.page_offset, 0)::int AS "pageOffset",
+       combined.held, combined.not_held_reason AS "notHeldReason",
+       combined.is_continuation AS "isContinuation"
      FROM combined
      JOIN core.classes c ON c.id = $1::bigint
      JOIN core.subjects sub ON sub.id = combined.subject_id

@@ -32,7 +32,13 @@ export interface SubjectDay {
      * @nullable
      */
   groupLabel: string | null;
-  /** What the class is scheduled to study in this subject today, or null where nobody has written the lesson yet - which is most periods. A timetable slot is owed to a child whether or not its content exists. */
+  /** False where the teacher struck this period off. The lesson then comes back null whatever was planned for it, and notHeldReason says why - there is nothing to study, and nothing to be checked on, in an hour that did not take place. */
+  held?: boolean;
+  /** @nullable */
+  notHeldReason?: string | null;
+  /** This period carried the previous one on. The child is being told to pick the book up, not to open it. */
+  isContinuation?: boolean;
+  /** What the class is scheduled to study in this subject today, or null where nobody has written the lesson yet - which is most periods. A timetable slot is owed to a child whether or not its content exists. Null too where the period was struck off. */
   lesson: DailyLessonView | null;
   /** Work assigned to this student personally in this subject. Where the class works through one book it is remediation on top; where the subject places students by level it is the whole of the day's work. */
   extra: ExtraWork | null;

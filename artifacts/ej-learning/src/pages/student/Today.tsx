@@ -101,8 +101,18 @@ function PeriodRow({ period, hasPlan }: { period: Period; hasPlan: (code: string
             </span>
           ) : null}
         </p>
-        {topic ? (
-          <p className="truncate text-xs text-muted-foreground">{topic}</p>
+        {day.held === false ? (
+          // Said plainly, with the reason. A child whose period simply went
+          // blank would think the system had lost it; the one thing they - and
+          // whoever asks them about it at home - need is that it did not
+          // happen, and why.
+          <p className="text-xs text-muted-foreground">
+            Хичээл болоогүй{day.notHeldReason ? ' — ' + day.notHeldReason : ''}
+          </p>
+        ) : topic ? (
+          <p className="truncate text-xs text-muted-foreground">
+            {day.isContinuation ? 'Үргэлжлэл · ' : ''}{topic}
+          </p>
         ) : null}
         {day.selectionPending ? (
           <p className="text-[11px] text-muted-foreground">Бүлгийн хуваарилалт тодруулаагүй</p>

@@ -31,6 +31,9 @@ export const scheduleForClass = (
     lessonType: string | null;
     skillName: string | null;
     note: string | null;
+    held: boolean;
+    notHeldReason: string | null;
+    isContinuation: boolean;
   }>(
     `WITH visible_subjects AS (
        SELECT sub.id, sub.name_mn FROM core.subjects sub
@@ -49,7 +52,9 @@ export const scheduleForClass = (
        JOIN visible_subjects sub ON sub.id = ts.subject_id
      ), rows AS (
        SELECT w.day, w.subject_id, w.id AS slot_id, w.period_no, w.group_label, w.teacher_id,
-              cs.daily_lesson_id, cs.note
+              cs.daily_lesson_id, cs.note,
+              COALESCE(cs.held, true) AS held, cs.not_held_reason,
+              COALESCE(cs.is_continuation, false) AS is_continuation
        FROM weekly w
        LEFT JOIN learning.class_schedule cs ON cs.class_id = $1 AND cs.scheduled_on = w.day
          AND cs.subject_id = w.subject_id
@@ -57,7 +62,9 @@ export const scheduleForClass = (
               (cs.timetable_slot_id IS NULL AND cs.period_no = w.period_no))
        UNION ALL
        SELECT d.day::date, sub.id, NULL::bigint, cs.period_no, NULL::varchar, NULL::bigint,
-              cs.daily_lesson_id, cs.note
+              cs.daily_lesson_id, cs.note,
+              COALESCE(cs.held, true), cs.not_held_reason,
+              COALESCE(cs.is_continuation, false)
        FROM generate_series($2::date, $3::date, interval '1 day') d(day)
        LEFT JOIN visible_subjects sub ON true
        LEFT JOIN learning.class_schedule cs ON cs.class_id = $1 AND cs.scheduled_on = d.day::date
@@ -70,7 +77,9 @@ export const scheduleForClass = (
        to_char(p.starts_at, 'HH24:MI') AS "startsAt", u.display_name AS "teacherName",
        sub.id::int AS "subjectId", sub.name_mn AS subject,
        dl.id::int AS "lessonId", dl.lesson_code AS "lessonCode",
-       dl.lesson_type AS "lessonType", sk.name_mn AS "skillName", rows.note
+       dl.lesson_type AS "lessonType", sk.name_mn AS "skillName", rows.note,
+       rows.held, rows.not_held_reason AS "notHeldReason",
+       rows.is_continuation AS "isContinuation"
      FROM rows
      LEFT JOIN core.subjects sub ON sub.id = rows.subject_id
      JOIN core.classes c ON c.id = $1
@@ -186,14 +195,19 @@ export async function setScheduleDay(row: {
   replacePages: boolean;
   timetableSlotId: number | null;
   periodNo: number | null;
+  held: boolean;
+  notHeldReason: string | null;
+  isContinuation: boolean;
 }) {
   await db.execute(sql`
     INSERT INTO learning.class_schedule
       (class_id, term_id, daily_lesson_id, scheduled_on, subject_id, created_by, note,
-       page_from, page_to, timetable_slot_id, period_no)
+       page_from, page_to, timetable_slot_id, period_no, held, not_held_reason,
+       is_continuation)
     SELECT ${row.classId}, ${row.termId}, ${row.dailyLessonId}, ${row.scheduledOn}::date,
       sk.subject_id, ${row.createdBy}, ${row.note}, ${row.pageFrom}, ${row.pageTo},
-      ${row.timetableSlotId}, ${row.periodNo}
+      ${row.timetableSlotId}, ${row.periodNo}, ${row.held}, ${row.notHeldReason},
+      ${row.isContinuation}
     FROM learning.daily_lessons dl
     JOIN content.skills sk ON sk.id = dl.core_skill_id
     WHERE dl.id = ${row.dailyLessonId}
@@ -202,6 +216,9 @@ export async function setScheduleDay(row: {
       period_no = EXCLUDED.period_no,
       term_id = EXCLUDED.term_id,
       created_by = EXCLUDED.created_by,
+      held = EXCLUDED.held,
+      not_held_reason = EXCLUDED.not_held_reason,
+      is_continuation = EXCLUDED.is_continuation,
       note = CASE WHEN ${row.replaceNote} THEN EXCLUDED.note
                   ELSE learning.class_schedule.note END,
       -- A page range belongs to the section that was taught. Changing the
@@ -252,8 +269,8 @@ export const scheduledLessonOn = (
   onDate: string,
   slotId: number | null,
 ) =>
-  readRows<{ dailyLessonId: number | null }>(
-    `SELECT daily_lesson_id::int AS "dailyLessonId"
+  readRows<{ dailyLessonId: number | null; held: boolean }>(
+    `SELECT daily_lesson_id::int AS "dailyLessonId", held
      FROM learning.class_schedule
      WHERE class_id = $1::bigint AND subject_id = $2::bigint AND scheduled_on = $3::date
        AND timetable_slot_id IS NOT DISTINCT FROM $4::bigint
@@ -292,9 +309,14 @@ export const pinnedScheduleDays = (
   after: string,
   until: string,
 ) =>
-  readRows<{ scheduledOn: string; timetableSlotId: number | null; dailyLessonId: number | null }>(
+  readRows<{
+    scheduledOn: string;
+    timetableSlotId: number | null;
+    dailyLessonId: number | null;
+    held: boolean;
+  }>(
     `SELECT scheduled_on::text AS "scheduledOn", timetable_slot_id::int AS "timetableSlotId",
-       daily_lesson_id::int AS "dailyLessonId"
+       daily_lesson_id::int AS "dailyLessonId", held
      FROM learning.class_schedule
      WHERE class_id = $1::bigint AND subject_id = $2::bigint AND created_by IS NOT NULL
        AND scheduled_on > $3::date AND scheduled_on <= $4::date`,
@@ -315,9 +337,11 @@ export const pinnedScheduleDays = (
 export const coveredLessonIds = (classId: number, subjectId: number, until: string) =>
   readRows<{ id: number }>(
     `SELECT DISTINCT daily_lesson_id::int AS id FROM (
+       -- held: a day struck off taught nothing, whatever section it named,
+       -- so its section is still owed a day and must fall back into the plan.
        SELECT daily_lesson_id FROM learning.class_schedule
         WHERE class_id = $1::bigint AND subject_id = $2::bigint
-          AND scheduled_on <= $3::date AND daily_lesson_id IS NOT NULL
+          AND scheduled_on <= $3::date AND daily_lesson_id IS NOT NULL AND held
        UNION
        SELECT daily_lesson_id FROM learning.class_lesson_coverage
         WHERE class_id = $1::bigint AND subject_id = $2::bigint

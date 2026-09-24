@@ -29,6 +29,9 @@ export type LessonRow = {
   teacherName?: string | null;
   startsAt?: string | null;
   endsAt?: string | null;
+  held?: boolean;
+  notHeldReason?: string | null;
+  isContinuation?: boolean;
 };
 
 export const studentClass = (studentId: number) =>
@@ -84,7 +87,7 @@ export const lessonsForDay = (studentId: number, onDate: string) =>
      ),
      dated AS (
        SELECT cs.subject_id, cs.period_no, cs.daily_lesson_id, cs.note, cs.timetable_slot_id,
-              cs.page_from, cs.page_to
+              cs.page_from, cs.page_to, cs.held, cs.not_held_reason, cs.is_continuation
          FROM learning.class_schedule cs
          JOIN enrolled ON enrolled.class_id = cs.class_id
         LEFT JOIN learning.timetable_slots ts ON ts.id = cs.timetable_slot_id
@@ -98,7 +101,9 @@ export const lessonsForDay = (studentId: number, onDate: string) =>
        -- has been prepared for it.
        SELECT p.subject_id, p.period_no, p.group_label, p.teacher_id,
               d.daily_lesson_id, d.note, d.page_from, d.page_to,
-              p.selection_pending, p.id AS slot_id
+              p.selection_pending, p.id AS slot_id,
+              COALESCE(d.held, true) AS held, d.not_held_reason,
+              COALESCE(d.is_continuation, false) AS is_continuation
          FROM pattern p
          LEFT JOIN dated d
            ON d.subject_id = p.subject_id
@@ -109,7 +114,8 @@ export const lessonsForDay = (studentId: number, onDate: string) =>
        -- a makeup lesson, a one-off, a class moved. Dropping these would lose
        -- the only lessons that were deliberately scheduled by hand.
        SELECT d.subject_id, d.period_no, NULL::varchar, NULL::bigint,
-              d.daily_lesson_id, d.note, d.page_from, d.page_to, false, d.timetable_slot_id
+              d.daily_lesson_id, d.note, d.page_from, d.page_to, false, d.timetable_slot_id,
+              COALESCE(d.held, true), d.not_held_reason, COALESCE(d.is_continuation, false)
          FROM dated d
         WHERE NOT EXISTS (
                 SELECT 1 FROM pattern p
@@ -137,7 +143,9 @@ export const lessonsForDay = (studentId: number, onDate: string) =>
        combined.period_no::int AS "periodNo", combined.group_label AS "groupLabel",
        teacher.display_name AS "teacherName",
        to_char(p.starts_at, 'HH24:MI') AS "startsAt",
-       to_char(p.ends_at, 'HH24:MI') AS "endsAt"
+       to_char(p.ends_at, 'HH24:MI') AS "endsAt",
+       combined.held, combined.not_held_reason AS "notHeldReason",
+       combined.is_continuation AS "isContinuation"
      FROM combined
      CROSS JOIN LATERAL (SELECT school_year FROM enrolled LIMIT 1) me
      JOIN core.subjects subj ON subj.id = combined.subject_id AND subj.is_active

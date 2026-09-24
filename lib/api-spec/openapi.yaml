@@ -2343,6 +2343,29 @@ components:
         lessonId:
           description: null clears the day.
           type: ["integer", "null"]
+        held:
+          description: >
+            Whether the lesson actually happened. True unless said otherwise,
+            and that default is the point: a teacher who marks nothing has not
+            said the class was cancelled, and reading silence as cancellation
+            would strike off every day nobody got round to entering. A false
+            here needs notHeldReason, covers no section - so the section falls
+            back into the plan and the class gets it another day - and leaves
+            the child with no material and no check for that period.
+          type: boolean
+        notHeldReason:
+          description: >
+            Why the lesson did not happen. Required when held is false; it is
+            the thing a parent asks about, and "the system says nothing
+            happened" is not an answer three weeks later.
+          type: ["string", "null"]
+          maxLength: 2000
+        isContinuation:
+          description: >
+            The period carried the previous one on rather than opening a new
+            section. It consumes no section from the plan, and reads
+            differently to a child: pick the book up, do not start it.
+          type: boolean
         coveredLessonIds:
           description: >
             Every section this period actually got through, including the one
@@ -2683,6 +2706,17 @@ components:
           type: ["string", "null"]
         estimatedMinutes:
           type: ["integer", "null"]
+        held:
+          description: >
+            False where the teacher struck the period off. The section stays on
+            the day so it can be read back, but nothing was taught: it falls
+            into the plan again and the class gets it another day.
+          type: boolean
+        notHeldReason:
+          type: ["string", "null"]
+        isContinuation:
+          description: The period carried the previous one on.
+          type: boolean
         coveredLessonIds:
           description: >
             The sections the teacher said this period got through. Empty where
@@ -2697,6 +2731,9 @@ components:
             - type: "null"
       required:
         - coveredLessonIds
+        - held
+        - notHeldReason
+        - isContinuation
         - timetableSlotId
         - periodNo
         - startsAt
@@ -3106,11 +3143,26 @@ components:
             Which half of a split class this slot is for, in the school's own
             words ("6а-1"). Null for a lesson the whole class attends.
           type: [string, "null"]
+        held:
+          description: >
+            False where the teacher struck this period off. The lesson then
+            comes back null whatever was planned for it, and notHeldReason says
+            why - there is nothing to study, and nothing to be checked on, in
+            an hour that did not take place.
+          type: boolean
+        notHeldReason:
+          type: ["string", "null"]
+        isContinuation:
+          description: >
+            This period carried the previous one on. The child is being told to
+            pick the book up, not to open it.
+          type: boolean
         lesson:
           description: >
             What the class is scheduled to study in this subject today, or null
             where nobody has written the lesson yet - which is most periods. A
             timetable slot is owed to a child whether or not its content exists.
+            Null too where the period was struck off.
           oneOf:
             - $ref: "#/components/schemas/DailyLessonView"
             - type: "null"
@@ -3238,6 +3290,17 @@ components:
           type: ["string", "null"]
         note:
           type: ["string", "null"]
+        held:
+          description: >
+            False where the teacher struck the period off. The section stays on
+            the day so it can be read back, but nothing was taught: it falls
+            into the plan again and the class gets it another day.
+          type: boolean
+        notHeldReason:
+          type: ["string", "null"]
+        isContinuation:
+          description: The period carried the previous one on.
+          type: boolean
       required:
         [scheduledOn, isToday, subjectId, subject, lessonId, lessonCode,
          lessonType, skillName, note]

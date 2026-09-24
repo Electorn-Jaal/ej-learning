@@ -41,6 +41,12 @@ export interface ClassDayLesson {
   studentMessage: string | null;
   /** @nullable */
   estimatedMinutes: number | null;
+  /** False where the teacher struck the period off. The section stays on the day so it can be read back, but nothing was taught: it falls into the plan again and the class gets it another day. */
+  held: boolean;
+  /** @nullable */
+  notHeldReason: string | null;
+  /** The period carried the previous one on. */
+  isContinuation: boolean;
   /** The sections the teacher said this period got through. Empty where nobody has said - the day then speaks for itself, and lessonId is all that is known. */
   coveredLessonIds: number[];
   book: ClassDayBook | null;
