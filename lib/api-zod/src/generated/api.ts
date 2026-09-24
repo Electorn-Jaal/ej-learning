@@ -1144,6 +1144,233 @@ export const GetTeacherQuizAttemptsResponse = zod.object({
 
 
 /**
+ * The school decides this, not the code. Each row says what a field is called, how its value is entered, and whether the member of staff may write it themselves. An administrator also sees the fields that have been switched off, because turning one back on is theirs to do and they cannot do it blind.
+ * @summary What a staff profile is made of
+ */
+export const GetStaffFieldsResponseItem = zod.object({
+  "id": zod.number().int(),
+  "fieldKey": zod.string().describe('Stable across renames; what the code refers to.'),
+  "labelMn": zod.string().describe('What the school calls it, and what it may change.'),
+  "valueKind": zod.enum(['TEXT', 'LONG_TEXT', 'DATE', 'PHONE', 'EMAIL']),
+  "sortOrder": zod.number().int(),
+  "selfEditable": zod.boolean(),
+  "isActive": zod.boolean(),
+  "columnName": zod.string().nullable().describe('Set for the fields that have a real column behind them. Those may be renamed but not removed.\n')
+})
+export const GetStaffFieldsResponse = zod.array(GetStaffFieldsResponseItem)
+
+
+/**
+ * @summary Every member of staff, with their profile values
+ */
+export const GetStaffListResponseItem = zod.object({
+  "teacherId": zod.number().int(),
+  "userId": zod.number().int(),
+  "displayName": zod.string(),
+  "username": zod.string(),
+  "teacherCode": zod.string(),
+  "photoUrl": zod.string().nullable(),
+  "subjects": zod.array(zod.string()),
+  "classes": zod.array(zod.string()),
+  "fields": zod.array(zod.object({
+  "fieldKey": zod.string(),
+  "labelMn": zod.string(),
+  "valueKind": zod.string(),
+  "selfEditable": zod.boolean(),
+  "value": zod.string().nullable()
+}))
+})
+export const GetStaffListResponse = zod.array(GetStaffListResponseItem)
+
+
+/**
+ * @summary The signed-in member of staff's own record
+ */
+export const GetMyStaffProfileResponse = zod.object({
+  "teacherId": zod.number().int(),
+  "userId": zod.number().int(),
+  "displayName": zod.string(),
+  "username": zod.string(),
+  "teacherCode": zod.string(),
+  "photoUrl": zod.string().nullable(),
+  "subjects": zod.array(zod.string()),
+  "classes": zod.array(zod.string()),
+  "fields": zod.array(zod.object({
+  "fieldKey": zod.string(),
+  "labelMn": zod.string(),
+  "valueKind": zod.string(),
+  "selfEditable": zod.boolean(),
+  "value": zod.string().nullable()
+}))
+})
+
+
+/**
+ * Only the fields marked selfEditable. A job title is a decision the school made about somebody, not a preference they may set.
+ * @summary Write the fields this person is allowed to write
+ */
+export const SaveMyStaffProfileBody = zod.object({
+  "fields": zod.record(zod.string(), zod.string().nullable()).describe('Field key to value. Null or an empty string clears it.')
+})
+
+export const SaveMyStaffProfileResponse = zod.object({
+  "teacherId": zod.number().int(),
+  "userId": zod.number().int(),
+  "displayName": zod.string(),
+  "username": zod.string(),
+  "teacherCode": zod.string(),
+  "photoUrl": zod.string().nullable(),
+  "subjects": zod.array(zod.string()),
+  "classes": zod.array(zod.string()),
+  "fields": zod.array(zod.object({
+  "fieldKey": zod.string(),
+  "labelMn": zod.string(),
+  "valueKind": zod.string(),
+  "selfEditable": zod.boolean(),
+  "value": zod.string().nullable()
+}))
+})
+
+
+/**
+ * Their own, or anybody's for an administrator. A staff record carries a telephone number and a department, which one teacher is not owed about another merely because they work in the same school.
+ * @summary One member of staff's record
+ */
+export const GetStaffProfileParams = zod.object({
+  "teacherId": zod.coerce.number().int()
+})
+
+export const GetStaffProfileResponse = zod.object({
+  "teacherId": zod.number().int(),
+  "userId": zod.number().int(),
+  "displayName": zod.string(),
+  "username": zod.string(),
+  "teacherCode": zod.string(),
+  "photoUrl": zod.string().nullable(),
+  "subjects": zod.array(zod.string()),
+  "classes": zod.array(zod.string()),
+  "fields": zod.array(zod.object({
+  "fieldKey": zod.string(),
+  "labelMn": zod.string(),
+  "valueKind": zod.string(),
+  "selfEditable": zod.boolean(),
+  "value": zod.string().nullable()
+}))
+})
+
+
+/**
+ * @summary Write one member of staff's fields
+ */
+export const SaveStaffProfileParams = zod.object({
+  "teacherId": zod.coerce.number().int()
+})
+
+export const SaveStaffProfileBody = zod.object({
+  "fields": zod.record(zod.string(), zod.string().nullable()).describe('Field key to value. Null or an empty string clears it.')
+})
+
+export const SaveStaffProfileResponse = zod.object({
+  "teacherId": zod.number().int(),
+  "userId": zod.number().int(),
+  "displayName": zod.string(),
+  "username": zod.string(),
+  "teacherCode": zod.string(),
+  "photoUrl": zod.string().nullable(),
+  "subjects": zod.array(zod.string()),
+  "classes": zod.array(zod.string()),
+  "fields": zod.array(zod.object({
+  "fieldKey": zod.string(),
+  "labelMn": zod.string(),
+  "valueKind": zod.string(),
+  "selfEditable": zod.boolean(),
+  "value": zod.string().nullable()
+}))
+})
+
+
+/**
+ * @summary The photograph, or 404 when there is none
+ */
+export const GetStaffPhotoParams = zod.object({
+  "teacherId": zod.coerce.number().int()
+})
+
+export const GetStaffPhotoResponse = zod.unknown()
+
+
+/**
+ * Their own, or anybody's for an administrator. One file per person, named after the account, so a second upload leaves no orphan behind.
+ * @summary Replace the photograph
+ */
+export const UploadStaffPhotoParams = zod.object({
+  "teacherId": zod.coerce.number().int()
+})
+
+export const UploadStaffPhotoResponse = zod.object({
+  "photoUrl": zod.string()
+})
+
+
+/**
+ * @summary Add a field of the school's own
+ */
+export const addStaffFieldBodyLabelMnMax = 120;
+
+
+
+export const AddStaffFieldBody = zod.object({
+  "labelMn": zod.string().max(addStaffFieldBodyLabelMnMax),
+  "valueKind": zod.enum(['TEXT', 'LONG_TEXT', 'DATE', 'PHONE', 'EMAIL']),
+  "selfEditable": zod.boolean()
+})
+
+export const AddStaffFieldResponseItem = zod.object({
+  "id": zod.number().int(),
+  "fieldKey": zod.string().describe('Stable across renames; what the code refers to.'),
+  "labelMn": zod.string().describe('What the school calls it, and what it may change.'),
+  "valueKind": zod.enum(['TEXT', 'LONG_TEXT', 'DATE', 'PHONE', 'EMAIL']),
+  "sortOrder": zod.number().int(),
+  "selfEditable": zod.boolean(),
+  "isActive": zod.boolean(),
+  "columnName": zod.string().nullable().describe('Set for the fields that have a real column behind them. Those may be renamed but not removed.\n')
+})
+export const AddStaffFieldResponse = zod.array(AddStaffFieldResponseItem)
+
+
+/**
+ * A field with a column behind it may be renamed and reordered but not switched off: the column would be left with nothing describing it.
+ * @summary Rename a field, move it, or put it away
+ */
+export const UpdateStaffFieldParams = zod.object({
+  "fieldId": zod.coerce.number().int()
+})
+
+export const updateStaffFieldBodyLabelMnMax = 120;
+
+
+
+export const UpdateStaffFieldBody = zod.object({
+  "labelMn": zod.string().max(updateStaffFieldBodyLabelMnMax).optional(),
+  "sortOrder": zod.number().int().optional(),
+  "selfEditable": zod.boolean().optional(),
+  "isActive": zod.boolean().optional()
+})
+
+export const UpdateStaffFieldResponseItem = zod.object({
+  "id": zod.number().int(),
+  "fieldKey": zod.string().describe('Stable across renames; what the code refers to.'),
+  "labelMn": zod.string().describe('What the school calls it, and what it may change.'),
+  "valueKind": zod.enum(['TEXT', 'LONG_TEXT', 'DATE', 'PHONE', 'EMAIL']),
+  "sortOrder": zod.number().int(),
+  "selfEditable": zod.boolean(),
+  "isActive": zod.boolean(),
+  "columnName": zod.string().nullable().describe('Set for the fields that have a real column behind them. Those may be renamed but not removed.\n')
+})
+export const UpdateStaffFieldResponse = zod.array(UpdateStaffFieldResponseItem)
+
+
+/**
  * The two halves of a teacher's morning in one answer. The lessons are the same content the class is served, rather than a teacher's-eye summary that can drift from it, and the students are the whole register: a child who answered nothing is present with no attempts, because who has not done the work is the question worth asking.
  * @summary One class on one day - what is set, and who has done it
  */

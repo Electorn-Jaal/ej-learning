@@ -56,6 +56,10 @@ export const usersInCore = core.table(
     passwordHash: varchar("password_hash", { length: 255 }).notNull(),
     displayName: varchar("display_name", { length: 300 }).notNull(),
     studentId: bigint("student_id", { mode: "number" }),
+    // The photograph, as a key into the same storage the textbooks use. On the
+    // user rather than the teacher: a child has a face too, and one upload
+    // path serving everybody beats rebuilding it for the second audience.
+    photoKey: varchar("photo_key", { length: 300 }),
     isActive: boolean("is_active").default(true).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
       .defaultNow()
@@ -115,6 +119,18 @@ export const teachersInCore = core.table(
     teacherCode: varchar("teacher_code", { length: 100 }).notNull(),
     // Nullable: an admin or a teacher of record may not map to one subject.
     subjectId: bigint("subject_id", { mode: "number" }),
+    // What the school employs them as, what they trained in, and the formal
+    // teaching rank. The register carries the first of these; the other two
+    // are the school's to fill in.
+    jobTitleMn: varchar("job_title_mn", { length: 200 }),
+    specialityMn: varchar("speciality_mn", { length: 200 }),
+    departmentMn: varchar("department_mn", { length: 200 }),
+    rankMn: varchar("rank_mn", { length: 100 }),
+    // When they started teaching, not how many years they have taught: a
+    // count is wrong the day after it is entered.
+    serviceSince: date("service_since"),
+    phone: varchar({ length: 40 }),
+    email: varchar({ length: 200 }),
     isActive: boolean("is_active").default(true).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
       .defaultNow()
@@ -129,6 +145,10 @@ export const teachersInCore = core.table(
     check(
       "teachers_data_origin_check",
       sql`(data_origin)::text = ANY ((ARRAY['REAL'::character varying, 'MOCK'::character varying])::text[])`,
+    ),
+    check(
+      "teachers_service_since_check",
+      sql`service_since IS NULL OR service_since >= DATE '1950-01-01'`,
     ),
     index("idx_teachers_subject").using(
       "btree",
@@ -418,6 +438,71 @@ export const studentTransfersInCore = core.table(
       columns: [table.studentId],
       foreignColumns: [studentsInCore.id],
       name: "student_transfers_student_id_fkey",
+    }).onDelete("cascade"),
+  ],
+);
+
+/**
+ * What a staff profile is made of, as rows a school can change.
+ *
+ * A field with a column_name is backed by a real column on core.teachers - the
+ * ones the register fills - so the import, the timetable and the class screens
+ * keep reading typed, constrained data. A field the school adds later has no
+ * column and its values live in staffFieldValuesInCore. One list on screen,
+ * two homes underneath.
+ */
+export const staffFieldsInCore = core.table(
+  "staff_fields",
+  {
+    id: bigint({ mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity({ name: "core.staff_fields_id_seq", startWith: 1, increment: 1, minValue: 1, cache: 1 }),
+    // Stable across renames: the label is what the school edits, this is what
+    // the code refers to.
+    fieldKey: varchar("field_key", { length: 60 }).notNull(),
+    labelMn: varchar("label_mn", { length: 120 }).notNull(),
+    columnName: varchar("column_name", { length: 60 }),
+    valueKind: varchar("value_kind", { length: 20 }).default("TEXT").notNull(),
+    sortOrder: smallint("sort_order").default(100).notNull(),
+    // Whether the staff member may write it themselves. A telephone number is
+    // theirs; a job title is a decision the school made about them.
+    selfEditable: boolean("self_editable").default(false).notNull(),
+    isActive: boolean("is_active").default(true).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).defaultNow().notNull(),
+  },
+  (table) => [
+    unique("staff_fields_field_key_key").on(table.fieldKey),
+    check(
+      "staff_fields_value_kind_check",
+      sql`value_kind IN ('TEXT', 'LONG_TEXT', 'DATE', 'PHONE', 'EMAIL')`,
+    ),
+    check(
+      "staff_fields_builtin_stays_active",
+      sql`column_name IS NULL OR is_active`,
+    ),
+  ],
+);
+
+/** Values of the fields that have no column of their own. */
+export const staffFieldValuesInCore = core.table(
+  "staff_field_values",
+  {
+    teacherId: bigint("teacher_id", { mode: "number" }).notNull(),
+    fieldId: bigint("field_id", { mode: "number" }).notNull(),
+    valueText: text("value_text"),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" }).defaultNow().notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.teacherId, table.fieldId], name: "staff_field_values_pkey" }),
+    foreignKey({
+      columns: [table.teacherId],
+      foreignColumns: [teachersInCore.id],
+      name: "staff_field_values_teacher_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.fieldId],
+      foreignColumns: [staffFieldsInCore.id],
+      name: "staff_field_values_field_id_fkey",
     }).onDelete("cascade"),
   ],
 );

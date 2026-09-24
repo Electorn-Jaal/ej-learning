@@ -778,6 +778,262 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /staff/fields:
+    get:
+      operationId: getStaffFields
+      tags: [staff]
+      summary: What a staff profile is made of
+      description: >
+        The school decides this, not the code. Each row says what a field is
+        called, how its value is entered, and whether the member of staff may
+        write it themselves. An administrator also sees the fields that have
+        been switched off, because turning one back on is theirs to do and
+        they cannot do it blind.
+      responses:
+        "200":
+          description: The fields, in the order they are shown
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StaffField"
+  /staff:
+    get:
+      operationId: getStaffList
+      tags: [staff]
+      summary: Every member of staff, with their profile values
+      responses:
+        "200":
+          description: The register
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StaffProfile"
+        "403":
+          description: Not an administrator
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /staff/me:
+    get:
+      operationId: getMyStaffProfile
+      tags: [staff]
+      summary: The signed-in member of staff's own record
+      responses:
+        "200":
+          description: The profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffProfile"
+        "404":
+          description: This account has no staff record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    patch:
+      operationId: saveMyStaffProfile
+      tags: [staff]
+      summary: Write the fields this person is allowed to write
+      description: >
+        Only the fields marked selfEditable. A job title is a decision the
+        school made about somebody, not a preference they may set.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StaffProfileInput"
+      responses:
+        "200":
+          description: The profile as it now stands
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffProfile"
+        "403":
+          description: A field only an administrator may write
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /staff/{teacherId}:
+    parameters:
+      - name: teacherId
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      operationId: getStaffProfile
+      tags: [staff]
+      summary: One member of staff's record
+      description: >
+        Their own, or anybody's for an administrator. A staff record carries a
+        telephone number and a department, which one teacher is not owed about
+        another merely because they work in the same school.
+      responses:
+        "200":
+          description: The profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffProfile"
+        "403":
+          description: Somebody else's record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    patch:
+      operationId: saveStaffProfile
+      tags: [staff]
+      summary: Write one member of staff's fields
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StaffProfileInput"
+      responses:
+        "200":
+          description: The profile as it now stands
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StaffProfile"
+        "403":
+          description: Somebody else's record, or an administrator-only field
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /staff/{teacherId}/photo:
+    parameters:
+      - name: teacherId
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      operationId: getStaffPhoto
+      tags: [staff]
+      summary: The photograph, or 404 when there is none
+      responses:
+        "200":
+          description: The image
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: No photograph
+    post:
+      operationId: uploadStaffPhoto
+      tags: [staff]
+      summary: Replace the photograph
+      description: >
+        Their own, or anybody's for an administrator. One file per person,
+        named after the account, so a second upload leaves no orphan behind.
+      requestBody:
+        required: true
+        content:
+          image/jpeg:
+            schema:
+              type: string
+              format: binary
+          image/png:
+            schema:
+              type: string
+              format: binary
+          image/webp:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "201":
+          description: Stored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  photoUrl:
+                    type: string
+                required: [photoUrl]
+        "400":
+          description: Not an image this server stores
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /admin/staff/fields:
+    post:
+      operationId: addStaffField
+      tags: [staff]
+      summary: Add a field of the school's own
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StaffFieldInput"
+      responses:
+        "201":
+          description: The fields, including the new one
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StaffField"
+        "403":
+          description: Not an administrator
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /admin/staff/fields/{fieldId}:
+    parameters:
+      - name: fieldId
+        in: path
+        required: true
+        schema:
+          type: integer
+    patch:
+      operationId: updateStaffField
+      tags: [staff]
+      summary: Rename a field, move it, or put it away
+      description: >
+        A field with a column behind it may be renamed and reordered but not
+        switched off: the column would be left with nothing describing it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StaffFieldPatch"
+      responses:
+        "200":
+          description: The fields as they now stand
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StaffField"
+        "400":
+          description: A built-in field cannot be switched off
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /teacher/class-day:
     get:
       operationId: getClassDay
@@ -2039,6 +2295,116 @@ components:
         - takenToday
         - previousScore
         - previousMaxScore
+    StaffField:
+      type: object
+      properties:
+        id:
+          type: integer
+        fieldKey:
+          description: Stable across renames; what the code refers to.
+          type: string
+        labelMn:
+          description: What the school calls it, and what it may change.
+          type: string
+        valueKind:
+          type: string
+          enum: [TEXT, LONG_TEXT, DATE, PHONE, EMAIL]
+        sortOrder:
+          type: integer
+        selfEditable:
+          type: boolean
+        isActive:
+          type: boolean
+        columnName:
+          description: >
+            Set for the fields that have a real column behind them. Those may
+            be renamed but not removed.
+          type: ["string", "null"]
+      required: [id, fieldKey, labelMn, valueKind, sortOrder, selfEditable, isActive, columnName]
+    StaffFieldValue:
+      type: object
+      properties:
+        fieldKey:
+          type: string
+        labelMn:
+          type: string
+        valueKind:
+          type: string
+        selfEditable:
+          type: boolean
+        value:
+          type: ["string", "null"]
+      required: [fieldKey, labelMn, valueKind, selfEditable, value]
+    StaffProfile:
+      type: object
+      properties:
+        teacherId:
+          type: integer
+        userId:
+          type: integer
+        displayName:
+          type: string
+        username:
+          type: string
+        teacherCode:
+          type: string
+        photoUrl:
+          type: ["string", "null"]
+        subjects:
+          type: array
+          items:
+            type: string
+        classes:
+          type: array
+          items:
+            type: string
+        fields:
+          type: array
+          items:
+            $ref: "#/components/schemas/StaffFieldValue"
+      required:
+        - teacherId
+        - userId
+        - displayName
+        - username
+        - teacherCode
+        - photoUrl
+        - subjects
+        - classes
+        - fields
+    StaffProfileInput:
+      type: object
+      properties:
+        fields:
+          description: Field key to value. Null or an empty string clears it.
+          type: object
+          additionalProperties:
+            type: ["string", "null"]
+      required: [fields]
+    StaffFieldInput:
+      type: object
+      properties:
+        labelMn:
+          type: string
+          maxLength: 120
+        valueKind:
+          type: string
+          enum: [TEXT, LONG_TEXT, DATE, PHONE, EMAIL]
+        selfEditable:
+          type: boolean
+      required: [labelMn, valueKind, selfEditable]
+    StaffFieldPatch:
+      type: object
+      properties:
+        labelMn:
+          type: string
+          maxLength: 120
+        sortOrder:
+          type: integer
+        selfEditable:
+          type: boolean
+        isActive:
+          type: boolean
     ClassDay:
       type: object
       properties:

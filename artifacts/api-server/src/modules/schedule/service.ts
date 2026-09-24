@@ -167,6 +167,12 @@ async function replanForward(
   // A subject whose lessons carry no place in a book has no "next", and
   // shuffling them would be inventing an order the school never chose.
   if (at < 0) return;
+  // Nothing follows this section - it is the last the school has content for -
+  // so there is nothing to lay out. Leaving the calendar alone matters:
+  // clearing the rest of the term is what "no successors" would otherwise
+  // mean, and a teacher who reaches the end of the book has not asked for
+  // every day after it to be emptied.
+  if (at + 1 >= ordered.length) return;
 
   const slots = await repository.subjectSlots(classId, subjectId);
   if (slots.length === 0) return;

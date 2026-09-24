@@ -3,7 +3,7 @@ import { useGetCurrentTerm } from "@workspace/api-client-react"
 import {
   LayoutDashboard, BookOpen, TrendingUp, User, Database, LogOut,
   CalendarDays, Sun, KeyRound, ClipboardCheck, Library, PenLine, Network, BarChart3,
-  BookMarked, Bell,
+  BookMarked, Bell, Users,
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -54,6 +54,7 @@ const TEACHING_ONLY = [
 // Only an administrator configures the books, or looks at an integration that
 // is not connected to anything.
 const ADMIN_ONLY = [
+  { href: "/teacher/staff", label: "Ажилтны бүртгэл", icon: Users },
   { href: "/teacher/books", label: "Ном ба сэдэв", icon: Library },
   { href: "/teacher/content-links", label: "Сэдвийн холбоо", icon: Network },
   { href: "/teacher/integrations", label: "Холболтууд", icon: Database },
@@ -65,6 +66,7 @@ const ADMIN_ONLY = [
  * /subjects nav entry.
  */
 const EXTRA_TITLES: [string, string][] = [
+  ["/teacher/profile", "Миний бүртгэл"],
   ["/subjects/", "Хувийн төлөвлөгөө"],
   ["/subject/", "Хичээл"],
   ["/assignment/", "Хичээл"],
@@ -368,7 +370,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <AccountMenu
               name={user.displayName}
               roleLabel={roleLabel}
-              profileHref={staff ? null : "/profile"}
+              profileHref={staff ? "/teacher/profile" : "/profile"}
               passwordHref={staff ? "/teacher/password" : "/password"}
               onSignOut={signOut}
               signingOut={signingOut}
