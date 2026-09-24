@@ -1396,21 +1396,32 @@ describe("EJ Learning API", { concurrency: false }, () => {
       assert.equal(res.payload.results[0].correctOptionId, right.optionId);
     });
 
-    it("refuses a second sitting the same day and keeps the first", async () => {
+    it("allows three goes a day and refuses the fourth", async () => {
       const question = paper.questions[0];
       const right = question.options.find((o) => o.text === "2");
-
-      // A quiz may be taken once a day (FR-C5). The right answer is sent this
-      // time, so a refusal cannot be mistaken for a marking failure.
-      const res = await client.request("/student/quiz-attempts", {
+      const send = () => client.request("/student/quiz-attempts", {
         method: "POST",
         body: { lessonId: paper.lessonId, answers: [{ itemId: question.itemId, optionId: right.optionId }] },
       });
-      assert.equal(res.status, 409, JSON.stringify(res.payload));
-      assert.equal(res.payload.code, "QUIZ_ALREADY_TAKEN");
+
+      // The daily check is practice: a child who gets one wrong thinks again
+      // and tries. One sitting forbids that; three permit it without turning
+      // the check into an examination. The first go happened above.
+      const second = await send();
+      assert.equal(second.status, 201, JSON.stringify(second.payload));
+      assert.equal(second.payload.attemptsUsed, 2);
+      assert.equal(second.payload.attemptsAllowed, 3);
+
+      const third = await send();
+      assert.equal(third.status, 201);
+      assert.equal(third.payload.attemptsUsed, 3);
+
+      const fourth = await send();
+      assert.equal(fourth.status, 409, JSON.stringify(fourth.payload));
+      assert.equal(fourth.payload.code, "QUIZ_ATTEMPTS_SPENT");
 
       const rows = await harness.sql("SELECT count(*)::int AS n FROM learning.quiz_attempts");
-      assert.equal(rows[0].n, 1, "the refused sitting must not be stored");
+      assert.equal(rows[0].n, 3, "the refused sitting must not be stored");
     });
 
     it("asks only what this day of the skill covers", async () => {
@@ -1496,12 +1507,16 @@ describe("EJ Learning API", { concurrency: false }, () => {
       );
     });
 
-    it("says on the paper that today's sitting is spent, with the score", async () => {
+    it("says on the paper how many goes are left and what the last one scored", async () => {
       const res = await client.request(`/student/quiz/${paper.lessonId}`);
       assert.equal(res.status, 200);
-      assert.equal(res.payload.takenToday, true);
-      assert.equal(res.payload.previousScore, 0, "the first sitting scored zero");
-      assert.ok(res.payload.previousMaxScore > 0);
+      assert.equal(res.payload.attemptsAllowed, 3);
+      assert.equal(res.payload.attemptsUsed, 3, "three sittings happened above");
+      assert.ok(res.payload.lastMaxScore > 0);
+      assert.equal(typeof res.payload.lastScore, "number");
+      // Five is the paper, not the pool: a lesson with more questions than
+      // that still hands a child five.
+      assert.ok(res.payload.questions.length <= 5);
     });
 
     it("says which kind of assessment each attempt was", async () => {
@@ -2460,10 +2475,10 @@ ${run.output}`);
   });
 
   // Last on purpose: it wipes this student's quiz history to measure a clean
-  // first sitting, which would pull the ground out from under any test that
-  // counted attempts.
-  describe("one clean sitting is enough while a quiz may only be taken once", () => {
-    it("marks the skill mastered on the first full-marks attempt", async () => {
+  // sitting, which would pull the ground out from under any test that counted
+  // attempts.
+  describe("the daily check is practice, not evidence", () => {
+    it("leaves skill progress alone however well the child does", async () => {
       const client = createClient(harness.baseUrl);
       await client.signIn(accountsByRole.STUDENT);
 
@@ -2494,15 +2509,35 @@ ${run.output}`);
       assert.equal(attempt.status, 201);
       assert.equal(attempt.payload.score, attempt.payload.maxScore, "the sitting must be perfect");
 
+      // And nothing moved. The daily check is the thinnest evidence the
+      // system has - one child, one afternoon, five questions, three goes -
+      // and a mastery figure built from it changed every time a child
+      // practised. Progress comes from the assessments a teacher marks;
+      // recordTeacherMastery is what writes it.
       const progress = await client.request("/student/progress");
       assert.equal(progress.status, 200);
       const skill = progress.payload.skills.find((row) => row.code === "MOCK-LOCAL-SKILL");
       assert.ok(skill, "expected the seeded skill on the progress page");
       assert.equal(
         skill.status,
-        "mastered",
-        "a single perfect sitting has to count, or nobody ever masters anything",
+        "unassessed",
+        "a perfect daily check must not by itself declare a skill mastered",
       );
+
+      const [{ n }] = await harness.sql(
+        "SELECT count(*)::int AS n FROM learning.student_skill_mastery WHERE student_id = $1",
+        [studentId],
+      );
+      assert.equal(n, 0, "the daily check wrote skill evidence");
+
+      // Nor did it decide what the child does next. Extra work used to be
+      // assigned automatically off the back of a wrong answer; that is the
+      // teacher's call, made on the screen where they can read the answers.
+      const [{ assigned }] = await harness.sql(
+        "SELECT count(*)::int AS assigned FROM learning.student_assignments WHERE student_id = $1",
+        [studentId],
+      );
+      assert.equal(assigned, 0, "the daily check assigned work by itself");
     });
   });
 });

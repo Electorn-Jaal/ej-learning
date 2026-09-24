@@ -133,14 +133,26 @@ export const lessonHeader = (lessonId: number) =>
     [lessonId],
   );
 
-export const attemptOnDate = (studentId: number, lessonId: number, onDate: string) =>
-  readRows<{ id: number; score: number; maxScore: number; submittedAt: string }>(
+/**
+ * Today's sittings of one quiz, newest first.
+ *
+ * A child gets more than one go at the daily check, so the question is no
+ * longer "have they answered" but "how many times, and which questions have
+ * they already seen". Both come out of this.
+ */
+export const attemptsOnDate = (studentId: number, lessonId: number, onDate: string) =>
+  readRows<{
+    id: number;
+    score: number;
+    maxScore: number;
+    submittedAt: string;
+    answers: QuizAnswer[] | null;
+  }>(
     `SELECT id::int AS id, score::int AS score, max_score::int AS "maxScore",
-       submitted_at AS "submittedAt"
+       to_json(submitted_at) #>> '{}' AS "submittedAt", answers
      FROM learning.quiz_attempts
      WHERE student_id = $1::bigint AND daily_lesson_id = $2::bigint
        AND (submitted_at AT TIME ZONE 'Asia/Ulaanbaatar')::date = $3::date
-     ORDER BY submitted_at DESC
-     LIMIT 1`,
+     ORDER BY submitted_at DESC`,
     [studentId, lessonId, onDate],
   );

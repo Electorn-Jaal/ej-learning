@@ -1096,7 +1096,9 @@ export const SubmitQuizAttemptResponse = zod.object({
   "correct": zod.boolean(),
   "correctOptionId": zod.number().int().nullable(),
   "explanation": zod.string().nullable()
-})).describe('Marking comes back with the attempt, which is the first time the key is disclosed.')
+})).describe('Marking comes back with the attempt, which is the first time the key is disclosed.'),
+  "attemptsUsed": zod.number().int().describe('Including this one.'),
+  "attemptsAllowed": zod.number().int()
 })
 
 
@@ -2007,9 +2009,10 @@ export const GetQuizPaperResponse = zod.object({
 }))
 })),
   "kind": zod.enum(['LESSON', 'UNIT', 'MONTHLY', 'DIAGNOSTIC']).describe('Which sort of assessment this is - the check at the end of a lesson, a unit test, a monthly one, a diagnostic. Recorded against the lesson that carries the questions; it is not yet an assessment of its own, with an owner and a window.\n'),
-  "takenToday": zod.boolean().describe('Whether this student has already sat this quiz today. A quiz may be taken once a day, so the paper says so up front rather than letting a child answer everything again and be refused at the end.\n'),
-  "previousScore": zod.number().int().nullable(),
-  "previousMaxScore": zod.number().int().nullable()
+  "attemptsUsed": zod.number().int().describe('How many times this student has sat this quiz today. The daily check is practice rather than an examination: a child who gets one wrong should be able to think again and try, so there are three goes and a retry draws questions they have not seen where the lesson has enough of them.\n'),
+  "attemptsAllowed": zod.number().int(),
+  "lastScore": zod.number().int().nullable(),
+  "lastMaxScore": zod.number().int().nullable()
 })
 
 

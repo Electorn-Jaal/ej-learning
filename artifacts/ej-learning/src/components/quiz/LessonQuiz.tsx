@@ -33,7 +33,7 @@ const KIND_LABEL: Record<string, string> = {
  * moment they are disclosed.
  */
 export function LessonQuiz({ lessonId }: { lessonId: number }) {
-  const { data: paper, isLoading } = useGetQuizPaper(lessonId, {
+  const { data: paper, isLoading, refetch } = useGetQuizPaper(lessonId, {
     query: { queryKey: getGetQuizPaperQueryKey(lessonId), retry: false },
   })
   const { mutate, isPending } = useSubmitQuizAttempt()
@@ -42,28 +42,32 @@ export function LessonQuiz({ lessonId }: { lessonId: number }) {
   const [results, setResults] = useState<QuizResult[] | null>(null)
   const [score, setScore] = useState<{ score: number; max: number } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [usedAfter, setUsedAfter] = useState(0)
+  const [allowedAfter, setAllowedAfter] = useState(0)
 
   if (isLoading) return <Skeleton className="h-64 w-full" />
   // A lesson with no questions yet simply has no check; that is not an error
   // worth putting in front of a student.
   if (!paper || paper.questions.length === 0) return null
 
-  // One sitting a day. Showing the paper again would invite a child to answer
-  // twenty questions and be refused at the end, so the score they already have
-  // is what they get instead.
-  if (paper.takenToday && results === null) {
+  // Three goes a day, and the paper says which one this is. Showing it again
+  // when there are none left would invite a child to answer five questions and
+  // be refused at the end, so what they get instead is the score they have.
+  const spent = paper.attemptsUsed >= paper.attemptsAllowed
+  if (spent && results === null) {
     return (
       <div className="space-y-2">
         <h3 className="text-lg font-semibold">{KIND_LABEL[paper.kind] ?? KIND_LABEL.LESSON}</h3>
         <p className="text-sm">
-          Өнөөдрийн сорилыг өгсөн байна.
-          {paper.previousMaxScore ? (
+          Өнөөдрийн сорилыг {paper.attemptsAllowed} удаа өгсөн байна.
+          {paper.lastMaxScore ? (
             <>
               {' '}
+              Сүүлийн оноо{' '}
               <strong>
-                {paper.previousScore}/{paper.previousMaxScore}
-              </strong>{' '}
-              оноо авсан.
+                {paper.lastScore}/{paper.lastMaxScore}
+              </strong>
+              .
             </>
           ) : null}
         </p>
@@ -75,6 +79,23 @@ export function LessonQuiz({ lessonId }: { lessonId: number }) {
   const answeredCount = Object.keys(chosen).length
   const allAnswered = answeredCount === paper.questions.length
   const resultFor = (itemId: number) => results?.find((row) => row.itemId === itemId)
+
+  // How many goes are left after the one just marked. Read from the attempt
+  // the server returned rather than counted here, because the server is what
+  // decides the rule and a second tab would otherwise disagree.
+  const left = results === null
+    ? paper.attemptsAllowed - paper.attemptsUsed
+    : Math.max(0, allowedAfter - usedAfter)
+
+  const retry = () => {
+    setResults(null)
+    setScore(null)
+    setChosen({})
+    setError(null)
+    // A fresh paper: the questions are chosen per sitting, so asking again is
+    // what produces the ones this child has not seen.
+    void refetch()
+  }
 
   const check = () => {
     setError(null)
@@ -92,6 +113,8 @@ export function LessonQuiz({ lessonId }: { lessonId: number }) {
         onSuccess: (attempt) => {
           setResults(attempt.results)
           setScore({ score: attempt.score, max: attempt.maxScore })
+          setUsedAfter(attempt.attemptsUsed)
+          setAllowedAfter(attempt.attemptsAllowed)
         },
         onError: (cause) => setError(cause?.data?.error ?? 'Хариултыг хадгалж чадсангүй.'),
       },
@@ -104,6 +127,10 @@ export function LessonQuiz({ lessonId }: { lessonId: number }) {
         <h3 className="text-lg font-semibold">{KIND_LABEL[paper.kind] ?? KIND_LABEL.LESSON}</h3>
         <p className="text-sm text-muted-foreground">
           {paper.questions.length} асуулт. Дэвтрийн ажлаа хийсний дараа хариулаарай.
+          {' '}
+          {paper.attemptsUsed > 0
+            ? `${paper.attemptsUsed + 1} дэх оролдлого.`
+            : `${paper.attemptsAllowed} удаа өгч болно.`}
         </p>
       </div>
 
@@ -188,7 +215,13 @@ export function LessonQuiz({ lessonId }: { lessonId: number }) {
                   ? ' Маш сайн!'
                   : ' Буруу хариултын тайлбарыг уншаарай.'}
               </p>
-              <span className="text-sm text-muted-foreground">Маргааш дахин өгч болно.</span>
+              {left > 0 ? (
+                <Button variant="outline" onClick={retry}>
+                  Дахин өгөх ({left} үлдсэн)
+                </Button>
+              ) : (
+                <span className="text-sm text-muted-foreground">Маргааш дахин өгч болно.</span>
+              )}
             </>
           )}
           {error ? (

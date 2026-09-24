@@ -404,12 +404,13 @@ export interface QuizPaper {
   questions: QuizQuestion[];
   /** Which sort of assessment this is - the check at the end of a lesson, a unit test, a monthly one, a diagnostic. Recorded against the lesson that carries the questions; it is not yet an assessment of its own, with an owner and a window. */
   kind: QuizPaperKind;
-  /** Whether this student has already sat this quiz today. A quiz may be taken once a day, so the paper says so up front rather than letting a child answer everything again and be refused at the end. */
-  takenToday: boolean;
+  /** How many times this student has sat this quiz today. The daily check is practice rather than an examination: a child who gets one wrong should be able to think again and try, so there are three goes and a retry draws questions they have not seen where the lesson has enough of them. */
+  attemptsUsed: number;
+  attemptsAllowed: number;
   /** @nullable */
-  previousScore: number | null;
+  lastScore: number | null;
   /** @nullable */
-  previousMaxScore: number | null;
+  lastMaxScore: number | null;
 }
 
 export type TeacherCardFieldsItem = {
@@ -696,6 +697,9 @@ export interface QuizAttempt {
   submittedAt: string;
   /** Marking comes back with the attempt, which is the first time the key is disclosed. */
   results: QuizResult[];
+  /** Including this one. */
+  attemptsUsed: number;
+  attemptsAllowed: number;
 }
 
 /**
