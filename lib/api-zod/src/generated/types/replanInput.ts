@@ -11,5 +11,4 @@ export interface ReplanInput {
   subjectId: number;
   /** @pattern ^\d{4}-\d{2}-\d{2}$ */
   fromDate: string;
-  lessonId: number;
 }

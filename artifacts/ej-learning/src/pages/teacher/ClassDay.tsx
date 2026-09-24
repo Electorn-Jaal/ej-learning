@@ -79,6 +79,12 @@ function LessonCard({ classId, date, lesson, editable, onSaved }: {
     pageFrom: lesson.book?.pageFrom == null ? '' : String(lesson.book.pageFrom),
     pageTo: lesson.book?.pageTo == null ? '' : String(lesson.book.pageTo),
     note: lesson.note ?? '',
+    // The sections beyond this one the teacher has said were also covered,
+    // as a sorted, comma-joined string so the dirty check compares by value.
+    alsoCovered: lesson.coveredLessonIds
+      .filter((id) => id !== lesson.lessonId)
+      .sort((a, b) => a - b)
+      .join(','),
   }
   const [draft, setDraft] = useState(server)
   const [saved, setSaved] = useState(false)
@@ -87,7 +93,8 @@ function LessonCard({ classId, date, lesson, editable, onSaved }: {
 
   // Re-seeded whenever the day comes back different, so a save elsewhere or a
   // replan does not leave the boxes showing something no longer true.
-  const key = [server.lessonId, server.pageFrom, server.pageTo, server.note].join('\u0000')
+  const key = [server.lessonId, server.pageFrom, server.pageTo, server.note, server.alsoCovered]
+    .join('\u0000')
   const [seed, setSeed] = useState(key)
   if (seed !== key) {
     setSeed(key)
@@ -105,6 +112,9 @@ function LessonCard({ classId, date, lesson, editable, onSaved }: {
         timetableSlotId: lesson.timetableSlotId,
         subjectId: lesson.subjectId,
         lessonId: draft.lessonId ? Number(draft.lessonId) : null,
+        coveredLessonIds: draft.lessonId
+          ? [Number(draft.lessonId), ...alsoCovered]
+          : null,
         note: draft.note.trim() === '' ? null : draft.note,
         // A range needs both ends or neither; the server says so too.
         pageFrom: draft.pageFrom === '' ? null : Number(draft.pageFrom),
@@ -117,6 +127,33 @@ function LessonCard({ classId, date, lesson, editable, onSaved }: {
         onSaved()
       },
     })
+  }
+
+  const alsoCovered = draft.alsoCovered === ''
+    ? []
+    : draft.alsoCovered.split(',').map(Number)
+
+  // The sections the class has gone past but not been marked as having done.
+  //
+  // A teacher who moves the day on from section 4 to section 5 means one of
+  // two things, and the day alone cannot tell them apart: we did 4 and started
+  // 5, or we skipped 4 and will come back to it. The system assumes the
+  // second, because a section wrongly thought untaught comes back round while
+  // one wrongly thought taught is never seen again - so this is where they say
+  // otherwise. Only what lies between the day's own section and the chosen one
+  // is offered; going back in the book asks nothing.
+  const ordered = lessons ?? []
+  const chosenAt = ordered.findIndex((row) => String(row.id) === draft.lessonId)
+  const wasAt = ordered.findIndex((row) => row.id === lesson.lessonId)
+  const skipped = chosenAt > 0 && wasAt >= 0 && chosenAt > wasAt
+    ? ordered.slice(wasAt, chosenAt)
+    : []
+
+  const toggle = (id: number) => {
+    const next = alsoCovered.includes(id)
+      ? alsoCovered.filter((row) => row !== id)
+      : [...alsoCovered, id]
+    setDraft({ ...draft, alsoCovered: next.sort((a, b) => a - b).join(',') })
   }
 
   const printed = lesson.book && lesson.book.bookPageFrom !== null
@@ -187,6 +224,29 @@ function LessonCard({ classId, date, lesson, editable, onSaved }: {
           </div>
         </div>
       </div>
+
+      {editable && skipped.length > 0 ? (
+        <div className="max-w-3xl space-y-1 rounded-[2px] border border-border bg-sidebar-active/40 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Эдгээрийг өнөөдөр бас үзсэн үү?
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Тэмдэглээгүй сэдэв улирлын дараагийн өдрүүдэд эргэж орно.
+          </p>
+          {skipped.map((row) => (
+            <label key={row.id} className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="h-3.5 w-3.5"
+                disabled={saving}
+                checked={alsoCovered.includes(row.id)}
+                onChange={() => toggle(row.id)}
+              />
+              <span>{row.skillName}{row.chapterTitle ? ' · ' + row.chapterTitle : ''}</span>
+            </label>
+          ))}
+        </div>
+      ) : null}
 
       <div className="max-w-3xl space-y-0.5">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">

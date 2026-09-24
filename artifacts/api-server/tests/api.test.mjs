@@ -590,10 +590,13 @@ describe("EJ Learning API", { concurrency: false }, () => {
     });
     after(async () => {
       if (slot) {
+        await harness.sql('DELETE FROM learning.class_lesson_coverage WHERE timetable_slot_id = $1', [slot.id]);
         await harness.sql('DELETE FROM learning.class_schedule WHERE timetable_slot_id = $1', [slot.id]);
         await harness.sql('DELETE FROM learning.timetable_slots WHERE id = $1', [slot.id]);
       }
       if (material) {
+        await harness.sql(`DELETE FROM learning.class_lesson_coverage WHERE daily_lesson_id IN
+          (SELECT id FROM learning.daily_lessons WHERE lesson_code LIKE 'TEST-REPLAN-%')`);
         await harness.sql(`DELETE FROM learning.class_schedule WHERE daily_lesson_id IN
           (SELECT id FROM learning.daily_lessons WHERE lesson_code LIKE 'TEST-REPLAN-%')`);
         await harness.sql("DELETE FROM learning.daily_lessons WHERE lesson_code LIKE 'TEST-REPLAN-%'");
@@ -630,16 +633,19 @@ describe("EJ Learning API", { concurrency: false }, () => {
       return row ?? null;
     };
 
-    it("carries the following sections forward, and moves them when the teacher corrects one", async () => {
-      assert.ok(days.length >= 3, `days=${days.length}`);
-
-      const setDay = (lessonId) => admin.request('/teacher/schedule/day', { method: 'PUT', body: {
+    const setDay = (lessonId, coveredLessonIds) =>
+      admin.request('/teacher/schedule/day', { method: 'PUT', body: {
         classId: klass, subjectId: subject, scheduledOn: days[0], lessonId,
         timetableSlotId: slot.id,
+        ...(coveredLessonIds ? { coveredLessonIds } : {}),
       } });
-      const approve = (lessonId) => admin.request('/teacher/schedule/replan', { method: 'POST', body: {
-        classId: klass, subjectId: subject, fromDate: days[0], lessonId,
+    const approve = () =>
+      admin.request('/teacher/schedule/replan', { method: 'POST', body: {
+        classId: klass, subjectId: subject, fromDate: days[0],
       } });
+
+    it("carries the following sections forward, and moves them when the teacher corrects one", async () => {
+      assert.ok(days.length >= 3, `days=${days.length}`);
 
       // Setting the first section offers to lay the rest of the term after it.
       const first = await setDay(lessons[0].id);
@@ -647,17 +653,21 @@ describe("EJ Learning API", { concurrency: false }, () => {
       assert.ok(first.payload.replan, 'no proposal came back');
       assert.equal(first.payload.replan.fromDate, days[0]);
       assert.ok(first.payload.replan.days.length > 0);
-      assert.equal((await approve(lessons[0].id)).status, 200);
+      assert.equal((await approve()).status, 200);
       assert.equal((await topicOn(days[1])).id, lessons[1].id, 'the next period did not follow on');
       assert.equal((await topicOn(days[2])).id, lessons[2].id);
       // Laid out, not chosen: that is what an empty created_by says.
       assert.equal((await topicOn(days[1])).created_by, null);
 
-      // The class went faster than the plan. Saying so is a proposal, not an
-      // act: the calendar the school is working from does not change until
-      // somebody reads which days move and says yes. A teacher opening a topic
-      // to see whether it fits used to rewrite their term by doing so.
-      const corrected = await setDay(lessons[1].id);
+      // The class went faster than the plan: section 1 done and section 2
+      // started in the same hour. Both are ticked, so the term carries on
+      // from section 3.
+      //
+      // Saying so is a proposal, not an act: the calendar the school is
+      // working from does not change until somebody reads which days move and
+      // says yes. A teacher opening a topic to see whether it fits used to
+      // rewrite their term by doing so.
+      const corrected = await setDay(lessons[1].id, [lessons[0].id, lessons[1].id]);
       assert.equal(corrected.status, 200, JSON.stringify(corrected.payload));
       const proposal = corrected.payload.replan;
       assert.ok(proposal, 'the correction proposed nothing');
@@ -672,12 +682,52 @@ describe("EJ Learning API", { concurrency: false }, () => {
       assert.equal((await topicOn(days[2])).id, lessons[2].id);
 
       // Approved, it moves - all of it at once.
-      assert.equal((await approve(lessons[1].id)).status, 200);
+      assert.equal((await approve()).status, 200);
       assert.equal((await topicOn(days[1])).id, lessons[2].id, 'the term did not move with the correction');
       assert.equal((await topicOn(days[2])).id, lessons[3].id);
 
       // What was taught stays taught: nothing before the corrected day moves.
       assert.equal((await topicOn(days[0])).id, lessons[1].id);
+    });
+
+    it("brings a section back round when the teacher skipped it rather than covering it", async () => {
+      // The other half of the same gesture, and the one the single column
+      // could never express. The day was to be section 1; the teacher taught
+      // section 2 instead and means to come back. Section 1 has not been
+      // taught, so it cannot simply fall off the end of the plan - which is
+      // what happened while "the day says 2" was the whole of the record.
+      assert.equal((await setDay(lessons[0].id)).status, 200);
+      assert.equal((await approve()).status, 200);
+      assert.equal((await topicOn(days[1])).id, lessons[1].id);
+
+      // No list of what was covered: the safe reading, just the one section.
+      const swapped = await setDay(lessons[1].id);
+      assert.equal(swapped.status, 200, JSON.stringify(swapped.payload));
+      assert.ok(swapped.payload.replan, 'the swap proposed nothing');
+      assert.equal((await approve()).status, 200);
+
+      assert.equal((await topicOn(days[0])).id, lessons[1].id, 'the day should hold what was taught');
+      assert.equal(
+        (await topicOn(days[1])).id,
+        lessons[0].id,
+        'the skipped section did not come back round',
+      );
+      assert.equal((await topicOn(days[2])).id, lessons[2].id);
+    });
+
+    it("refuses to mark a section covered that this class cannot be given", async () => {
+      // A section this class has no claim on. The list is checked against what
+      // the class can actually be given, because marking a section covered
+      // takes it out of a plan - and a stray id would take it out of somebody
+      // else's.
+      const [other] = await harness.sql(
+        'SELECT (max(id) + 1000)::int AS id FROM learning.daily_lessons');
+      const res = await admin.request('/teacher/schedule/day', { method: 'PUT', body: {
+        classId: klass, subjectId: subject, scheduledOn: days[0], lessonId: lessons[0].id,
+        timetableSlotId: slot.id, coveredLessonIds: [other.id],
+      } });
+      assert.equal(res.status, 400, JSON.stringify(res.payload));
+      assert.equal(res.payload.code, 'LESSON_NOT_SCHEDULABLE');
     });
 
     it("refuses to re-divide the term from a day already taught, or for a stranger", async () => {
@@ -688,7 +738,7 @@ describe("EJ Learning API", { concurrency: false }, () => {
 
       const [{ past }] = await harness.sql(
         "SELECT (CURRENT_DATE - interval '1 day')::date::text AS past");
-      const body = { classId: klass, subjectId: subject, fromDate: past, lessonId: lessons[0].id };
+      const body = { classId: klass, subjectId: subject, fromDate: past };
 
       // A teacher who does not hold this subject in this class has no business
       // re-laying its term.

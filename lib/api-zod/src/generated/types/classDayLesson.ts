@@ -41,5 +41,7 @@ export interface ClassDayLesson {
   studentMessage: string | null;
   /** @nullable */
   estimatedMinutes: number | null;
+  /** The sections the teacher said this period got through. Empty where nobody has said - the day then speaks for itself, and lessonId is all that is known. */
+  coveredLessonIds: number[];
   book: ClassDayBook | null;
 }

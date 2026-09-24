@@ -278,19 +278,126 @@ export const subjectSlots = (classId: number, subjectId: number) =>
     [classId, subjectId],
   );
 
-/** Days a person chose, which a replan must step around rather than over. */
+/**
+ * Days a person chose, which a replan must step around rather than over.
+ *
+ * The lesson comes back with them because stepping around a day is not enough:
+ * a section a teacher has already pinned to the 14th must not also be dealt
+ * out to the 3rd, which is what laying the remaining sections out in order
+ * without looking at the pinned ones would do.
+ */
 export const pinnedScheduleDays = (
   classId: number,
   subjectId: number,
   after: string,
   until: string,
 ) =>
-  readRows<{ scheduledOn: string; timetableSlotId: number | null }>(
-    `SELECT scheduled_on::text AS "scheduledOn", timetable_slot_id::int AS "timetableSlotId"
+  readRows<{ scheduledOn: string; timetableSlotId: number | null; dailyLessonId: number | null }>(
+    `SELECT scheduled_on::text AS "scheduledOn", timetable_slot_id::int AS "timetableSlotId",
+       daily_lesson_id::int AS "dailyLessonId"
      FROM learning.class_schedule
      WHERE class_id = $1::bigint AND subject_id = $2::bigint AND created_by IS NOT NULL
        AND scheduled_on > $3::date AND scheduled_on <= $4::date`,
     [classId, subjectId, after, until],
+  );
+
+/**
+ * Every section this class has already been through, on or before a date.
+ *
+ * Two sources, because there are two kinds of claim. class_schedule says what
+ * each day was for - the plan's own account, and all anybody has for a day
+ * that went by unremarked. class_lesson_coverage says what a teacher told us
+ * actually got covered in a period, which is the only way a day that took two
+ * sections, or a day that skipped one, can be told apart from the plan.
+ *
+ * Union, not preference: a section counts as taught if either says so.
+ */
+export const coveredLessonIds = (classId: number, subjectId: number, until: string) =>
+  readRows<{ id: number }>(
+    `SELECT DISTINCT daily_lesson_id::int AS id FROM (
+       SELECT daily_lesson_id FROM learning.class_schedule
+        WHERE class_id = $1::bigint AND subject_id = $2::bigint
+          AND scheduled_on <= $3::date AND daily_lesson_id IS NOT NULL
+       UNION
+       SELECT daily_lesson_id FROM learning.class_lesson_coverage
+        WHERE class_id = $1::bigint AND subject_id = $2::bigint
+          AND scheduled_on <= $3::date
+     ) covered`,
+    [classId, subjectId, until],
+  ).then((rows) => rows.map((row) => row.id));
+
+/** What a teacher said was covered in one period, for the screen to show back. */
+export const dayCoverage = (
+  classId: number,
+  subjectId: number,
+  scheduledOn: string,
+  slotId: number | null,
+) =>
+  readRows<{ id: number }>(
+    `SELECT daily_lesson_id::int AS id
+       FROM learning.class_lesson_coverage
+      WHERE class_id = $1::bigint AND subject_id = $2::bigint
+        AND scheduled_on = $3::date AND timetable_slot_id IS NOT DISTINCT FROM $4::bigint
+      ORDER BY daily_lesson_id`,
+    [classId, subjectId, scheduledOn, slotId],
+  ).then((rows) => rows.map((row) => row.id));
+
+/**
+ * Replace what one period says it covered.
+ *
+ * Replace rather than add: the teacher is correcting a single period, and the
+ * list on their screen is the whole of their answer. One transaction, so a
+ * period is never left saying it covered nothing at all.
+ */
+export async function setDayCoverage(
+  classId: number,
+  subjectId: number,
+  scheduledOn: string,
+  slotId: number | null,
+  lessonIds: number[],
+  createdBy: number,
+) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `DELETE FROM learning.class_lesson_coverage
+        WHERE class_id = $1::bigint AND subject_id = $2::bigint
+          AND scheduled_on = $3::date AND timetable_slot_id IS NOT DISTINCT FROM $4::bigint`,
+      [classId, subjectId, scheduledOn, slotId],
+    );
+    if (lessonIds.length > 0) {
+      await client.query(
+        `INSERT INTO learning.class_lesson_coverage
+           (class_id, subject_id, scheduled_on, timetable_slot_id, daily_lesson_id, created_by)
+         SELECT $1::bigint, $2::bigint, $3::date, $4::bigint, x.lesson_id, $6::bigint
+           FROM unnest($5::bigint[]) AS x(lesson_id)
+         ON CONFLICT ON CONSTRAINT class_lesson_coverage_key DO NOTHING`,
+        [classId, subjectId, scheduledOn, slotId, lessonIds, createdBy],
+      );
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/** Coverage goes with the day it describes when the day is emptied. */
+export const clearDayCoverage = (
+  classId: number,
+  subjectIds: number[] | null,
+  scheduledOn: string,
+  slotId: number | null,
+) =>
+  pool.query(
+    `DELETE FROM learning.class_lesson_coverage
+      WHERE class_id = $1::bigint AND scheduled_on = $3::date
+        AND ($2::bigint[] IS NULL OR subject_id = ANY($2::bigint[]))
+        AND timetable_slot_id IS NOT DISTINCT FROM $4::bigint`,
+    [classId, subjectIds, scheduledOn, slotId],
   );
 
 /**

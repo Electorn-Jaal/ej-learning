@@ -195,6 +195,92 @@ export const classScheduleInLearning = learning.table(
 );
 
 /**
+ * Which sections a class actually got through in one period.
+ *
+ * class_schedule holds one lesson per period - what the child opens, what the
+ * book pages and the note belong to. That is the right shape for the child and
+ * the wrong shape for the plan, because a period is not always one section.
+ *
+ * Two things happen in real teaching and they look identical in a single
+ * column. A class covers section 4 and starts section 5 in the same hour: the
+ * term afterwards should carry on from 6. A teacher skips section 4 and
+ * teaches 5 instead, meaning to come back: 4 has not been taught and must fall
+ * somewhere later. Both end with "the day says 5", and until now the second
+ * quietly lost section 4 - the plan moved on as though it had been covered.
+ *
+ * So the sections covered are recorded, all of them, and the plan for the rest
+ * of the term is what remains. The row in class_schedule stays the one the
+ * class ended on, because that is the one whose pages and instruction the
+ * child needs.
+ *
+ * Only what a teacher said is here. Days nobody has confirmed carry no rows
+ * and are read from class_schedule as before - the plan's own claim about what
+ * was taught, which is all anybody has for a day that went unremarked.
+ */
+export const classLessonCoverageInLearning = learning.table(
+  "class_lesson_coverage",
+  {
+    id: bigint({ mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity({
+        name: "learning.class_lesson_coverage_id_seq",
+        startWith: 1,
+        increment: 1,
+        minValue: 1,
+        cache: 1,
+      }),
+    classId: bigint("class_id", { mode: "number" }).notNull(),
+    subjectId: bigint("subject_id", { mode: "number" }).notNull(),
+    scheduledOn: date("scheduled_on").notNull(),
+    // Nullable for the same reason class_schedule's is: a school without a
+    // timetable still teaches, and the day is then the only address a lesson
+    // has.
+    timetableSlotId: bigint("timetable_slot_id", { mode: "number" }),
+    dailyLessonId: bigint("daily_lesson_id", { mode: "number" }).notNull(),
+    createdBy: bigint("created_by", { mode: "number" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("class_lesson_coverage_key").on(
+      table.classId, table.scheduledOn, table.timetableSlotId, table.dailyLessonId,
+    ).nullsNotDistinct(),
+    index("idx_class_lesson_coverage_day").using(
+      "btree",
+      table.classId.asc().nullsLast(),
+      table.subjectId.asc().nullsLast(),
+      table.scheduledOn.asc().nullsLast(),
+    ),
+    foreignKey({
+      columns: [table.classId],
+      foreignColumns: [classesInCore.id],
+      name: "class_lesson_coverage_class_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.subjectId],
+      foreignColumns: [subjectsInCore.id],
+      name: "class_lesson_coverage_subject_id_fkey",
+    }),
+    foreignKey({
+      columns: [table.dailyLessonId],
+      foreignColumns: [dailyLessonsInLearning.id],
+      name: "class_lesson_coverage_daily_lesson_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.timetableSlotId],
+      foreignColumns: [timetableSlotsInLearning.id],
+      name: "class_lesson_coverage_timetable_slot_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.createdBy],
+      foreignColumns: [usersInCore.id],
+      name: "class_lesson_coverage_created_by_fkey",
+    }),
+  ],
+);
+
+/**
  * Work assigned to one student on one day.
  *
  * class_schedule answers "what is this class studying today", which is the

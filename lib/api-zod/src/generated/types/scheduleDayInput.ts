@@ -26,6 +26,13 @@ export interface ScheduleDayInput {
      */
   lessonId: number | null;
   /**
+     * Every section this period actually got through, including the one in lessonId. A teacher who moves the class on from section 4 to section 5 is saying one of two things and the day alone cannot tell them apart: we did 4 and started 5, or we skipped 4 and will come back to it. This is where they say which.
+     * Left out, the answer is "just the one in lessonId". That is the safe reading: a section wrongly thought untaught comes back round, while one wrongly thought taught is never seen again. Clearing the day clears this with it.
+     * @nullable
+     * @items.minimum 1
+     */
+  coveredLessonIds?: number[] | null;
+  /**
      * What the teacher wants the class to know about this day - which pages to read, which exercises to do, what to watch out for. The student sees it. Leave the field out to keep whatever note is already there; send null or an empty string to remove it. Clearing the day removes the note with it.
      * @maxLength 2000
      * @nullable
