@@ -294,7 +294,7 @@ export const pinnedScheduleDays = (
   );
 
 /**
- * Lay the rest of the term out again, in one statement.
+ * Lay the rest of the term out again, all of it or none of it.
  *
  * Every row it writes carries created_by null, which is how this system says
  * "nobody decided this, it follows from the order of the book". The rows it
@@ -302,7 +302,12 @@ export const pinnedScheduleDays = (
  * at all, because the caller leaves them out.
  *
  * The delete goes first so that a plan which now needs fewer days does not
- * leave the tail of the old one lying in the calendar.
+ * leave the tail of the old one lying in the calendar - and that is exactly
+ * why the two statements share one transaction. Between them the rest of the
+ * term is empty. A connection dropped there, or an insert that fails on a row
+ * near the end, would leave a class with no plan at all: not the old one, not
+ * the new one, and nothing on the screen to say so. A teacher approved a
+ * change, so they get the change or they get what they had.
  */
 export async function replanScheduleDays(
   classId: number,
@@ -311,42 +316,54 @@ export async function replanScheduleDays(
   until: string,
   rows: Array<{ lessonId: number; onDate: string; slotId: number | null; periodNo: number | null }>,
 ) {
-  // The pool directly, with plain parameters. readRows opens a READ ONLY
-  // transaction, and a drizzle template expands a JS array into a list of
-  // parameters - which turns unnest($3::bigint[]) into unnest(1, 2, 3::bigint[]).
-  await pool.query(
-    `DELETE FROM learning.class_schedule
-      WHERE class_id = $1::bigint AND subject_id = $2::bigint AND created_by IS NULL
-        AND scheduled_on > $3::date AND scheduled_on <= $4::date`,
-    [classId, subjectId, after, until],
-  );
-  if (rows.length === 0) return;
-  await pool.query(
-    `INSERT INTO learning.class_schedule
-       (class_id, term_id, daily_lesson_id, scheduled_on, subject_id, created_by,
-        timetable_slot_id, period_no)
-     SELECT $1::bigint, t.id, x.lesson_id, x.on_date, $2::bigint, NULL, x.slot_id, x.period_no
-       FROM unnest($3::bigint[], $4::date[], $5::bigint[], $6::int[])
-              AS x(lesson_id, on_date, slot_id, period_no)
-       JOIN LATERAL (
-         SELECT id FROM learning.terms
-          WHERE x.on_date BETWEEN starts_on AND ends_on
-          ORDER BY term_number LIMIT 1
-       ) t ON true
-     ON CONFLICT ON CONSTRAINT class_schedule_class_day_key DO UPDATE SET
-       daily_lesson_id = EXCLUDED.daily_lesson_id,
-       period_no = EXCLUDED.period_no,
-       term_id = EXCLUDED.term_id,
-       created_by = EXCLUDED.created_by`,
-    [
-      classId,
-      subjectId,
-      rows.map((row) => row.lessonId),
-      rows.map((row) => row.onDate),
-      rows.map((row) => row.slotId),
-      rows.map((row) => row.periodNo),
-    ],
-  );
+  // One client, held for both statements. readRows would not do: it opens a
+  // READ ONLY transaction. Nor would a drizzle template: it expands a JS array
+  // into a list of parameters, which turns unnest($3::bigint[]) into
+  // unnest(1, 2, 3::bigint[]).
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `DELETE FROM learning.class_schedule
+        WHERE class_id = $1::bigint AND subject_id = $2::bigint AND created_by IS NULL
+          AND scheduled_on > $3::date AND scheduled_on <= $4::date`,
+      [classId, subjectId, after, until],
+    );
+    if (rows.length > 0) {
+      await client.query(
+        `INSERT INTO learning.class_schedule
+           (class_id, term_id, daily_lesson_id, scheduled_on, subject_id, created_by,
+            timetable_slot_id, period_no)
+         SELECT $1::bigint, t.id, x.lesson_id, x.on_date, $2::bigint, NULL, x.slot_id, x.period_no
+           FROM unnest($3::bigint[], $4::date[], $5::bigint[], $6::int[])
+                  AS x(lesson_id, on_date, slot_id, period_no)
+           JOIN LATERAL (
+             SELECT id FROM learning.terms
+              WHERE x.on_date BETWEEN starts_on AND ends_on
+              ORDER BY term_number LIMIT 1
+           ) t ON true
+         ON CONFLICT ON CONSTRAINT class_schedule_class_day_key DO UPDATE SET
+           daily_lesson_id = EXCLUDED.daily_lesson_id,
+           period_no = EXCLUDED.period_no,
+           term_id = EXCLUDED.term_id,
+           created_by = EXCLUDED.created_by`,
+        [
+          classId,
+          subjectId,
+          rows.map((row) => row.lessonId),
+          rows.map((row) => row.onDate),
+          rows.map((row) => row.slotId),
+          rows.map((row) => row.periodNo),
+        ],
+      );
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 export const timetableSlot = (id: number) => readRows<{
