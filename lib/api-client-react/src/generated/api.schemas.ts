@@ -904,7 +904,8 @@ export type TeacherScheduleStage = typeof TeacherScheduleStage[keyof typeof Teac
 
 export const TeacherScheduleStage = {
   PRIMARY: 'PRIMARY',
-  SECONDARY: 'SECONDARY',
+  LOWER_SECONDARY: 'LOWER_SECONDARY',
+  UPPER_SECONDARY: 'UPPER_SECONDARY',
 } as const;
 
 export interface TeacherSchedule {
@@ -1317,7 +1318,8 @@ export type AssessmentSheetStage = typeof AssessmentSheetStage[keyof typeof Asse
 
 export const AssessmentSheetStage = {
   PRIMARY: 'PRIMARY',
-  SECONDARY: 'SECONDARY',
+  LOWER_SECONDARY: 'LOWER_SECONDARY',
+  UPPER_SECONDARY: 'UPPER_SECONDARY',
 } as const;
 
 export interface AssessmentSheet {

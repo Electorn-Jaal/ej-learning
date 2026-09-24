@@ -1022,7 +1022,7 @@ export const GetTeacherScheduleResponse = zod.object({
   "classId": zod.number().int(),
   "className": zod.string(),
   "gradeLevel": zod.number().int(),
-  "stage": zod.enum(['PRIMARY', 'SECONDARY']).describe('Derived from the class\'s grade, not stored on the teacher: the two workflows differ per class, and one teacher may hold both.\n'),
+  "stage": zod.enum(['PRIMARY', 'LOWER_SECONDARY', 'UPPER_SECONDARY']).describe('Derived from the class\'s grade, not stored on the teacher: the two workflows differ per class, and one teacher may hold both.\n'),
   "days": zod.array(zod.object({
   "periodNo": zod.number().int().nullish(),
   "groupLabel": zod.string().nullish(),
@@ -1505,7 +1505,7 @@ export const GetAssessmentSheetResponse = zod.object({
   "classId": zod.number().int(),
   "className": zod.string(),
   "gradeLevel": zod.number().int(),
-  "stage": zod.enum(['PRIMARY', 'SECONDARY']),
+  "stage": zod.enum(['PRIMARY', 'LOWER_SECONDARY', 'UPPER_SECONDARY']),
   "skills": zod.array(zod.object({
   "skillId": zod.number().int(),
   "skillCode": zod.string(),

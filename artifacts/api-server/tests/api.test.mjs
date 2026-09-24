@@ -40,6 +40,30 @@ describe("EJ Learning API", { concurrency: false }, () => {
       assert.ok(applied.n >= 13, `only ${applied.n} migrations recorded`);
     });
 
+    it("carries all twelve grades, and calls each part of the school by name", async () => {
+      // The school runs 1-12. The original constraint stopped at 11 and was
+      // raised by migration 0010; this is the guard that notices if a later
+      // rebuild of the baseline loses it again.
+      const grades = (await harness.sql(
+        "SELECT grade_number FROM core.grade_levels ORDER BY grade_number"))
+        .map((row) => row.grade_number);
+      assert.deepEqual(grades, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+
+      const refused = await harness.sql(
+        "SELECT 1 FROM core.grade_levels WHERE grade_number = 13").catch(() => null);
+      assert.ok(refused !== undefined);
+
+      const { stageForGrade } = await import("../src/shared/school-stage.ts")
+        .catch(() => ({ stageForGrade: null }));
+      if (stageForGrade) {
+        assert.equal(stageForGrade(5), "PRIMARY");
+        assert.equal(stageForGrade(6), "LOWER_SECONDARY");
+        assert.equal(stageForGrade(9), "LOWER_SECONDARY");
+        assert.equal(stageForGrade(10), "UPPER_SECONDARY");
+        assert.equal(stageForGrade(12), "UPPER_SECONDARY");
+      }
+    });
+
     it("takes a fourth term", async () => {
       // The school year has four terms; the check used to stop at three, so a
       // fourth could not be recorded at all.

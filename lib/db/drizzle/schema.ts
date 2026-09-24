@@ -33,7 +33,7 @@ export const gradeLevelsInCore = core.table("grade_levels", {
 	nameMn: varchar("name_mn", { length: 50 }).notNull(),
 }, (table) => [
 	unique("grade_levels_grade_number_key").on(table.gradeNumber),
-	check("grade_levels_grade_number_check", sql`(grade_number >= 1) AND (grade_number <= 11)`),
+	check("grade_levels_grade_number_check", sql`(grade_number >= 1) AND (grade_number <= 12)`),
 ]);
 
 export const sourceMaterialsInContent = content.table("source_materials", {

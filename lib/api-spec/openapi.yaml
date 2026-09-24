@@ -3097,7 +3097,7 @@ components:
           type: integer
         stage:
           type: string
-          enum: [PRIMARY, SECONDARY]
+          enum: [PRIMARY, LOWER_SECONDARY, UPPER_SECONDARY]
           description: >
             Derived from the class's grade, not stored on the teacher: the two
             workflows differ per class, and one teacher may hold both.
@@ -3621,7 +3621,7 @@ components:
           type: integer
         stage:
           type: string
-          enum: [PRIMARY, SECONDARY]
+          enum: [PRIMARY, LOWER_SECONDARY, UPPER_SECONDARY]
         skills:
           type: array
           items:
