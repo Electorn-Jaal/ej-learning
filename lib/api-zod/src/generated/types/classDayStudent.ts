@@ -6,10 +6,13 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { ClassDayAttempt } from './classDayAttempt';
+import type { NotebookMark } from './notebookMark';
 
 export interface ClassDayStudent {
   studentId: number;
   studentName: string;
   studentCode: string;
   attempts: ClassDayAttempt[];
+  /** The marks written for this child today, one per period. Empty where nobody looked - which is not the same as nothing done, and is the reason this is a list rather than a field with a default. */
+  notebook: NotebookMark[];
 }

@@ -1,8 +1,8 @@
 import { Router, type IRouter } from "express";
-import { GetClassDayResponse } from "@workspace/api-zod";
+import { GetClassDayResponse, MarkNotebooksBody, MarkNotebooksResponse } from "@workspace/api-zod";
 import { requireRole } from "../../middlewares/auth";
 import { badRequest } from "../../shared/http-error";
-import { classDay } from "./service";
+import { classDay, markNotebooks } from "./service";
 
 const router: IRouter = Router();
 
@@ -25,6 +25,16 @@ router.get("/teacher/class-day", requireRole("TEACHER", "ADMIN"), async (req, re
       subjectId,
       on: req.query.on,
     })));
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.put("/teacher/notebook", requireRole("TEACHER", "ADMIN"), async (req, res, next) => {
+  try {
+    const parsed = MarkNotebooksBody.safeParse(req.body);
+    if (!parsed.success) throw badRequest("Тэмдэглэгээ буруу байна.", "INVALID_INPUT");
+    res.json(MarkNotebooksResponse.parse(await markNotebooks(req.user!, parsed.data)));
   } catch (error) {
     next(error);
   }

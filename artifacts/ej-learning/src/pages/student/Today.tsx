@@ -30,6 +30,12 @@ function Choice({ day, view, children }: { day: SubjectDay; view: string; childr
 /** Anything a child can actually open: content, personal work, questions. */
 const hasWork = (slot: SubjectDay) => Boolean(slot.lesson || slot.extra)
 
+const NOTEBOOK: Record<string, string> = {
+  DONE: 'хийсэн',
+  PARTIAL: 'дутуу',
+  NOT_DONE: 'хийгээгүй',
+}
+
 /**
  * One period of the day.
  *
@@ -116,6 +122,14 @@ function PeriodRow({ period, hasPlan }: { period: Period; hasPlan: (code: string
         ) : null}
         {day.selectionPending ? (
           <p className="text-[11px] text-muted-foreground">Бүлгийн хуваарилалт тодруулаагүй</p>
+        ) : null}
+        {/* Only when a teacher actually looked. A period nobody marked says
+            nothing here, because silence is what it is - not a verdict. */}
+        {day.notebook ? (
+          <p className="text-[11px] text-muted-foreground">
+            Дэвтэр: {NOTEBOOK[day.notebook.state] ?? day.notebook.state}
+            {day.notebook.comment ? ' — ' + day.notebook.comment : ''}
+          </p>
         ) : null}
       </div>
 

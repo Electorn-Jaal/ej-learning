@@ -508,6 +508,118 @@ describe("EJ Learning API", { concurrency: false }, () => {
     });
   });
 
+  describe("the exercise book is marked, and silence is not a verdict", () => {
+    let admin, teacher, child, klass, subject, studentId, day;
+    before(async () => {
+      admin = createClient(harness.baseUrl);
+      teacher = createClient(harness.baseUrl);
+      child = createClient(harness.baseUrl);
+      await admin.signIn(accountsByRole.ADMIN);
+      await teacher.signIn(byName["demo-teacher"]);
+      await child.signIn(accountsByRole.STUDENT);
+      [{ id: klass }] = await harness.sql(
+        "SELECT id::int FROM core.classes WHERE class_code = 'MOCK-LOCAL-9A'");
+      [{ id: subject }] = await harness.sql("SELECT id::int FROM core.subjects WHERE code = 'MATH'");
+      [{ id: studentId }] = await harness.sql(
+        "SELECT student_id::int AS id FROM core.users WHERE username = 'demo-student'");
+      [{ day }] = await harness.sql("SELECT CURRENT_DATE::text AS day");
+    });
+    after(async () => {
+      await harness.sql("DELETE FROM learning.notebook_marks WHERE class_id = $1", [klass]);
+    });
+
+    it("starts with nothing said about anybody", async () => {
+      const res = await teacher.request(`/teacher/class-day?classId=${klass}&subjectId=${subject}`);
+      assert.equal(res.status, 200);
+      const rows = res.payload.students;
+      assert.ok(rows.length > 0, "expected a roster");
+      // Not an empty verdict - no verdict. Thirty children and six periods a
+      // day means most of this grid is never filled in, and that has to read
+      // as silence rather than as a class that did nothing.
+      assert.ok(rows.every((row) => row.notebook.length === 0));
+    });
+
+    it("records done, partly done and not done, with the teacher's own sentence", async () => {
+      const res = await teacher.request("/teacher/notebook", { method: "PUT", body: {
+        classId: klass, subjectId: subject, scheduledOn: day,
+        marks: [{ studentId, state: "PARTIAL", comment: "3, 5-р дасгал дутуу" }],
+      } });
+      assert.equal(res.status, 200, JSON.stringify(res.payload));
+      assert.equal(res.payload.marked, 1);
+
+      const board = await teacher.request(`/teacher/class-day?classId=${klass}&subjectId=${subject}`);
+      const marked = board.payload.students.find((row) => row.studentId === studentId);
+      assert.equal(marked.notebook.length, 1);
+      assert.equal(marked.notebook[0].state, "PARTIAL");
+      assert.equal(marked.notebook[0].comment, "3, 5-р дасгал дутуу");
+
+      // Everybody else is still unmarked: a teacher who looked at one book has
+      // said nothing about the rest.
+      const others = board.payload.students.filter((row) => row.studentId !== studentId);
+      assert.ok(others.every((row) => row.notebook.length === 0));
+    });
+
+    it("shows the child their own mark, and the sentence with it", async () => {
+      const today = await child.request("/student/today");
+      assert.equal(today.status, 200);
+      const marked = today.payload.slots.filter((slot) => slot.notebook !== null);
+      assert.ok(marked.length > 0, "the child cannot see the mark at all");
+      assert.equal(marked[0].notebook.state, "PARTIAL");
+      assert.equal(marked[0].notebook.comment, "3, 5-р дасгал дутуу");
+    });
+
+    it("takes a mark off again rather than storing a fourth state", async () => {
+      // Undoing a slip has to leave no trace, because a stored "unchecked"
+      // would be a record saying somebody looked.
+      const res = await teacher.request("/teacher/notebook", { method: "PUT", body: {
+        classId: klass, subjectId: subject, scheduledOn: day,
+        marks: [{ studentId, state: "UNCHECKED" }],
+      } });
+      assert.equal(res.status, 200);
+      const [{ n }] = await harness.sql(
+        "SELECT count(*)::int AS n FROM learning.notebook_marks WHERE student_id = $1", [studentId]);
+      assert.equal(n, 0, "unchecked was stored instead of removed");
+    });
+
+    it("refuses a child who is not in the class, an unknown verdict, and a day that has not happened", async () => {
+      const body = { classId: klass, subjectId: subject, scheduledOn: day };
+      const stranger = await teacher.request("/teacher/notebook", { method: "PUT", body: {
+        ...body, marks: [{ studentId: 99999999, state: "DONE" }],
+      } });
+      assert.equal(stranger.status, 400, JSON.stringify(stranger.payload));
+      assert.equal(stranger.payload.code, "STUDENT_NOT_IN_CLASS");
+
+      const nonsense = await teacher.request("/teacher/notebook", { method: "PUT", body: {
+        ...body, marks: [{ studentId, state: "EXCELLENT" }],
+      } });
+      assert.equal(nonsense.status, 400);
+
+      const [{ tomorrow }] = await harness.sql(
+        "SELECT (CURRENT_DATE + 1)::text AS tomorrow");
+      const early = await teacher.request("/teacher/notebook", { method: "PUT", body: {
+        ...body, scheduledOn: tomorrow, marks: [{ studentId, state: "DONE" }],
+      } });
+      assert.equal(early.status, 400, JSON.stringify(early.payload));
+      assert.equal(early.payload.code, "FUTURE_DAY");
+    });
+
+    it("keeps one teacher's register out of another's hands", async () => {
+      const stranger = createClient(harness.baseUrl);
+      await stranger.signIn(byName["demo-teacher-b"]);
+      const res = await stranger.request("/teacher/notebook", { method: "PUT", body: {
+        classId: klass, subjectId: subject, scheduledOn: day,
+        marks: [{ studentId, state: "DONE" }],
+      } });
+      assert.equal(res.status, 403, JSON.stringify(res.payload));
+
+      // And a child cannot mark their own book.
+      assert.equal((await child.request("/teacher/notebook", { method: "PUT", body: {
+        classId: klass, subjectId: subject, scheduledOn: day,
+        marks: [{ studentId, state: "DONE" }],
+      } })).status, 403);
+    });
+  });
+
   describe("a corrected day re-lays the rest of the term", () => {
     let admin, klass, grade, subject, lessons, slot, days, material, restore;
     before(async () => {

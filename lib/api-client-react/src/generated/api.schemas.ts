@@ -742,11 +742,41 @@ export interface ClassDayAttempt {
   answers: ClassDayAttemptAnswersItem[];
 }
 
+/**
+ * What the teacher found in the book. UNCHECKED is never stored - it is the absence of a mark - but it may be sent, to undo one.
+ */
+export type NotebookState = typeof NotebookState[keyof typeof NotebookState];
+
+
+export const NotebookState = {
+  DONE: 'DONE',
+  PARTIAL: 'PARTIAL',
+  NOT_DONE: 'NOT_DONE',
+  UNCHECKED: 'UNCHECKED',
+} as const;
+
+/**
+ * One period's verdict on one child's exercise book. Keyed by the period, because a child can have done the maths and not the physics.
+ */
+export interface NotebookMark {
+  subjectId: number;
+  /** @nullable */
+  timetableSlotId: number | null;
+  state: NotebookState;
+  /**
+     * The teacher's own sentence about this book - the one thing that says why.
+     * @nullable
+     */
+  comment: string | null;
+}
+
 export interface ClassDayStudent {
   studentId: number;
   studentName: string;
   studentCode: string;
   attempts: ClassDayAttempt[];
+  /** The marks written for this child today, one per period. Empty where nobody looked - which is not the same as nothing done, and is the reason this is a list rather than a field with a default. */
+  notebook: NotebookMark[];
 }
 
 export interface ClassDay {
@@ -755,6 +785,33 @@ export interface ClassDay {
   date: string;
   lessons: ClassDayLesson[];
   students: ClassDayStudent[];
+}
+
+export type NotebookInputMarksItem = {
+  studentId: number;
+  state: NotebookState;
+  /**
+     * @maxLength 500
+     * @nullable
+     */
+  comment?: string | null;
+};
+
+/**
+ * A whole period's marks at once, because that is how the work is done: a teacher goes down the register and presses save once. Children left out are left alone.
+ */
+export interface NotebookInput {
+  classId: number;
+  subjectId: number;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  scheduledOn: string;
+  /** @nullable */
+  timetableSlotId?: number | null;
+  marks: NotebookInputMarksItem[];
+}
+
+export interface NotebookResult {
+  marked: number;
 }
 
 export type TeacherQuizPaperKind = typeof TeacherQuizPaperKind[keyof typeof TeacherQuizPaperKind];
@@ -897,6 +954,15 @@ export interface PasswordChangeInput {
   newPassword: string;
 }
 
+/**
+ * What the teacher found in this child's exercise book for this period, or null where nobody has looked. Null is not "nothing done": most periods are never marked, and a child should not read silence as a verdict.
+ */
+export type SubjectDayNotebook = {
+  state: NotebookState;
+  /** @nullable */
+  comment: string | null;
+} | null;
+
 export interface SubjectDay {
   /** @nullable */
   timetableSlotId?: number | null;
@@ -921,6 +987,8 @@ export interface SubjectDay {
      * @nullable
      */
   groupLabel: string | null;
+  /** What the teacher found in this child's exercise book for this period, or null where nobody has looked. Null is not "nothing done": most periods are never marked, and a child should not read silence as a verdict. */
+  notebook?: SubjectDayNotebook;
   /** False where the teacher struck this period off. The lesson then comes back null whatever was planned for it, and notHeldReason says why - there is nothing to study, and nothing to be checked on, in an hour that did not take place. */
   held?: boolean;
   /** @nullable */

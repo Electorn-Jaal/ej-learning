@@ -862,6 +862,10 @@ export const GetStudentTodayResponse = zod.object({
   "endsAt": zod.string().nullable(),
   "teacherName": zod.string().nullable().describe('Who takes this period, from the school\'s own timetable.'),
   "groupLabel": zod.string().nullable().describe('Which half of a split class this slot is for, in the school\'s own words ("6а-1"). Null for a lesson the whole class attends.\n'),
+  "notebook": zod.union([zod.object({
+  "state": zod.enum(['DONE', 'PARTIAL', 'NOT_DONE', 'UNCHECKED']).describe('What the teacher found in the book. UNCHECKED is never stored - it is the absence of a mark - but it may be sent, to undo one.\n'),
+  "comment": zod.string().nullable()
+}),zod.null()]).optional().describe('What the teacher found in this child\'s exercise book for this period, or null where nobody has looked. Null is not "nothing done": most periods are never marked, and a child should not read silence as a verdict.\n'),
   "held": zod.boolean().optional().describe('False where the teacher struck this period off. The lesson then comes back null whatever was planned for it, and notHeldReason says why - there is nothing to study, and nothing to be checked on, in an hour that did not take place.\n'),
   "notHeldReason": zod.string().nullish(),
   "isContinuation": zod.boolean().optional().describe('This period carried the previous one on. The child is being told to pick the book up, not to open it.\n'),
@@ -947,6 +951,10 @@ export const GetStudentScheduleResponse = zod.object({
   "endsAt": zod.string().nullable(),
   "teacherName": zod.string().nullable().describe('Who takes this period, from the school\'s own timetable.'),
   "groupLabel": zod.string().nullable().describe('Which half of a split class this slot is for, in the school\'s own words ("6а-1"). Null for a lesson the whole class attends.\n'),
+  "notebook": zod.union([zod.object({
+  "state": zod.enum(['DONE', 'PARTIAL', 'NOT_DONE', 'UNCHECKED']).describe('What the teacher found in the book. UNCHECKED is never stored - it is the absence of a mark - but it may be sent, to undo one.\n'),
+  "comment": zod.string().nullable()
+}),zod.null()]).optional().describe('What the teacher found in this child\'s exercise book for this period, or null where nobody has looked. Null is not "nothing done": most periods are never marked, and a child should not read silence as a verdict.\n'),
   "held": zod.boolean().optional().describe('False where the teacher struck this period off. The lesson then comes back null whatever was planned for it, and notHeldReason says why - there is nothing to study, and nothing to be checked on, in an hour that did not take place.\n'),
   "notHeldReason": zod.string().nullish(),
   "isContinuation": zod.boolean().optional().describe('This period carried the previous one on. The child is being told to pick the book up, not to open it.\n'),
@@ -1485,7 +1493,13 @@ export const GetClassDayResponse = zod.object({
   "chosenText": zod.string(),
   "correct": zod.boolean()
 }))
-}))
+})),
+  "notebook": zod.array(zod.object({
+  "subjectId": zod.number().int(),
+  "timetableSlotId": zod.number().int().nullable(),
+  "state": zod.enum(['DONE', 'PARTIAL', 'NOT_DONE', 'UNCHECKED']).describe('What the teacher found in the book. UNCHECKED is never stored - it is the absence of a mark - but it may be sent, to undo one.\n'),
+  "comment": zod.string().nullable().describe('The teacher\'s own sentence about this book - the one thing that says why.')
+}).describe('One period\'s verdict on one child\'s exercise book. Keyed by the period, because a child can have done the maths and not the physics.\n')).describe('The marks written for this child today, one per period. Empty where nobody looked - which is not the same as nothing done, and is the reason this is a list rather than a field with a default.\n')
 }))
 })
 
@@ -1733,6 +1747,33 @@ export const SetScheduleDayResponse = zod.object({
   "currentSkillName": zod.string().nullish()
 }).describe('One day the re-division would change, and what it holds now.'))
 }).describe('What the rest of the term would become. Nothing has been written: these are the days that would move if the teacher approves, and only the ones that would actually change.\n'),zod.null()]).describe('Null when nothing later would change.')
+})
+
+
+/**
+ * The written half of the day's work. A child does the practice in their book; this is where the teacher says whether it was done, partly done, or not done, and adds the sentence that explains it.
+ * Not checked is not the same as not done. A period nobody looked at carries no marks at all, and the difference matters: a school that collapses the two will sooner or later tell a parent their child did nothing when the truth is that nobody looked. So UNCHECKED removes a mark rather than storing a fourth state, and children left out of the list keep whatever they had.
+ * @summary Record what was found in a class's exercise books
+ */
+export const markNotebooksBodyScheduledOnRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const markNotebooksBodyMarksItemCommentMax = 500;
+
+
+
+export const MarkNotebooksBody = zod.object({
+  "classId": zod.number().int(),
+  "subjectId": zod.number().int(),
+  "scheduledOn": zod.string().regex(markNotebooksBodyScheduledOnRegExp),
+  "timetableSlotId": zod.number().int().nullish(),
+  "marks": zod.array(zod.object({
+  "studentId": zod.number().int(),
+  "state": zod.enum(['DONE', 'PARTIAL', 'NOT_DONE', 'UNCHECKED']).describe('What the teacher found in the book. UNCHECKED is never stored - it is the absence of a mark - but it may be sent, to undo one.\n'),
+  "comment": zod.string().max(markNotebooksBodyMarksItemCommentMax).nullish()
+}))
+}).describe('A whole period\'s marks at once, because that is how the work is done: a teacher goes down the register and presses save once. Children left out are left alone.\n')
+
+export const MarkNotebooksResponse = zod.object({
+  "marked": zod.number().int()
 })
 
 
