@@ -137,9 +137,28 @@ const shiftDay = (day: string, offset: number) => {
   return date.toISOString().slice(0, 10);
 };
 
+export type ReplanDay = {
+  scheduledOn: string;
+  periodNo: number | null;
+  lessonId: number;
+  lessonCode: string;
+  skillName: string;
+  chapterTitle: string | null;
+  currentLessonCode: string | null;
+  currentSkillName: string | null;
+};
+
+export type ReplanProposal = {
+  classId: number;
+  subjectId: number;
+  fromDate: string;
+  lessonId: number;
+  days: ReplanDay[];
+};
+
 /**
- * The rest of the term, laid out again from where the teacher just said the
- * class is.
+ * What the rest of the term would become, from where the teacher just said the
+ * class is. Computed, not written.
  *
  * The plan the class starts the year with is arithmetic: the sections of the
  * book, one per period, in printed order. Teaching is not arithmetic. A
@@ -149,12 +168,18 @@ const shiftDay = (day: string, offset: number) => {
  * to one day - it is the new truth about where the class is, and the days
  * after it follow from it.
  *
+ * But they follow from it only once the teacher says so. This used to run the
+ * moment a day was saved, which meant a teacher trying a topic to see whether
+ * it fitted had already rewritten their term by the time they read the screen.
+ * So the two halves are separate: this one works out the rows, and
+ * applyReplan writes them after the teacher has seen which days move.
+ *
  * Days a teacher chose themselves are stepped around, never over: those are
  * decisions, not arithmetic. Rows the plan wrote before are replaced, because
  * that is all they ever were. Nothing before the corrected day is touched -
  * what has been taught has been taught.
  */
-async function replanForward(
+async function planForward(
   classId: number,
   subjectId: number,
   fromDate: string,
@@ -166,16 +191,16 @@ async function replanForward(
   const at = ordered.findIndex((lesson) => lesson.id === lessonId);
   // A subject whose lessons carry no place in a book has no "next", and
   // shuffling them would be inventing an order the school never chose.
-  if (at < 0) return;
+  if (at < 0) return [];
   // Nothing follows this section - it is the last the school has content for -
   // so there is nothing to lay out. Leaving the calendar alone matters:
   // clearing the rest of the term is what "no successors" would otherwise
   // mean, and a teacher who reaches the end of the book has not asked for
   // every day after it to be emptied.
-  if (at + 1 >= ordered.length) return;
+  if (at + 1 >= ordered.length) return [];
 
   const slots = await repository.subjectSlots(classId, subjectId);
-  if (slots.length === 0) return;
+  if (slots.length === 0) return [];
 
   const pinned = new Set(
     (await repository.pinnedScheduleDays(classId, subjectId, fromDate, termEndsOn))
@@ -211,7 +236,113 @@ async function replanForward(
     }
   }
 
-  await repository.replanScheduleDays(classId, subjectId, fromDate, termEndsOn, rows);
+  return rows;
+}
+
+/**
+ * The same plan, written out for a person to approve: only the days that would
+ * actually change, each saying what is there now and what would replace it.
+ *
+ * One line per period, not per timetable slot. Where a class splits into two
+ * groups the register holds two rows for the same period and both halves are
+ * taught the same section - showing it twice would read as two different
+ * lessons.
+ */
+async function proposeReplan(
+  classId: number,
+  subjectId: number,
+  fromDate: string,
+  lessonId: number,
+  termEndsOn: string,
+): Promise<ReplanProposal> {
+  const rows = await planForward(classId, subjectId, fromDate, lessonId, termEndsOn);
+  if (rows.length === 0) {
+    return { classId, subjectId, fromDate, lessonId, days: [] };
+  }
+
+  const lessons = new Map(
+    (await repository.schedulableLessons(classId, [subjectId])).map((lesson) => [lesson.id, lesson]),
+  );
+  const current = new Map<
+    string,
+    { lessonId: number | null; lessonCode: string | null; skillName: string | null }
+  >();
+  for (const day of await repository.scheduleForClass(
+    classId,
+    shiftDay(fromDate, 1),
+    termEndsOn,
+    [subjectId],
+  )) {
+    current.set(`${day.scheduledOn}:${day.periodNo ?? ""}`, {
+      lessonId: day.lessonId,
+      lessonCode: day.lessonCode,
+      skillName: day.skillName,
+    });
+  }
+
+  const days: ReplanDay[] = [];
+  const shown = new Set<string>();
+  for (const row of rows) {
+    const key = `${row.onDate}:${row.periodNo ?? ""}`;
+    if (shown.has(key)) continue;
+    shown.add(key);
+    const was = current.get(key);
+    // Unchanged days are not news. A teacher who moves the class on by one
+    // section wants to see the handful of days that shift, not every remaining
+    // period of the term restated.
+    if (was && was.lessonId === row.lessonId) continue;
+    const lesson = lessons.get(row.lessonId);
+    days.push({
+      scheduledOn: row.onDate,
+      periodNo: row.periodNo,
+      lessonId: row.lessonId,
+      lessonCode: lesson?.lessonCode ?? "",
+      skillName: lesson?.skillName ?? "",
+      chapterTitle: lesson?.chapterTitle ?? null,
+      currentLessonCode: was?.lessonCode ?? null,
+      currentSkillName: was?.skillName ?? null,
+    });
+  }
+  return { classId, subjectId, fromDate, lessonId, days };
+}
+
+/**
+ * Approval. Recomputed here rather than taken from the browser: the proposal
+ * the teacher read is a picture of a calculation, and the calculation is what
+ * should reach the calendar. A stale tab then writes the plan that follows from
+ * the day as it stands, not the one that followed from it an hour ago.
+ */
+export async function applyReplan(
+  user: AuthenticatedUser,
+  input: { classId: number; subjectId: number; fromDate: string; lessonId: number },
+) {
+  const klass = await authorisedClass(user, input.classId);
+  await editableSubjects(user, klass.classId, input.subjectId);
+  if (!isIsoDate(input.fromDate)) throw badRequest("Огноо буруу байна.", "INVALID_DATE");
+  if (input.fromDate < todayInUlaanbaatar() && !user.roles.includes("ADMIN")) {
+    throw forbidden("Өнгөрсөн өдрөөс хуваарь дахин хуваарилах боломжгүй.", "PAST_DAY");
+  }
+
+  const [term] = await repository.termCovering(input.fromDate);
+  if (!term) throw badRequest("Энэ огноо ямар ч улиралд хамаарахгүй байна.", "OUTSIDE_TERM");
+  const [termRow] = await repository.termById(term.id);
+  if (!termRow) throw badRequest("Улирал олдсонгүй.", "OUTSIDE_TERM");
+
+  const rows = await planForward(
+    klass.classId,
+    input.subjectId,
+    input.fromDate,
+    input.lessonId,
+    termRow.endsOn,
+  );
+  await repository.replanScheduleDays(
+    klass.classId,
+    input.subjectId,
+    input.fromDate,
+    termRow.endsOn,
+    rows,
+  );
+  return { days: rows.length };
 }
 
 export async function setScheduleDay(
@@ -310,7 +441,7 @@ export async function setScheduleDay(
 
   if (input.lessonId === null) {
     await repository.clearScheduleDay(klass.classId, input.scheduledOn, subjectIds, slotId);
-    return;
+    return { replan: null };
   }
 
   const lessons = await repository.schedulableLessons(klass.classId, subjectIds);
@@ -359,21 +490,24 @@ export async function setScheduleDay(
     periodNo,
   });
 
-  // Only when the lesson itself changed. Writing a note says nothing about
-  // where the class is, and re-laying the term every time somebody edits a
-  // sentence would move their plan under them.
+  // The day is saved; the rest of the term is offered, not taken. Only when
+  // the lesson itself changed - writing a note says nothing about where the
+  // class is, and proposing to re-lay the term every time somebody edits a
+  // sentence would train teachers to dismiss the question without reading it.
   if (input.lessonId !== previousLessonId) {
     const [termRow] = await repository.termById(term.id);
     if (termRow) {
-      await replanForward(
+      const proposal = await proposeReplan(
         klass.classId,
         lesson.subjectId,
         input.scheduledOn,
         input.lessonId,
         termRow.endsOn,
       );
+      if (proposal.days.length > 0) return { replan: proposal };
     }
   }
+  return { replan: null };
 }
 
 async function editableSlot(user: AuthenticatedUser, slotId: number) {

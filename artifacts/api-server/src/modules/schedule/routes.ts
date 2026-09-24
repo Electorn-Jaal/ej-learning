@@ -6,12 +6,15 @@ import {
   GetTeacherScheduleResponse,
   GetTeacherWeekResponse,
   SetScheduleDayBody,
+  SetScheduleDayResponse,
+  ApplyReplanBody,
+  ApplyReplanResponse,
   GetTimetableStudentsResponse,
   SetTimetableStudentsBody,
 } from "@workspace/api-zod";
 import { requireRole } from "../../middlewares/auth";
 import { badRequest } from "../../shared/http-error";
-import { generateSchedule, schedulableLessons, setScheduleDay, teacherSchedule, teacherWeek, timetableStudents, setTimetableStudents } from "./service";
+import { applyReplan, generateSchedule, schedulableLessons, setScheduleDay, teacherSchedule, teacherWeek, timetableStudents, setTimetableStudents } from "./service";
 
 const router: IRouter = Router();
 const asStaff = requireRole("TEACHER", "ADMIN");
@@ -76,8 +79,17 @@ router.put("/teacher/schedule/day", asStaff, async (req, res, next) => {
   try {
     const parsed = SetScheduleDayBody.safeParse(req.body);
     if (!parsed.success) throw badRequest("Өдрийн мэдээлэл буруу байна.", "INVALID_INPUT");
-    await setScheduleDay(req.user!, parsed.data);
-    res.status(204).end();
+    res.json(SetScheduleDayResponse.parse(await setScheduleDay(req.user!, parsed.data)));
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/teacher/schedule/replan", asStaff, async (req, res, next) => {
+  try {
+    const parsed = ApplyReplanBody.safeParse(req.body);
+    if (!parsed.success) throw badRequest("Хуваарийн мэдээлэл буруу байна.", "INVALID_INPUT");
+    res.json(ApplyReplanResponse.parse(await applyReplan(req.user!, parsed.data)));
   } catch (error) {
     next(error);
   }

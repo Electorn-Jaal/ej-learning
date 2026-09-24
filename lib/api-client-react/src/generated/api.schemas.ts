@@ -311,6 +311,58 @@ export interface GenerateScheduleResult {
   notice: string;
 }
 
+/**
+ * One day the re-division would change, and what it holds now.
+ */
+export interface ReplanDay {
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  scheduledOn: string;
+  /** @nullable */
+  periodNo?: number | null;
+  lessonId: number;
+  lessonCode: string;
+  skillName: string;
+  /** @nullable */
+  chapterTitle?: string | null;
+  /**
+     * What stands there now; null where the day is empty.
+     * @nullable
+     */
+  currentLessonCode?: string | null;
+  /** @nullable */
+  currentSkillName?: string | null;
+}
+
+/**
+ * What the rest of the term would become. Nothing has been written: these are the days that would move if the teacher approves, and only the ones that would actually change.
+ */
+export interface ReplanProposal {
+  classId: number;
+  subjectId: number;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  fromDate: string;
+  lessonId: number;
+  days: ReplanDay[];
+}
+
+export interface ScheduleDayResult {
+  /** Null when nothing later would change. */
+  replan: ReplanProposal | null;
+}
+
+export interface ReplanInput {
+  classId: number;
+  subjectId: number;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  fromDate: string;
+  lessonId: number;
+}
+
+export interface ReplanResult {
+  /** How many periods were written. */
+  days: number;
+}
+
 export interface ScheduleDayInput {
   /**
      * @minimum 1

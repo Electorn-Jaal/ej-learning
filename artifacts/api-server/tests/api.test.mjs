@@ -295,19 +295,19 @@ describe("EJ Learning API", { concurrency: false }, () => {
       };
 
       const note = "41-44 хуудсыг уншаад 3, 5, 7-р дасгалыг хий.";
-      assert.equal((await teacher.request('/teacher/schedule/day', { method: 'PUT', body: { ...day, lessonId, note } })).status, 204);
+      assert.equal((await teacher.request('/teacher/schedule/day', { method: 'PUT', body: { ...day, lessonId, note } })).status, 200);
       assert.equal((await read()).note, note);
 
       // Changing the lesson says nothing about the note, so the note stands.
-      assert.equal((await teacher.request('/teacher/schedule/day', { method: 'PUT', body: { ...day, lessonId } })).status, 204);
+      assert.equal((await teacher.request('/teacher/schedule/day', { method: 'PUT', body: { ...day, lessonId } })).status, 200);
       assert.equal((await read()).note, note, "swapping the lesson discarded the note");
 
       // Whitespace is not a note.
-      assert.equal((await teacher.request('/teacher/schedule/day', { method: 'PUT', body: { ...day, lessonId, note: "   " } })).status, 204);
+      assert.equal((await teacher.request('/teacher/schedule/day', { method: 'PUT', body: { ...day, lessonId, note: "   " } })).status, 200);
       assert.equal((await read()).note, null);
 
       // The student sees it on the day it belongs to.
-      assert.equal((await teacher.request('/teacher/schedule/day', { method: 'PUT', body: { ...day, lessonId, note } })).status, 204);
+      assert.equal((await teacher.request('/teacher/schedule/day', { method: 'PUT', body: { ...day, lessonId, note } })).status, 200);
       const personal = await student.request('/student/schedule?date=' + weekday);
       const shown = personal.payload.slots.find((row) => row.lesson?.id === lessonId);
       assert.ok(shown, "the student should have this lesson that day");
@@ -322,7 +322,7 @@ describe("EJ Learning API", { concurrency: false }, () => {
       assert.equal((await read()).note, note, "a refused write must not change the note");
 
       // Clearing the day takes the note with it.
-      assert.equal((await teacher.request('/teacher/schedule/day', { method: 'PUT', body: { ...day, lessonId: null } })).status, 204);
+      assert.equal((await teacher.request('/teacher/schedule/day', { method: 'PUT', body: { ...day, lessonId: null } })).status, 200);
       assert.equal((await read()).note, null);
     });
 
@@ -331,14 +331,14 @@ describe("EJ Learning API", { concurrency: false }, () => {
       assert.equal((await teacher.request('/teacher/schedule/day', { method: 'PUT', body })).status, 403);
       assert.equal((await student.request('/teacher/schedule/day', { method: 'PUT', body })).status, 403);
       const saved = await admin.request('/teacher/schedule/day', { method: 'PUT', body });
-      assert.equal(saved.status, 204, JSON.stringify(saved.payload));
+      assert.equal(saved.status, 200, JSON.stringify(saved.payload));
       const shown = await teacher.request('/teacher/schedule?classId=' + classId + '&subjectId=' + subjectId + '&from=' + weekend + '&to=' + weekend);
       assert.equal(shown.payload.days[0].lessonId, lessonId);
       const personal = await student.request('/student/schedule?date=' + weekend);
       assert.ok(personal.payload.slots.some((row) => row.lesson?.id === lessonId));
       const clearing = { ...body, lessonId: null };
       assert.equal((await teacher.request('/teacher/schedule/day', { method: 'PUT', body: clearing })).status, 403);
-      assert.equal((await admin.request('/teacher/schedule/day', { method: 'PUT', body: clearing })).status, 204);
+      assert.equal((await admin.request('/teacher/schedule/day', { method: 'PUT', body: clearing })).status, 200);
       const cleared = await teacher.request('/teacher/schedule?classId=' + classId + '&subjectId=' + subjectId + '&from=' + weekend + '&to=' + weekend);
       assert.equal(cleared.payload.days[0].lessonId, null);
     });
@@ -633,28 +633,72 @@ describe("EJ Learning API", { concurrency: false }, () => {
     it("carries the following sections forward, and moves them when the teacher corrects one", async () => {
       assert.ok(days.length >= 3, `days=${days.length}`);
 
-      // Setting the first section lays the rest of the term after it.
-      const first = await admin.request('/teacher/schedule/day', { method: 'PUT', body: {
-        classId: klass, subjectId: subject, scheduledOn: days[0], lessonId: lessons[0].id,
+      const setDay = (lessonId) => admin.request('/teacher/schedule/day', { method: 'PUT', body: {
+        classId: klass, subjectId: subject, scheduledOn: days[0], lessonId,
         timetableSlotId: slot.id,
       } });
-      assert.equal(first.status, 204, JSON.stringify(first.payload));
+      const approve = (lessonId) => admin.request('/teacher/schedule/replan', { method: 'POST', body: {
+        classId: klass, subjectId: subject, fromDate: days[0], lessonId,
+      } });
+
+      // Setting the first section offers to lay the rest of the term after it.
+      const first = await setDay(lessons[0].id);
+      assert.equal(first.status, 200, JSON.stringify(first.payload));
+      assert.ok(first.payload.replan, 'no proposal came back');
+      assert.equal(first.payload.replan.fromDate, days[0]);
+      assert.ok(first.payload.replan.days.length > 0);
+      assert.equal((await approve(lessons[0].id)).status, 200);
       assert.equal((await topicOn(days[1])).id, lessons[1].id, 'the next period did not follow on');
       assert.equal((await topicOn(days[2])).id, lessons[2].id);
       // Laid out, not chosen: that is what an empty created_by says.
       assert.equal((await topicOn(days[1])).created_by, null);
 
-      // The class went faster than the plan. Saying so moves everything after
-      // it rather than only that one day.
-      assert.equal((await admin.request('/teacher/schedule/day', { method: 'PUT', body: {
-        classId: klass, subjectId: subject, scheduledOn: days[0], lessonId: lessons[1].id,
-        timetableSlotId: slot.id,
-      } })).status, 204);
+      // The class went faster than the plan. Saying so is a proposal, not an
+      // act: the calendar the school is working from does not change until
+      // somebody reads which days move and says yes. A teacher opening a topic
+      // to see whether it fits used to rewrite their term by doing so.
+      const corrected = await setDay(lessons[1].id);
+      assert.equal(corrected.status, 200, JSON.stringify(corrected.payload));
+      const proposal = corrected.payload.replan;
+      assert.ok(proposal, 'the correction proposed nothing');
+      // The proposal says what stands there now and what would replace it, so
+      // the teacher is reading their own calendar rather than a list of codes.
+      const next = proposal.days.find((row) => row.scheduledOn === days[1]);
+      assert.ok(next, `${days[1]} is missing from the proposal`);
+      assert.equal(next.lessonId, lessons[2].id);
+      assert.equal(next.currentSkillName, lessons[1].skillName);
+      // And nothing has moved yet.
+      assert.equal((await topicOn(days[1])).id, lessons[1].id, 'the term moved before it was approved');
+      assert.equal((await topicOn(days[2])).id, lessons[2].id);
+
+      // Approved, it moves - all of it at once.
+      assert.equal((await approve(lessons[1].id)).status, 200);
       assert.equal((await topicOn(days[1])).id, lessons[2].id, 'the term did not move with the correction');
       assert.equal((await topicOn(days[2])).id, lessons[3].id);
 
       // What was taught stays taught: nothing before the corrected day moves.
       assert.equal((await topicOn(days[0])).id, lessons[1].id);
+    });
+
+    it("refuses to re-divide the term from a day already taught, or for a stranger", async () => {
+      const teacher = createClient(harness.baseUrl);
+      const stranger = createClient(harness.baseUrl);
+      await teacher.signIn(byName['demo-teacher']);
+      await stranger.signIn(byName['demo-teacher-b']);
+
+      const [{ past }] = await harness.sql(
+        "SELECT (CURRENT_DATE - interval '1 day')::date::text AS past");
+      const body = { classId: klass, subjectId: subject, fromDate: past, lessonId: lessons[0].id };
+
+      // A teacher who does not hold this subject in this class has no business
+      // re-laying its term.
+      assert.equal((await stranger.request('/teacher/schedule/replan', { method: 'POST', body })).status, 403);
+
+      // And the day before today has already happened to the children. Moving
+      // the term from it would rewrite days they have already worked through.
+      const refused = await teacher.request('/teacher/schedule/replan', { method: 'POST', body });
+      assert.equal(refused.status, 403, JSON.stringify(refused.payload));
+      assert.equal(refused.payload.code, 'PAST_DAY');
     });
 
     it("sends the child to the pages the class actually covered", async () => {
@@ -667,7 +711,7 @@ describe("EJ Learning API", { concurrency: false }, () => {
         classId: klass, subjectId: subject, scheduledOn: days[0], lessonId: lessons[0].id,
         timetableSlotId: slot.id, pageFrom: 40, pageTo: 45,
       } });
-      assert.equal(saved.status, 204, JSON.stringify(saved.payload));
+      assert.equal(saved.status, 200, JSON.stringify(saved.payload));
 
       const day = await student.request('/student/schedule?date=' + days[0]);
       assert.equal(day.status, 200);
@@ -688,7 +732,7 @@ describe("EJ Learning API", { concurrency: false }, () => {
       assert.equal((await admin.request('/teacher/schedule/day', { method: 'PUT', body: {
         classId: klass, subjectId: subject, scheduledOn: days[0], lessonId: lessons[0].id,
         timetableSlotId: slot.id, pageFrom: null, pageTo: null,
-      } })).status, 204);
+      } })).status, 200);
       const back = await student.request('/student/schedule?date=' + days[0]);
       const again = back.payload.slots.find((row) => row.lesson !== null);
       assert.equal(again.lesson.book.pageFrom, 10, 'the book’s own range did not come back');
@@ -742,14 +786,14 @@ describe("EJ Learning API", { concurrency: false }, () => {
           classId: klass, subjectId: subject, scheduledOn: day, lessonId: lesson,
           timetableSlotId: slot.id, note: `period ${index + 1}`,
         } });
-        assert.equal(saved.status, 204, JSON.stringify(saved.payload));
+        assert.equal(saved.status, 200, JSON.stringify(saved.payload));
       }
       let response = await student.request('/student/schedule?date=' + day);
       assert.equal(response.status, 200);
       assert.deepEqual(response.payload.slots.map(row => row.lesson?.teacherNote), ['period 1', 'period 2']);
       assert.equal((await admin.request('/teacher/schedule/day', { method: 'PUT', body: {
         classId: klass, subjectId: subject, scheduledOn: day, lessonId: null, timetableSlotId: slots[0].id,
-      } })).status, 204);
+      } })).status, 200);
       response = await student.request('/student/schedule?date=' + day);
       assert.equal(response.payload.slots.length, 2);
       assert.equal(response.payload.slots[0].lesson, null);
@@ -798,7 +842,7 @@ describe("EJ Learning API", { concurrency: false }, () => {
       // A makeup lesson is exactly this, and it is the administrator's to put
       // there - so the rule stops at the teacher.
       const allowed = await admin.request('/teacher/schedule/day', { method: 'PUT', body });
-      assert.equal(allowed.status, 204, JSON.stringify(allowed.payload));
+      assert.equal(allowed.status, 200, JSON.stringify(allowed.payload));
     });
 
     it('validates slot dates and prevents another teacher or student from changing group membership', async () => {
