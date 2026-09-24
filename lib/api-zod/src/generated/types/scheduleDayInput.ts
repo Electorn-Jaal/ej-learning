@@ -25,6 +25,32 @@ export interface ScheduleDayInput {
      * @nullable
      */
   lessonId: number | null;
+  /**
+     * HH:MM, in the school's own time, before which the day's check cannot be sat. Null - nearly always - means it is open as soon as the day is. A teacher holding it back until the practice is done sets a time here.
+     * @nullable
+     * @pattern ^\d{2}:\d{2}$
+     */
+  quizOpensAt?: string | null;
+  /**
+     * How many questions the check asks. Null means the system's five.
+     * @minimum 1
+     * @maximum 50
+     * @nullable
+     */
+  quizQuestionCount?: number | null;
+  /**
+     * How many goes a child gets in a day. Null means the system's three.
+     * @minimum 1
+     * @maximum 10
+     * @nullable
+     */
+  quizAttempts?: number | null;
+  /**
+     * When the key and the marking notes become the child's to see. Null is "not yet", and that is where a check sits while it is still being sat: three goes are pointless if the first hands over the answer, and a parent reading over a shoulder is how it would travel. Whether each answer was right is told at once regardless.
+     * An ISO 8601 instant. Sending "now" is the ordinary case; a later one schedules the release.
+     * @nullable
+     */
+  answersOpenAt?: string | null;
   /** Whether the lesson actually happened. True unless said otherwise, and that default is the point: a teacher who marks nothing has not said the class was cancelled, and reading silence as cancellation would strike off every day nobody got round to entering. A false here needs notHeldReason, covers no section - so the section falls back into the plan and the class gets it another day - and leaves the child with no material and no check for that period. */
   held?: boolean;
   /**

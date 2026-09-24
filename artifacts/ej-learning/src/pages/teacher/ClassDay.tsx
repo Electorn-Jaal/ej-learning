@@ -88,6 +88,10 @@ function LessonCard({ classId, date, lesson, editable, onSaved }: {
     held: lesson.held ? '1' : '',
     notHeldReason: lesson.notHeldReason ?? '',
     isContinuation: lesson.isContinuation ? '1' : '',
+    quizOpensAt: lesson.quizOpensAt ?? '',
+    quizQuestionCount: lesson.quizQuestionCount == null ? '' : String(lesson.quizQuestionCount),
+    quizAttempts: lesson.quizAttempts == null ? '' : String(lesson.quizAttempts),
+    answersOpenAt: lesson.answersOpenAt ?? '',
   }
   const [draft, setDraft] = useState(server)
   const [saved, setSaved] = useState(false)
@@ -99,6 +103,7 @@ function LessonCard({ classId, date, lesson, editable, onSaved }: {
   const key = [
     server.lessonId, server.pageFrom, server.pageTo, server.note, server.alsoCovered,
     server.held, server.notHeldReason, server.isContinuation,
+    server.quizOpensAt, server.quizQuestionCount, server.quizAttempts, server.answersOpenAt,
   ].join('\u0000')
   const [seed, setSeed] = useState(key)
   if (seed !== key) {
@@ -124,6 +129,10 @@ function LessonCard({ classId, date, lesson, editable, onSaved }: {
         held: draft.held !== '',
         notHeldReason: draft.notHeldReason.trim() === '' ? null : draft.notHeldReason,
         isContinuation: draft.isContinuation !== '',
+        quizOpensAt: draft.quizOpensAt === '' ? null : draft.quizOpensAt,
+        quizQuestionCount: draft.quizQuestionCount === '' ? null : Number(draft.quizQuestionCount),
+        quizAttempts: draft.quizAttempts === '' ? null : Number(draft.quizAttempts),
+        answersOpenAt: draft.answersOpenAt === '' ? null : draft.answersOpenAt,
         // A range needs both ends or neither; the server says so too.
         pageFrom: draft.pageFrom === '' ? null : Number(draft.pageFrom),
         pageTo: draft.pageTo === '' ? null : Number(draft.pageTo),
@@ -317,6 +326,74 @@ function LessonCard({ classId, date, lesson, editable, onSaved }: {
               <span>{row.skillName}{row.chapterTitle ? ' · ' + row.chapterTitle : ''}</span>
             </label>
           ))}
+        </div>
+      ) : null}
+
+      {editable && held ? (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-0.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Сорил нээгдэх
+              </p>
+              <input
+                type="time"
+                className={cn(NATIVE_INPUT, 'w-28')}
+                aria-label="Сорил нээгдэх цаг"
+                disabled={saving}
+                value={draft.quizOpensAt}
+                onChange={(event) => setDraft({ ...draft, quizOpensAt: event.target.value })}
+              />
+            </div>
+            {/* Blank is not "none": it is the school's own rule, five and
+                three, which is what almost every period wants. The
+                placeholder says so rather than leaving a teacher to guess
+                what an empty box does. */}
+            <div className="space-y-0.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Асуулт
+              </p>
+              <input
+                type="number" min={1} max={50} inputMode="numeric"
+                className={cn(NATIVE_INPUT, 'w-20')}
+                placeholder="5"
+                aria-label="Сорилын асуултын тоо"
+                disabled={saving}
+                value={draft.quizQuestionCount}
+                onChange={(event) => setDraft({ ...draft, quizQuestionCount: event.target.value })}
+              />
+            </div>
+            <div className="space-y-0.5">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Оролдлого
+              </p>
+              <input
+                type="number" min={1} max={10} inputMode="numeric"
+                className={cn(NATIVE_INPUT, 'w-20')}
+                placeholder="3"
+                aria-label="Сорилын оролдлогын тоо"
+                disabled={saving}
+                value={draft.quizAttempts}
+                onChange={(event) => setDraft({ ...draft, quizAttempts: event.target.value })}
+              />
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="h-3.5 w-3.5"
+              disabled={saving}
+              checked={draft.answersOpenAt !== ''}
+              onChange={(event) => setDraft({
+                ...draft,
+                answersOpenAt: event.target.checked ? new Date().toISOString() : '',
+              })}
+            />
+            <span>Зөв хариулт, тайлбарыг сурагчид нээх</span>
+          </label>
+          <p className="text-xs text-muted-foreground">
+            Нээх хүртэл сурагч зөвхөн зөв бурууг нь мэдэнэ, аль нь зөв болохыг мэдэхгүй.
+          </p>
         </div>
       ) : null}
 

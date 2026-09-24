@@ -47,6 +47,32 @@ export interface ClassDayLesson {
   notHeldReason: string | null;
   /** The period carried the previous one on. */
   isContinuation: boolean;
+  /**
+     * HH:MM, in the school's own time, before which the day's check cannot be sat. Null - nearly always - means it is open as soon as the day is. A teacher holding it back until the practice is done sets a time here.
+     * @nullable
+     * @pattern ^\d{2}:\d{2}$
+     */
+  quizOpensAt: string | null;
+  /**
+     * How many questions the check asks. Null means the system's five.
+     * @minimum 1
+     * @maximum 50
+     * @nullable
+     */
+  quizQuestionCount: number | null;
+  /**
+     * How many goes a child gets in a day. Null means the system's three.
+     * @minimum 1
+     * @maximum 10
+     * @nullable
+     */
+  quizAttempts: number | null;
+  /**
+     * When the key and the marking notes become the child's to see. Null is "not yet", and that is where a check sits while it is still being sat: three goes are pointless if the first hands over the answer, and a parent reading over a shoulder is how it would travel. Whether each answer was right is told at once regardless.
+     * An ISO 8601 instant. Sending "now" is the ordinary case; a later one schedules the release.
+     * @nullable
+     */
+  answersOpenAt: string | null;
   /** The sections the teacher said this period got through. Empty where nobody has said - the day then speaks for itself, and lessonId is all that is known. */
   coveredLessonIds: number[];
   book: ClassDayBook | null;

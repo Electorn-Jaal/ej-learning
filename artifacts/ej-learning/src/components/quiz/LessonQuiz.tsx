@@ -54,6 +54,19 @@ export function LessonQuiz({ lessonId }: { lessonId: number }) {
   // when there are none left would invite a child to answer five questions and
   // be refused at the end, so what they get instead is the score they have.
   const spent = paper.attemptsUsed >= paper.attemptsAllowed
+  if (!paper.isOpen) {
+    return (
+      <div className="rounded-[2px] border border-border p-4">
+        <p className="text-sm">
+          Энэ сорил {paper.opensAt}-аас нээгдэнэ.
+        </p>
+        <p className="text-xs text-muted-foreground">
+          Тэр болтол дэвтрийн ажлаа хийгээрэй.
+        </p>
+      </div>
+    )
+  }
+
   if (spent && results === null) {
     return (
       <div className="space-y-2">
@@ -153,26 +166,35 @@ export function LessonQuiz({ lessonId }: { lessonId: number }) {
               >
                 {question.options.map((option) => {
                   const inputId = `q${question.itemId}-${option.optionId}`
-                  const isAnswer = result?.correctOptionId === option.optionId
                   const isChosen = chosen[question.itemId] === option.optionId
+                  // Which option was right is only here once the teacher has
+                  // released it. Until then the child still learns whether
+                  // THEIR answer was right - that is the feedback, and it is
+                  // what makes a second go worth taking - but not where the
+                  // right one was.
+                  const isAnswer = result != null
+                    && result.correctOptionId != null
+                    && result.correctOptionId === option.optionId
+                  const wrongHere = result != null && isChosen && !result.correct
+                  const rightHere = isAnswer || (result != null && isChosen && result.correct)
                   return (
                     <div
                       key={option.optionId}
                       className={cn(
                         'flex items-center gap-3 rounded-md border px-3 py-2 transition-colors',
                         !results && 'hover:bg-muted/50',
-                        results && isAnswer && 'border-success bg-success/5',
-                        results && isChosen && !isAnswer && 'border-destructive bg-destructive/5',
+                        rightHere && 'border-success bg-success/5',
+                        wrongHere && 'border-destructive bg-destructive/5',
                       )}
                     >
                       <RadioGroupItem value={String(option.optionId)} id={inputId} />
                       <Label htmlFor={inputId} className="flex-1 cursor-pointer font-normal">
                         {option.text}
                       </Label>
-                      {results && isAnswer ? (
+                      {rightHere ? (
                         <Check className="h-4 w-4 shrink-0 text-success" />
                       ) : null}
-                      {results && isChosen && !isAnswer ? (
+                      {wrongHere ? (
                         <X className="h-4 w-4 shrink-0 text-destructive" />
                       ) : null}
                     </div>
@@ -190,7 +212,8 @@ export function LessonQuiz({ lessonId }: { lessonId: number }) {
                   )}
                 >
                   {result.correct ? 'Зөв. ' : 'Дахин үзье. '}
-                  {result.explanation}
+                  {result.explanation
+                    ?? (result.correct ? '' : 'Зөв хариултыг багш хараахан нээгээгүй байна.')}
                 </p>
               ) : null}
             </fieldset>

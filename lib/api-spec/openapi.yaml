@@ -2343,6 +2343,37 @@ components:
         lessonId:
           description: null clears the day.
           type: ["integer", "null"]
+        quizOpensAt:
+          description: >
+            HH:MM, in the school's own time, before which the day's check
+            cannot be sat. Null - nearly always - means it is open as soon as
+            the day is. A teacher holding it back until the practice is done
+            sets a time here.
+          type: ["string", "null"]
+          pattern: '^\d{2}:\d{2}$'
+        quizQuestionCount:
+          description: >
+            How many questions the check asks. Null means the system's five.
+          type: ["integer", "null"]
+          minimum: 1
+          maximum: 50
+        quizAttempts:
+          description: >
+            How many goes a child gets in a day. Null means the system's three.
+          type: ["integer", "null"]
+          minimum: 1
+          maximum: 10
+        answersOpenAt:
+          description: >
+            When the key and the marking notes become the child's to see. Null
+            is "not yet", and that is where a check sits while it is still
+            being sat: three goes are pointless if the first hands over the
+            answer, and a parent reading over a shoulder is how it would
+            travel. Whether each answer was right is told at once regardless.
+
+            An ISO 8601 instant. Sending "now" is the ordinary case; a later
+            one schedules the release.
+          type: ["string", "null"]
         held:
           description: >
             Whether the lesson actually happened. True unless said otherwise,
@@ -2487,6 +2518,20 @@ components:
             goes and a retry draws questions they have not seen where the
             lesson has enough of them.
           type: integer
+        opensAt:
+          description: >
+            HH:MM before which this check cannot be sat, or null where it is
+            open all day. Told rather than hidden: a page with nothing on it
+            reads as broken.
+          type: ["string", "null"]
+        isOpen:
+          description: False while the check is still waiting for its hour. The questions are then empty.
+          type: boolean
+        answersOpen:
+          description: >
+            Whether the teacher has released the key. Until they have, a marked
+            paper says which answers were right or wrong and no more.
+          type: boolean
         attemptsAllowed:
           type: integer
         lastScore:
@@ -2717,6 +2762,37 @@ components:
         isContinuation:
           description: The period carried the previous one on.
           type: boolean
+        quizOpensAt:
+          description: >
+            HH:MM, in the school's own time, before which the day's check
+            cannot be sat. Null - nearly always - means it is open as soon as
+            the day is. A teacher holding it back until the practice is done
+            sets a time here.
+          type: ["string", "null"]
+          pattern: '^\d{2}:\d{2}$'
+        quizQuestionCount:
+          description: >
+            How many questions the check asks. Null means the system's five.
+          type: ["integer", "null"]
+          minimum: 1
+          maximum: 50
+        quizAttempts:
+          description: >
+            How many goes a child gets in a day. Null means the system's three.
+          type: ["integer", "null"]
+          minimum: 1
+          maximum: 10
+        answersOpenAt:
+          description: >
+            When the key and the marking notes become the child's to see. Null
+            is "not yet", and that is where a check sits while it is still
+            being sat: three goes are pointless if the first hands over the
+            answer, and a parent reading over a shoulder is how it would
+            travel. Whether each answer was right is told at once regardless.
+
+            An ISO 8601 instant. Sending "now" is the ordinary case; a later
+            one schedules the release.
+          type: ["string", "null"]
         coveredLessonIds:
           description: >
             The sections the teacher said this period got through. Empty where
@@ -2734,6 +2810,10 @@ components:
         - held
         - notHeldReason
         - isContinuation
+        - quizOpensAt
+        - quizQuestionCount
+        - quizAttempts
+        - answersOpenAt
         - timetableSlotId
         - periodNo
         - startsAt
@@ -2928,7 +3008,10 @@ components:
         submittedAt:
           type: string
         results:
-          description: Marking comes back with the attempt, which is the first time the key is disclosed.
+          description: >
+            Marking comes back with the attempt. Whether each answer was right
+            is always here; the key and the note are filled in only once the
+            teacher has released them.
           type: array
           items:
             $ref: "#/components/schemas/QuizResult"
@@ -2937,7 +3020,12 @@ components:
           type: integer
         attemptsAllowed:
           type: integer
-      required: [id, lessonCode, score, maxScore, submittedAt, results, attemptsUsed, attemptsAllowed]
+        answersOpen:
+          description: >
+            Whether the teacher has released the key. False leaves
+            correctOptionId and explanation null on every result.
+          type: boolean
+      required: [id, lessonCode, score, maxScore, submittedAt, results, attemptsUsed, attemptsAllowed, answersOpen]
     TeacherQuizAttemptRow:
       type: object
       properties:

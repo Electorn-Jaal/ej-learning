@@ -13,9 +13,11 @@ export interface QuizAttempt {
   score: number;
   maxScore: number;
   submittedAt: string;
-  /** Marking comes back with the attempt, which is the first time the key is disclosed. */
+  /** Marking comes back with the attempt. Whether each answer was right is always here; the key and the note are filled in only once the teacher has released them. */
   results: QuizResult[];
   /** Including this one. */
   attemptsUsed: number;
   attemptsAllowed: number;
+  /** Whether the teacher has released the key. False leaves correctOptionId and explanation null on every result. */
+  answersOpen: boolean;
 }
