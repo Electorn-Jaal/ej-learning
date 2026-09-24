@@ -15,4 +15,7 @@ export interface QuizAttempt {
   submittedAt: string;
   /** Marking comes back with the attempt, which is the first time the key is disclosed. */
   results: QuizResult[];
+  /** Including this one. */
+  attemptsUsed: number;
+  attemptsAllowed: number;
 }

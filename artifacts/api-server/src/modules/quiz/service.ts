@@ -1,10 +1,31 @@
 import { badRequest, conflict, forbidden } from "../../shared/http-error";
-import { isIsoDate, shiftDays, todayInUlaanbaatar } from "../../shared/school-date";
+import { isIsoDate, todayInUlaanbaatar } from "../../shared/school-date";
 import { authorisedClass, viewableSubjects } from "../class-access/service";
 import type { AuthenticatedUser } from "../identity/service";
-import { recordSkillEvidence } from "../mastery/service";
-import { assignRemediation } from "../mastery/remediation";
 import * as repository from "./repository";
+
+/**
+ * How the daily check is set, and what it is not.
+ *
+ * Five questions, three goes. The check at the end of a lesson is practice: a
+ * child who gets one wrong should be able to think again and try, which one
+ * sitting a day forbids and three permits without turning it into an exam.
+ *
+ * A retry draws questions the child has not seen today where the lesson has
+ * enough of them, so the second go tests the skill rather than the memory of
+ * which option was ticked.
+ *
+ * What this deliberately does NOT do any more: write skill progress, and
+ * assign extra work. Both used to happen automatically on every submission.
+ * The daily check is the thinnest evidence the system has - one child, one
+ * afternoon, five questions, three tries - and a mastery figure built from it
+ * moved every time a child practised. Progress is now the business of the
+ * monthly, termly and diagnostic assessments, which are sat once and marked;
+ * and what a child should do about a weak topic is the teacher's to decide,
+ * on the screen where they can see the answers.
+ */
+const QUESTIONS_PER_QUIZ = 5;
+const ATTEMPTS_PER_DAY = 3;
 
 type QuizQuestion = {
   itemId: number;
@@ -38,22 +59,44 @@ async function requireReachableLesson(studentId: number, lessonId: number) {
   }
 }
 
+/**
+ * Five questions, preferring the ones this child has not answered today.
+ *
+ * Not shuffled at random: a lesson with exactly five questions would then hand
+ * back the same five in a different order and call it a new paper. Unseen
+ * first, and only when those run out does it fall back to repeating - which is
+ * honest about a lesson that has five questions and a child on their third go.
+ */
+function chooseQuestions(all: QuizQuestion[], seen: Set<number>) {
+  const fresh = all.filter((question) => !seen.has(question.itemId));
+  const rest = all.filter((question) => seen.has(question.itemId));
+  return [...fresh, ...rest].slice(0, QUESTIONS_PER_QUIZ);
+}
+
 export async function quizPaper(user: AuthenticatedUser, lessonId: number) {
   const studentId = requireStudentId(user);
   await requireReachableLesson(studentId, lessonId);
 
   const [header] = await repository.lessonHeader(lessonId);
   const rows = await repository.quizItemsForLesson(lessonId);
-  const [taken] = await repository.attemptOnDate(studentId, lessonId, todayInUlaanbaatar());
+  const attempts = await repository.attemptsOnDate(studentId, lessonId, todayInUlaanbaatar());
+
+  const seen = new Set<number>();
+  for (const attempt of attempts) {
+    for (const answer of attempt.answers ?? []) seen.add(Number(answer.questionId));
+  }
+
+  const [latest] = attempts;
   return {
     lessonId,
     lessonCode: header?.lessonCode ?? "",
     skillName: header?.skillName ?? "",
-    questions: groupQuestions(rows),
+    questions: chooseQuestions(groupQuestions(rows), seen),
     kind: header?.assessmentKind ?? "LESSON",
-    takenToday: Boolean(taken),
-    previousScore: taken?.score ?? null,
-    previousMaxScore: taken?.maxScore ?? null,
+    attemptsUsed: attempts.length,
+    attemptsAllowed: ATTEMPTS_PER_DAY,
+    lastScore: latest?.score ?? null,
+    lastMaxScore: latest?.maxScore ?? null,
   };
 }
 
@@ -65,17 +108,31 @@ export async function recordQuizAttemptScored(
   await requireReachableLesson(studentId, input.lessonId);
 
   const today = todayInUlaanbaatar();
-  const [already] = await repository.attemptOnDate(studentId, input.lessonId, today);
-  if (already) {
-    throw conflict("Энэ сорилыг өнөөдөр аль хэдийн өгсөн байна.", "QUIZ_ALREADY_TAKEN");
+  const attempts = await repository.attemptsOnDate(studentId, input.lessonId, today);
+  if (attempts.length >= ATTEMPTS_PER_DAY) {
+    throw conflict(
+      `Энэ сорилыг өнөөдөр ${ATTEMPTS_PER_DAY} удаа өгсөн байна.`,
+      "QUIZ_ATTEMPTS_SPENT",
+    );
   }
 
   const rows = await repository.quizItemsForLesson(input.lessonId);
   if (rows.length === 0) throw badRequest("Энэ хичээлд шалгах асуулт алга.", "NO_QUESTIONS");
 
   const options = new Map(rows.map((row) => [row.optionId, row]));
-  const items = new Map<number, repository.QuizItemRow[]>();
-  for (const row of rows) items.set(row.itemId, [...(items.get(row.itemId) ?? []), row]);
+  const everyItem = new Map<number, repository.QuizItemRow[]>();
+  for (const row of rows) everyItem.set(row.itemId, [...(everyItem.get(row.itemId) ?? []), row]);
+
+  // Only what was asked. The paper is five questions drawn from the lesson's
+  // pool, so marking every question in the pool would score a child zero on
+  // the ones they were never shown - which is what happened while the paper
+  // was the whole pool and nobody noticed.
+  const asked = [...new Set(input.answers.map((answer) => answer.itemId))]
+    .filter((itemId) => everyItem.has(itemId));
+  if (asked.length === 0) {
+    throw badRequest("Хариулт ирсэнгүй.", "NO_ANSWERS");
+  }
+  const items = new Map(asked.map((itemId) => [itemId, everyItem.get(itemId)!]));
 
   const chosen = new Map(input.answers.map((answer) => [answer.itemId, answer.optionId]));
   const stored: repository.QuizAnswer[] = [];
@@ -117,21 +174,16 @@ export async function recordQuizAttemptScored(
     maxScore: stored.length,
   });
 
-  const perSkill = new Map<number, { correct: number; total: number }>();
-  for (const [itemId, itemRows] of items) {
-    const skillId = itemRows[0].skillId;
-    if (!skillId) continue;
-    const tally = perSkill.get(skillId) ?? { correct: 0, total: 0 };
-    tally.total += 1;
-    if (results.find((result) => result.itemId === itemId)?.correct) tally.correct += 1;
-    perSkill.set(skillId, tally);
-  }
-  await recordSkillEvidence(
-    studentId,
-    [...perSkill].map(([skillId, tally]) => ({ skillId, ...tally })),
-  );
-  await assignRemediation(studentId, shiftDays(today, 1));
-  return { ...attempt, results };
+  // No skill evidence, and no automatic extra work. See the note at the top of
+  // this file: the daily check is practice, and neither a mastery figure nor a
+  // child's next fortnight should move because they had a second go at five
+  // questions on a Tuesday afternoon.
+  return {
+    ...attempt,
+    results,
+    attemptsUsed: attempts.length + 1,
+    attemptsAllowed: ATTEMPTS_PER_DAY,
+  };
 }
 
 /**
