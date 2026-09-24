@@ -60,10 +60,11 @@ export async function studentToday(user: AuthenticatedUser, date = todayInUlaanb
     );
   }
 
-  const [[enrolment], timetable, assignments] = await Promise.all([
+  const [[enrolment], timetable, assignments, marks] = await Promise.all([
     repository.studentClass(user.studentId),
     repository.lessonsForDay(user.studentId, date),
     repository.assignmentsForDay(user.studentId, date),
+    repository.notebookForDay(user.studentId, date),
   ]);
 
   type Extra = {
@@ -89,6 +90,14 @@ export async function studentToday(user: AuthenticatedUser, date = todayInUlaanb
     // Carrying the last period on rather than opening a new section, which
     // reads differently: pick the book up, do not start it.
     isContinuation: row.isContinuation ?? false,
+    // What the teacher found in their book. Null where nobody has looked -
+    // which is not the same as nothing done, and the child should not read it
+    // as though it were.
+    notebook: marks.find((mark) =>
+      mark.subjectCode === row.subjectCode
+      && (mark.timetableSlotId === (row.timetableSlotId ?? null)
+          || mark.timetableSlotId === null),
+    ) ?? null,
     // Null where nobody has written the lesson, which is most of them.
     lesson: row.id === null || row.held === false ? null : toLessonView(row),
     extra: null as Extra | null,
@@ -117,6 +126,7 @@ export async function studentToday(user: AuthenticatedUser, date = todayInUlaanb
         held: true,
         notHeldReason: null,
         isContinuation: false,
+        notebook: null,
         lesson: null,
         extra,
       });

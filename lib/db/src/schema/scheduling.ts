@@ -325,6 +325,89 @@ export const classLessonCoverageInLearning = learning.table(
 );
 
 /**
+ * What a teacher found in a child's exercise book.
+ *
+ * Three states are written down - done, partly done, not done - and a fourth
+ * is the absence of a row. That fourth one is the reason this is a table of
+ * marks rather than a column with a default: "not checked" and "not done" are
+ * different facts about a child, and a school that cannot tell them apart will
+ * sooner or later tell a parent their child did nothing when the truth is that
+ * nobody looked. Thirty children and six periods a day means most of this grid
+ * is never filled in, and that has to read as silence.
+ *
+ * Keyed by the period, not the day: a child can have done the maths and not
+ * the physics, and the two are marked by two different people.
+ *
+ * The comment is the teacher's own sentence about this child's book - the one
+ * thing in the system that says why, and the reason a mark is worth reading at
+ * home rather than just counting.
+ */
+export const notebookMarksInLearning = learning.table(
+  "notebook_marks",
+  {
+    id: bigint({ mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity({
+        name: "learning.notebook_marks_id_seq",
+        startWith: 1,
+        increment: 1,
+        minValue: 1,
+        cache: 1,
+      }),
+    classId: bigint("class_id", { mode: "number" }).notNull(),
+    subjectId: bigint("subject_id", { mode: "number" }).notNull(),
+    scheduledOn: date("scheduled_on").notNull(),
+    timetableSlotId: bigint("timetable_slot_id", { mode: "number" }),
+    studentId: bigint("student_id", { mode: "number" }).notNull(),
+    state: varchar({ length: 16 }).notNull(),
+    comment: text(),
+    markedBy: bigint("marked_by", { mode: "number" }),
+    markedAt: timestamp("marked_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("notebook_marks_key").on(
+      table.studentId, table.scheduledOn, table.timetableSlotId, table.subjectId,
+    ).nullsNotDistinct(),
+    check(
+      "notebook_marks_state_check",
+      sql`state IN ('DONE', 'PARTIAL', 'NOT_DONE')`,
+    ),
+    index("idx_notebook_marks_day").using(
+      "btree",
+      table.classId.asc().nullsLast(),
+      table.scheduledOn.asc().nullsLast(),
+    ),
+    foreignKey({
+      columns: [table.classId],
+      foreignColumns: [classesInCore.id],
+      name: "notebook_marks_class_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.subjectId],
+      foreignColumns: [subjectsInCore.id],
+      name: "notebook_marks_subject_id_fkey",
+    }),
+    foreignKey({
+      columns: [table.studentId],
+      foreignColumns: [studentsInCore.id],
+      name: "notebook_marks_student_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.timetableSlotId],
+      foreignColumns: [timetableSlotsInLearning.id],
+      name: "notebook_marks_timetable_slot_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.markedBy],
+      foreignColumns: [usersInCore.id],
+      name: "notebook_marks_marked_by_fkey",
+    }),
+  ],
+);
+
+/**
  * Work assigned to one student on one day.
  *
  * class_schedule answers "what is this class studying today", which is the

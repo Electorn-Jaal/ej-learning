@@ -1404,6 +1404,47 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /teacher/notebook:
+    put:
+      operationId: markNotebooks
+      tags: [teacher]
+      summary: Record what was found in a class's exercise books
+      description: >
+        The written half of the day's work. A child does the practice in their
+        book; this is where the teacher says whether it was done, partly done,
+        or not done, and adds the sentence that explains it.
+
+        Not checked is not the same as not done. A period nobody looked at
+        carries no marks at all, and the difference matters: a school that
+        collapses the two will sooner or later tell a parent their child did
+        nothing when the truth is that nobody looked. So UNCHECKED removes a
+        mark rather than storing a fourth state, and children left out of the
+        list keep whatever they had.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotebookInput"
+      responses:
+        "200":
+          description: Marked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotebookResult"
+        "400":
+          description: A child who is not in the class, a bad state, or a day that has not happened
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Not a teacher of that class or subject
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /teacher/schedule/replan:
     post:
       operationId: applyReplan
@@ -2853,6 +2894,28 @@ components:
         fileUrl:
           type: ["string", "null"]
       required: [materialId, title, pageFrom, pageTo, bookPageFrom, bookPageTo, filePage, fileUrl]
+    NotebookState:
+      description: >
+        What the teacher found in the book. UNCHECKED is never stored - it is
+        the absence of a mark - but it may be sent, to undo one.
+      type: string
+      enum: [DONE, PARTIAL, NOT_DONE, UNCHECKED]
+    NotebookMark:
+      type: object
+      description: >
+        One period's verdict on one child's exercise book. Keyed by the period,
+        because a child can have done the maths and not the physics.
+      properties:
+        subjectId:
+          type: integer
+        timetableSlotId:
+          type: [integer, "null"]
+        state:
+          $ref: "#/components/schemas/NotebookState"
+        comment:
+          description: The teacher's own sentence about this book - the one thing that says why.
+          type: ["string", "null"]
+      required: [subjectId, timetableSlotId, state, comment]
     ClassDayStudent:
       type: object
       properties:
@@ -2866,7 +2929,51 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ClassDayAttempt"
-      required: [studentId, studentName, studentCode, attempts]
+        notebook:
+          description: >
+            The marks written for this child today, one per period. Empty where
+            nobody looked - which is not the same as nothing done, and is the
+            reason this is a list rather than a field with a default.
+          type: array
+          items:
+            $ref: "#/components/schemas/NotebookMark"
+      required: [studentId, studentName, studentCode, attempts, notebook]
+    NotebookInput:
+      type: object
+      description: >
+        A whole period's marks at once, because that is how the work is done: a
+        teacher goes down the register and presses save once. Children left out
+        are left alone.
+      required: [classId, subjectId, scheduledOn, marks]
+      properties:
+        classId:
+          type: integer
+        subjectId:
+          type: integer
+        scheduledOn:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+        timetableSlotId:
+          type: [integer, "null"]
+        marks:
+          type: array
+          items:
+            type: object
+            required: [studentId, state]
+            properties:
+              studentId:
+                type: integer
+              state:
+                $ref: "#/components/schemas/NotebookState"
+              comment:
+                type: ["string", "null"]
+                maxLength: 500
+    NotebookResult:
+      type: object
+      required: [marked]
+      properties:
+        marked:
+          type: integer
     ClassDayAttempt:
       type: object
       properties:
@@ -3231,6 +3338,21 @@ components:
             Which half of a split class this slot is for, in the school's own
             words ("6а-1"). Null for a lesson the whole class attends.
           type: [string, "null"]
+        notebook:
+          description: >
+            What the teacher found in this child's exercise book for this
+            period, or null where nobody has looked. Null is not "nothing
+            done": most periods are never marked, and a child should not read
+            silence as a verdict.
+          oneOf:
+            - type: object
+              required: [state, comment]
+              properties:
+                state:
+                  $ref: "#/components/schemas/NotebookState"
+                comment:
+                  type: ["string", "null"]
+            - type: "null"
         held:
           description: >
             False where the teacher struck this period off. The lesson then

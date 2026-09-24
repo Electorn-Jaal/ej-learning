@@ -254,3 +254,25 @@ export const assignmentsForDay = (studentId: number, onDate: string) =>
      ORDER BY subj.code`,
     [studentId, onDate],
   );
+
+
+/**
+ * What the teacher wrote about this child's book today.
+ *
+ * Their own only. A mark is a sentence about one child, and the register it
+ * came from is the teacher's, not the class's to read.
+ */
+export const notebookForDay = (studentId: number, onDate: string) =>
+  readRows<{
+    subjectCode: string;
+    timetableSlotId: number | null;
+    state: string;
+    comment: string | null;
+  }>(
+    `SELECT sub.code AS "subjectCode", nm.timetable_slot_id::int AS "timetableSlotId",
+       nm.state, nm.comment
+     FROM learning.notebook_marks nm
+     JOIN core.subjects sub ON sub.id = nm.subject_id
+     WHERE nm.student_id = $1::bigint AND nm.scheduled_on = $2::date`,
+    [studentId, onDate],
+  );

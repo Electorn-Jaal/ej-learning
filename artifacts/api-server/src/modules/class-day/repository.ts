@@ -1,4 +1,4 @@
-import { readRows } from "@workspace/db";
+import { pool, readRows } from "@workspace/db";
 
 export type ClassDayLessonRow = {
   timetableSlotId: number | null;
@@ -215,3 +215,108 @@ export const coverageForClassDay = (
      ORDER BY daily_lesson_id`,
     [classId, subjectIds, onDate],
   );
+
+
+/**
+ * The notebook marks written for one class on one day.
+ *
+ * Absence is a value here: a period nobody looked at has no rows, and the
+ * screen shows those children as unchecked rather than as having done
+ * nothing. Nothing is invented to fill the grid.
+ */
+export const notebookMarksForClassDay = (
+  classId: number,
+  subjectIds: number[] | null,
+  onDate: string,
+) =>
+  readRows<{
+    studentId: number;
+    subjectId: number;
+    timetableSlotId: number | null;
+    state: string;
+    comment: string | null;
+  }>(
+    `SELECT student_id::int AS "studentId", subject_id::int AS "subjectId",
+       timetable_slot_id::int AS "timetableSlotId", state, comment
+     FROM learning.notebook_marks
+     WHERE class_id = $1::bigint AND scheduled_on = $3::date
+       AND ($2::bigint[] IS NULL OR subject_id = ANY($2::bigint[]))`,
+    [classId, subjectIds, onDate],
+  );
+
+/** The class's active roster, to check a mark is for a child who is in it. */
+export const rosterIds = (classId: number) =>
+  readRows<{ id: number }>(
+    `SELECT s.id::int AS id
+       FROM core.students s
+       JOIN core.student_enrollments e ON e.student_id = s.id AND e.is_active
+      WHERE e.class_id = $1::bigint AND s.is_active`,
+    [classId],
+  ).then((rows) => rows.map((row) => row.id));
+
+/**
+ * Write one period's marks, all together.
+ *
+ * A teacher marking a class works down the register and presses save once, so
+ * the whole set arrives at once and lands at once. Children left out of the
+ * list are left alone - a teacher who marked five books has said nothing
+ * about the other twenty-five.
+ *
+ * An UNCHECKED state removes the row rather than storing a fourth value,
+ * because "not checked" is exactly the absence of a mark: if it were stored,
+ * a teacher undoing a mistake would leave behind a record saying somebody
+ * looked.
+ */
+export async function setNotebookMarks(
+  classId: number,
+  subjectId: number,
+  scheduledOn: string,
+  slotId: number | null,
+  markedBy: number,
+  marks: Array<{ studentId: number; state: string; comment: string | null }>,
+) {
+  const clearing = marks.filter((mark) => mark.state === "UNCHECKED");
+  const writing = marks.filter((mark) => mark.state !== "UNCHECKED");
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    if (clearing.length > 0) {
+      await client.query(
+        `DELETE FROM learning.notebook_marks
+          WHERE class_id = $1::bigint AND subject_id = $2::bigint
+            AND scheduled_on = $3::date AND timetable_slot_id IS NOT DISTINCT FROM $4::bigint
+            AND student_id = ANY($5::bigint[])`,
+        [classId, subjectId, scheduledOn, slotId, clearing.map((mark) => mark.studentId)],
+      );
+    }
+    if (writing.length > 0) {
+      await client.query(
+        `INSERT INTO learning.notebook_marks
+           (class_id, subject_id, scheduled_on, timetable_slot_id, student_id, state,
+            comment, marked_by, marked_at)
+         SELECT $1::bigint, $2::bigint, $3::date, $4::bigint, x.student_id, x.state,
+                x.comment, $8::bigint, now()
+           FROM unnest($5::bigint[], $6::text[], $7::text[])
+                  AS x(student_id, state, comment)
+         ON CONFLICT ON CONSTRAINT notebook_marks_key DO UPDATE SET
+           state = EXCLUDED.state,
+           comment = EXCLUDED.comment,
+           marked_by = EXCLUDED.marked_by,
+           marked_at = EXCLUDED.marked_at`,
+        [
+          classId, subjectId, scheduledOn, slotId,
+          writing.map((mark) => mark.studentId),
+          writing.map((mark) => mark.state),
+          writing.map((mark) => mark.comment),
+          markedBy,
+        ],
+      );
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}

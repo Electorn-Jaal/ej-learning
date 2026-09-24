@@ -55,6 +55,8 @@ import type {
   MarkableClass,
   MaterialOutline,
   MaterialOutlineInput,
+  NotebookInput,
+  NotebookResult,
   OutlineChoice,
   PageOffsetInput,
   PasswordChangeInput,
@@ -5028,6 +5030,96 @@ export const useSetScheduleDay = <TError = ErrorType<ApiError>,
         TContext
       > => {
       return useMutation(getSetScheduleDayMutationOptions(options));
+    }
+
+export const getMarkNotebooksUrl = () => {
+
+
+
+
+  return `/api/teacher/notebook`
+}
+
+/**
+ * The written half of the day's work. A child does the practice in their book; this is where the teacher says whether it was done, partly done, or not done, and adds the sentence that explains it.
+ * Not checked is not the same as not done. A period nobody looked at carries no marks at all, and the difference matters: a school that collapses the two will sooner or later tell a parent their child did nothing when the truth is that nobody looked. So UNCHECKED removes a mark rather than storing a fourth state, and children left out of the list keep whatever they had.
+ * @summary Record what was found in a class's exercise books
+ */
+export const markNotebooks = async (notebookInput: NotebookInput, options?: Parameters<typeof customFetch>[1]): Promise<NotebookResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<NotebookResult>(getMarkNotebooksUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(notebookInput)
+  }
+);}
+
+
+
+
+
+export const getMarkNotebooksMutationKey = () => ['markNotebooks'] as const;
+
+export const getMarkNotebooksMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markNotebooks>>, TError,MarkNotebooksMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof markNotebooks>>, TError,MarkNotebooksMutationVariables, TContext> => {
+
+const mutationKey = getMarkNotebooksMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof markNotebooks>>, MarkNotebooksMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  markNotebooks(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MarkNotebooksMutationResult = NonNullable<Awaited<ReturnType<typeof markNotebooks>>>
+    export type MarkNotebooksMutationBody = BodyType<NotebookInput>
+    export type MarkNotebooksMutationError = ErrorType<ApiError>
+    export type MarkNotebooksMutationVariables = {data: BodyType<NotebookInput>}
+
+    /**
+ * @summary Record what was found in a class's exercise books
+ */
+export const useMarkNotebooks = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markNotebooks>>, TError,MarkNotebooksMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof markNotebooks>>,
+        TError,
+        MarkNotebooksMutationVariables,
+        TContext
+      > => {
+      return useMutation(getMarkNotebooksMutationOptions(options));
     }
 
 export const getApplyReplanUrl = () => {

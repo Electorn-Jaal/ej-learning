@@ -6,9 +6,12 @@ import {
   useGetClassDay,
   useGetTeacherLessons,
   useSetScheduleDay,
+  useMarkNotebooks,
   type ClassDayLesson,
   type ClassDayStudent,
   type ReplanProposal,
+  type ClassDayLesson as ClassDayLessonType,
+  type NotebookState,
 } from '@workspace/api-client-react'
 import { ArrowLeft, Check, ChevronDown, ChevronUp, ClipboardList, Users, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -484,8 +487,28 @@ function LessonCard({ classId, date, lesson, editable, onSaved }: {
   )
 }
 
+/**
+ * The three verdicts, and the fourth that is the absence of one.
+ *
+ * Unchecked is not a button of its own: pressing the verdict that is already
+ * set takes it off again, which is how a teacher undoes a slip without having
+ * to find a fourth control for "actually, I did not look".
+ */
+const MARKS: Array<{ state: NotebookState; label: string; short: string }> = [
+  { state: 'DONE', label: 'Хийсэн', short: 'Х' },
+  { state: 'PARTIAL', label: 'Дутуу', short: 'Д' },
+  { state: 'NOT_DONE', label: 'Хийгээгүй', short: '—' },
+]
+
 /** One child, and how they answered - opened one at a time. */
-function StudentRow({ student }: { student: ClassDayStudent }) {
+function StudentRow({ student, mark, comment, onMark, onComment, editable }: {
+  student: ClassDayStudent
+  mark: NotebookState | null
+  comment: string
+  onMark: (state: NotebookState | null) => void
+  onComment: (text: string) => void
+  editable: boolean
+}) {
   const [open, setOpen] = useState(false)
   const answered = student.attempts.length > 0
   const score = student.attempts.reduce((sum, row) => sum + row.score, 0)
@@ -493,6 +516,7 @@ function StudentRow({ student }: { student: ClassDayStudent }) {
 
   return (
     <li>
+      <div className="flex items-stretch">
       <button
         type="button"
         onClick={() => answered && setOpen(!open)}
@@ -528,6 +552,50 @@ function StudentRow({ student }: { student: ClassDayStudent }) {
         )}
       </button>
 
+      {/* Дэвтэр. Three presses wide and no wider: a register is marked by
+          looking at a book and tapping once, thirty times over, and anything
+          that asks for a second gesture per child does not get used. */}
+      {editable ? (
+        <div className="flex shrink-0 items-stretch self-stretch border-l border-border">
+          {MARKS.map((option) => (
+            <button
+              key={option.state}
+              type="button"
+              aria-pressed={mark === option.state}
+              title={option.label}
+              onClick={() => onMark(mark === option.state ? null : option.state)}
+              className={cn(
+                'w-9 text-xs transition-colors hover:bg-sidebar-active',
+                mark === option.state && 'bg-sidebar font-semibold',
+              )}
+            >
+              {option.short}
+            </button>
+          ))}
+        </div>
+      ) : mark ? (
+        <span className="flex shrink-0 items-center px-3 text-xs text-muted-foreground">
+          {MARKS.find((option) => option.state === mark)?.label}
+        </span>
+      ) : null}
+      </div>
+
+      {editable && mark ? (
+        <div className="px-4 pb-2">
+          <input
+            type="text"
+            className={NATIVE_INPUT}
+            placeholder="Тайлбар — сурагч харна"
+            aria-label={student.studentName + ' — дэвтрийн тайлбар'}
+            maxLength={500}
+            value={comment}
+            onChange={(event) => onComment(event.target.value)}
+          />
+        </div>
+      ) : !editable && comment ? (
+        <p className="px-4 pb-2 text-xs text-muted-foreground">{comment}</p>
+      ) : null}
+
       {open ? (
         <div className="space-y-3 border-t border-border bg-muted/30 px-4 py-3">
           {student.attempts.map((attempt) => (
@@ -562,6 +630,145 @@ function StudentRow({ student }: { student: ClassDayStudent }) {
         </div>
       ) : null}
     </li>
+  )
+}
+
+/**
+ * The register: every child, what they answered, and what was in their book.
+ *
+ * Marked a period at a time, because a mark belongs to a period - a child can
+ * have done the maths and not the physics - and saved once, because that is
+ * how the work is actually done: down the class, book by book, then away.
+ *
+ * Children left untouched are not sent. A teacher who looked at five books has
+ * said nothing about the other twenty-five, and the difference between "not
+ * done" and "not checked" is the whole reason this screen is worth having.
+ */
+function NotebookRegister({ classId, date, lessons, students, editable, onSaved }: {
+  classId: number
+  date: string
+  lessons: ClassDayLessonType[]
+  students: ClassDayStudent[]
+  editable: boolean
+  onSaved: () => void
+}) {
+  const [chosen, setChosen] = useState(0)
+  const lesson = lessons[chosen] ?? lessons[0] ?? null
+  const { mutate: save, isPending, error } = useMarkNotebooks()
+
+  const markOf = (student: ClassDayStudent) =>
+    lesson === null
+      ? null
+      : student.notebook.find((row) =>
+          row.subjectId === lesson.subjectId
+          && row.timetableSlotId === lesson.timetableSlotId,
+        ) ?? null
+
+  const server = new Map(students.map((student) => {
+    const found = markOf(student)
+    return [student.studentId, {
+      state: (found?.state ?? null) as NotebookState | null,
+      comment: found?.comment ?? '',
+    }]
+  }))
+
+  const [draft, setDraft] = useState(server)
+  // Re-seeded when the day, the period or the saved marks change underneath.
+  const key = [date, lesson?.timetableSlotId, lesson?.subjectId,
+    ...students.map((student) => {
+      const found = markOf(student)
+      return `${student.studentId}:${found?.state ?? ''}:${found?.comment ?? ''}`
+    })].join('\u0000')
+  const [seed, setSeed] = useState(key)
+  if (seed !== key) {
+    setSeed(key)
+    setDraft(server)
+  }
+
+  const changed = students.filter((student) => {
+    const was = server.get(student.studentId)!
+    const now = draft.get(student.studentId)!
+    return was.state !== now.state || (now.state !== null && was.comment !== now.comment)
+  })
+
+  const set = (studentId: number, patch: { state?: NotebookState | null; comment?: string }) => {
+    const next = new Map(draft)
+    next.set(studentId, { ...next.get(studentId)!, ...patch })
+    setDraft(next)
+  }
+
+  const submit = () => {
+    if (lesson === null) return
+    save({
+      data: {
+        classId,
+        subjectId: lesson.subjectId,
+        scheduledOn: date,
+        timetableSlotId: lesson.timetableSlotId,
+        marks: changed.map((student) => {
+          const now = draft.get(student.studentId)!
+          return {
+            studentId: student.studentId,
+            // Taking a mark off is not a fourth verdict: it is saying nobody
+            // looked, which is what the row's absence means.
+            state: (now.state ?? 'UNCHECKED') as NotebookState,
+            comment: now.state === null || now.comment.trim() === '' ? null : now.comment,
+          }
+        }),
+      },
+    }, { onSuccess: onSaved })
+  }
+
+  return (
+    <div className="space-y-3">
+      {editable && lessons.length > 1 ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground">Дэвтэр шалгах цаг</span>
+          <select
+            className={cn(NATIVE_SELECT, 'w-auto')}
+            aria-label="Дэвтэр шалгах цаг"
+            value={String(chosen)}
+            onChange={(event) => setChosen(Number(event.target.value))}
+          >
+            {lessons.map((row, index) => (
+              <option key={index} value={String(index)}>
+                {row.periodNo ? row.periodNo + '-р цаг · ' : ''}{row.subjectName}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+
+      <ul className="divide-y divide-border rounded-[2px] border border-border bg-card">
+        {students.map((student) => (
+          <StudentRow
+            key={student.studentId}
+            student={student}
+            editable={editable && lesson !== null}
+            mark={draft.get(student.studentId)?.state ?? null}
+            comment={draft.get(student.studentId)?.comment ?? ''}
+            onMark={(state) => set(student.studentId, { state })}
+            onComment={(comment) => set(student.studentId, { comment })}
+          />
+        ))}
+      </ul>
+
+      {editable && lesson !== null ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" size="sm" disabled={isPending || changed.length === 0} onClick={submit}>
+            {isPending ? 'Хадгалж байна…' : `Дэвтэр хадгалах (${changed.length})`}
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            Тэмдэглээгүй сурагч «шалгаагүй» хэвээр үлдэнэ.
+          </span>
+          {error ? (
+            <span role="alert" className="text-xs text-destructive">
+              {error?.data?.error ?? 'Хадгалж чадсангүй.'}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   )
 }
 
@@ -676,11 +883,14 @@ export default function TeacherClassDay() {
           Энэ ангид бүртгэлтэй сурагч алга байна.
         </p>
       ) : (
-        <ul className="divide-y divide-border rounded-[2px] border border-border bg-card">
-          {data.students.map((student) => (
-            <StudentRow key={student.studentId} student={student} />
-          ))}
-        </ul>
+        <NotebookRegister
+          classId={classId}
+          date={data.date}
+          lessons={data.lessons}
+          students={data.students}
+          editable={data.date <= schoolToday()}
+          onSaved={refresh}
+        />
       )}
     </div>
   )
