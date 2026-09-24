@@ -2276,17 +2276,19 @@ components:
         What the rest of the term would become. Nothing has been written: these
         are the days that would move if the teacher approves, and only the ones
         that would actually change.
-      required: [classId, subjectId, fromDate, lessonId, days]
+      required: [classId, subjectId, fromDate, days]
       properties:
         classId:
           type: integer
         subjectId:
           type: integer
         fromDate:
+          description: >
+            The day the class is now known to have reached. The plan is worked
+            out from what this class has been through on or before it, not from
+            any one section, so approving it needs nothing else.
           type: string
           pattern: '^\d{4}-\d{2}-\d{2}$'
-        lessonId:
-          type: integer
         days:
           type: array
           items:
@@ -2302,7 +2304,7 @@ components:
             - type: "null"
     ReplanInput:
       type: object
-      required: [classId, subjectId, fromDate, lessonId]
+      required: [classId, subjectId, fromDate]
       properties:
         classId:
           type: integer
@@ -2311,8 +2313,6 @@ components:
         fromDate:
           type: string
           pattern: '^\d{4}-\d{2}-\d{2}$'
-        lessonId:
-          type: integer
     ReplanResult:
       type: object
       required: [days]
@@ -2343,6 +2343,22 @@ components:
         lessonId:
           description: null clears the day.
           type: ["integer", "null"]
+        coveredLessonIds:
+          description: >
+            Every section this period actually got through, including the one
+            in lessonId. A teacher who moves the class on from section 4 to
+            section 5 is saying one of two things and the day alone cannot tell
+            them apart: we did 4 and started 5, or we skipped 4 and will come
+            back to it. This is where they say which.
+
+            Left out, the answer is "just the one in lessonId". That is the
+            safe reading: a section wrongly thought untaught comes back round,
+            while one wrongly thought taught is never seen again. Clearing the
+            day clears this with it.
+          type: ["array", "null"]
+          items:
+            type: integer
+            minimum: 1
         note:
           description: >
             What the teacher wants the class to know about this day - which
@@ -2667,11 +2683,20 @@ components:
           type: ["string", "null"]
         estimatedMinutes:
           type: ["integer", "null"]
+        coveredLessonIds:
+          description: >
+            The sections the teacher said this period got through. Empty where
+            nobody has said - the day then speaks for itself, and lessonId is
+            all that is known.
+          type: array
+          items:
+            type: integer
         book:
           oneOf:
             - $ref: "#/components/schemas/ClassDayBook"
             - type: "null"
       required:
+        - coveredLessonIds
         - timetableSlotId
         - periodNo
         - startsAt

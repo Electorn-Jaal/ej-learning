@@ -13,8 +13,10 @@ import type { ReplanDay } from './replanDay';
 export interface ReplanProposal {
   classId: number;
   subjectId: number;
-  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  /**
+     * The day the class is now known to have reached. The plan is worked out from what this class has been through on or before it, not from any one section, so approving it needs nothing else.
+     * @pattern ^\d{4}-\d{2}-\d{2}$
+     */
   fromDate: string;
-  lessonId: number;
   days: ReplanDay[];
 }

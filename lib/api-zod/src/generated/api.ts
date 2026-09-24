@@ -1432,6 +1432,7 @@ export const GetClassDayResponse = zod.object({
   "independentPractice": zod.string().nullable(),
   "studentMessage": zod.string().nullable(),
   "estimatedMinutes": zod.number().int().nullable(),
+  "coveredLessonIds": zod.array(zod.number().int()).describe('The sections the teacher said this period got through. Empty where nobody has said - the day then speaks for itself, and lessonId is all that is known.\n'),
   "book": zod.union([zod.object({
   "materialId": zod.number().int(),
   "title": zod.string().nullable(),
@@ -1655,6 +1656,7 @@ export const GenerateScheduleResponse = zod.object({
  */
 
 export const setScheduleDayBodyScheduledOnRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
 export const setScheduleDayBodyNoteMax = 2000;
 
 
@@ -1667,6 +1669,7 @@ export const SetScheduleDayBody = zod.object({
   "subjectId": zod.number().int().nullish().describe('Which subject\'s day this is. Setting a lesson takes the subject from the lesson itself, so this only matters when clearing: without it, emptying Tuesday in the maths timetable would also empty Tuesday\'s physics. Null clears every subject the teacher holds in the class.\n'),
   "scheduledOn": zod.string().regex(setScheduleDayBodyScheduledOnRegExp),
   "lessonId": zod.number().int().nullable().describe('null clears the day.'),
+  "coveredLessonIds": zod.array(zod.number().int().min(1)).nullish().describe('Every section this period actually got through, including the one in lessonId. A teacher who moves the class on from section 4 to section 5 is saying one of two things and the day alone cannot tell them apart: we did 4 and started 5, or we skipped 4 and will come back to it. This is where they say which.\nLeft out, the answer is "just the one in lessonId". That is the safe reading: a section wrongly thought untaught comes back round, while one wrongly thought taught is never seen again. Clearing the day clears this with it.\n'),
   "note": zod.string().max(setScheduleDayBodyNoteMax).nullish().describe('What the teacher wants the class to know about this day - which pages to read, which exercises to do, what to watch out for. The student sees it. Leave the field out to keep whatever note is already there; send null or an empty string to remove it. Clearing the day removes the note with it.\n'),
   "pageFrom": zod.number().int().min(1).nullish().describe('The pages this class actually covered, when they are not the ones the book prints for the section. Leave both out to keep whatever is recorded; send null to fall back to the book\'s own range. A class that went further than the section is the reason this exists, and a teacher setting it changes nothing for any other class.\n'),
   "pageTo": zod.number().int().min(1).nullish()
@@ -1680,8 +1683,7 @@ export const SetScheduleDayResponse = zod.object({
   "replan": zod.union([zod.object({
   "classId": zod.number().int(),
   "subjectId": zod.number().int(),
-  "fromDate": zod.string().regex(setScheduleDayResponseReplanOneFromDateRegExp),
-  "lessonId": zod.number().int(),
+  "fromDate": zod.string().regex(setScheduleDayResponseReplanOneFromDateRegExp).describe('The day the class is now known to have reached. The plan is worked out from what this class has been through on or before it, not from any one section, so approving it needs nothing else.\n'),
   "days": zod.array(zod.object({
   "scheduledOn": zod.string().regex(setScheduleDayResponseReplanOneDaysItemScheduledOnRegExp),
   "periodNo": zod.number().int().nullish(),
@@ -1707,8 +1709,7 @@ export const applyReplanBodyFromDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$'
 export const ApplyReplanBody = zod.object({
   "classId": zod.number().int(),
   "subjectId": zod.number().int(),
-  "fromDate": zod.string().regex(applyReplanBodyFromDateRegExp),
-  "lessonId": zod.number().int()
+  "fromDate": zod.string().regex(applyReplanBodyFromDateRegExp)
 })
 
 export const ApplyReplanResponse = zod.object({

@@ -42,7 +42,6 @@ export function ReplanPrompt({
           classId: proposal.classId,
           subjectId: proposal.subjectId,
           fromDate: proposal.fromDate,
-          lessonId: proposal.lessonId,
         },
       },
       { onSuccess: onDone },

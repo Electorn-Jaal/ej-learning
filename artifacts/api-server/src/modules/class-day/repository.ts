@@ -177,3 +177,25 @@ export const answersForClassDay = (
      ORDER BY st.display_name, qa.submitted_at`,
     [classId, subjectIds, onDate],
   );
+
+/**
+ * What each period of this day was said to have covered.
+ *
+ * Only a teacher's own answer is here. A period nobody has spoken for comes
+ * back with nothing, and the screen then shows the day's own lesson - which
+ * is all that is known about it.
+ */
+export const coverageForClassDay = (
+  classId: number,
+  subjectIds: number[] | null,
+  onDate: string,
+) =>
+  readRows<{ subjectId: number; timetableSlotId: number | null; dailyLessonId: number }>(
+    `SELECT subject_id::int AS "subjectId", timetable_slot_id::int AS "timetableSlotId",
+       daily_lesson_id::int AS "dailyLessonId"
+     FROM learning.class_lesson_coverage
+     WHERE class_id = $1::bigint AND scheduled_on = $3::date
+       AND ($2::bigint[] IS NULL OR subject_id = ANY($2::bigint[]))
+     ORDER BY daily_lesson_id`,
+    [classId, subjectIds, onDate],
+  );
