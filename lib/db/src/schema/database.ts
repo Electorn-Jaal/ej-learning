@@ -949,6 +949,9 @@ export const studentEnrollmentsInCore = core.table("student_enrollments", {
 	classId: bigint("class_id", { mode: "number" }).notNull(),
 	enrolledAt: date("enrolled_at").default(sql`CURRENT_DATE`).notNull(),
 	isActive: boolean("is_active").default(true).notNull(),
+	// The day the child left this class. Null while they are in it; the move
+	// itself is in core.enrollment_changes.
+	leftOn: date("left_on"),
 }, (table) => [
 	index("idx_enrollments_class").using("btree", table.classId.asc().nullsLast().op("int8_ops")),
 	foreignKey({

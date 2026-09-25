@@ -321,6 +321,174 @@ export const GetChildDiagnosticPlansResponse = zod.array(GetChildDiagnosticPlans
 
 
 /**
+ * @summary Active classes with their class teacher, and the staff who could be one
+ */
+export const GetEnrollmentOverviewResponse = zod.object({
+  "classes": zod.array(zod.object({
+  "classId": zod.number().int(),
+  "name": zod.string(),
+  "gradeLevel": zod.number().int(),
+  "schoolYear": zod.string(),
+  "classTeacherId": zod.number().int().nullable(),
+  "classTeacherName": zod.string().nullable(),
+  "students": zod.number().int()
+})),
+  "teachers": zod.array(zod.object({
+  "teacherId": zod.number().int(),
+  "name": zod.string()
+})),
+  "schoolYears": zod.array(zod.string())
+})
+
+
+export const searchEnrollmentStudentsQueryQMax = 100;
+
+
+
+export const SearchEnrollmentStudentsQueryParams = zod.object({
+  "q": zod.coerce.string().min(1).max(searchEnrollmentStudentsQueryQMax)
+})
+
+export const SearchEnrollmentStudentsResponseItem = zod.object({
+  "studentId": zod.number().int(),
+  "studentCode": zod.string(),
+  "name": zod.string(),
+  "classId": zod.number().int().nullable(),
+  "className": zod.string().nullable()
+})
+export const SearchEnrollmentStudentsResponse = zod.array(SearchEnrollmentStudentsResponseItem)
+
+
+/**
+ * @summary Move a child to another class (FR28). Past answers, marks and attendance stay theirs.
+ */
+
+
+export const transferStudentBodyEffectiveOnRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const transferStudentBodyReasonMax = 1000;
+
+
+
+export const TransferStudentBody = zod.object({
+  "studentId": zod.number().int().min(1),
+  "toClassId": zod.number().int().min(1),
+  "effectiveOn": zod.string().regex(transferStudentBodyEffectiveOnRegExp),
+  "reason": zod.string().max(transferStudentBodyReasonMax)
+})
+
+export const TransferStudentResponse = zod.object({
+  "id": zod.number().int(),
+  "kind": zod.enum(['TRANSFER', 'PROMOTE', 'REPEAT', 'GRADUATE']),
+  "studentId": zod.number().int(),
+  "studentName": zod.string(),
+  "fromClass": zod.string().nullable(),
+  "toClass": zod.string().nullable(),
+  "effectiveOn": zod.string(),
+  "reason": zod.string(),
+  "changedBy": zod.string().nullable(),
+  "changedAt": zod.string()
+})
+
+
+
+
+export const setClassTeacherBodyEffectiveOnRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const SetClassTeacherBody = zod.object({
+  "classId": zod.number().int().min(1),
+  "teacherId": zod.number().int().min(1).nullable(),
+  "effectiveOn": zod.string().regex(setClassTeacherBodyEffectiveOnRegExp)
+})
+
+export const SetClassTeacherResponse = zod.object({
+  "classId": zod.number().int(),
+  "name": zod.string(),
+  "gradeLevel": zod.number().int(),
+  "schoolYear": zod.string(),
+  "classTeacherId": zod.number().int().nullable(),
+  "classTeacherName": zod.string().nullable(),
+  "students": zod.number().int()
+})
+
+
+
+
+
+export const GetEnrollmentHistoryQueryParams = zod.object({
+  "studentId": zod.coerce.number().int().min(1).optional()
+})
+
+export const GetEnrollmentHistoryResponseItem = zod.object({
+  "id": zod.number().int(),
+  "kind": zod.enum(['TRANSFER', 'PROMOTE', 'REPEAT', 'GRADUATE']),
+  "studentId": zod.number().int(),
+  "studentName": zod.string(),
+  "fromClass": zod.string().nullable(),
+  "toClass": zod.string().nullable(),
+  "effectiveOn": zod.string(),
+  "reason": zod.string(),
+  "changedBy": zod.string().nullable(),
+  "changedAt": zod.string()
+})
+export const GetEnrollmentHistoryResponse = zod.array(GetEnrollmentHistoryResponseItem)
+
+
+/**
+ * @summary What moving a school year up would do, before anything is changed (FR29)
+ */
+export const getPromotionPreviewQueryFromYearRegExp = new RegExp('^\\d{4}-\\d{4}$');
+
+
+export const GetPromotionPreviewQueryParams = zod.object({
+  "fromYear": zod.coerce.string().regex(getPromotionPreviewQueryFromYearRegExp)
+})
+
+export const GetPromotionPreviewResponse = zod.object({
+  "fromYear": zod.string(),
+  "toYear": zod.string(),
+  "rows": zod.array(zod.object({
+  "studentId": zod.number().int(),
+  "name": zod.string(),
+  "fromClass": zod.string(),
+  "gradeLevel": zod.number().int(),
+  "proposed": zod.enum(['PROMOTE', 'GRADUATE', 'MANUAL']),
+  "toClass": zod.string().nullable().describe('The next year\'s class name for PROMOTE')
+})),
+  "newClasses": zod.array(zod.string()).describe('Next-year classes that do not exist yet and would be created')
+})
+
+
+/**
+ * @summary Move the year up in one transaction, with the exceptions the administrator chose
+ */
+export const applyPromotionBodyFromYearRegExp = new RegExp('^\\d{4}-\\d{4}$');
+export const applyPromotionBodyEffectiveOnRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+export const applyPromotionBodyDecisionsMax = 5000;
+
+
+
+export const ApplyPromotionBody = zod.object({
+  "fromYear": zod.string().regex(applyPromotionBodyFromYearRegExp),
+  "effectiveOn": zod.string().regex(applyPromotionBodyEffectiveOnRegExp),
+  "decisions": zod.array(zod.object({
+  "studentId": zod.number().int().min(1),
+  "action": zod.enum(['PROMOTE', 'REPEAT', 'GRADUATE', 'SKIP'])
+})).max(applyPromotionBodyDecisionsMax)
+})
+
+export const ApplyPromotionResponse = zod.object({
+  "toYear": zod.string(),
+  "promoted": zod.number().int(),
+  "repeated": zod.number().int(),
+  "graduated": zod.number().int(),
+  "skipped": zod.number().int(),
+  "createdClasses": zod.array(zod.string())
+})
+
+
+/**
  * @summary Approved textbooks for independent reading across all grades
  */
 export const GetLibraryBooksResponseItem = zod.object({

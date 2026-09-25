@@ -159,6 +159,140 @@ paths:
               schema:
                 type: array
                 items: {$ref: '#/components/schemas/PublishedDiagnosticPlan'}
+  /admin/enrollment:
+    get:
+      operationId: getEnrollmentOverview
+      tags: [admin]
+      summary: Active classes with their class teacher, and the staff who could be one
+      responses:
+        default:
+          description: Validation, access or a missing record
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        "200":
+          description: Classes and teachers
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EnrollmentOverview'}
+  /admin/enrollment/students:
+    get:
+      operationId: searchEnrollmentStudents
+      tags: [admin]
+      parameters:
+        - {name: q, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 100}}
+      responses:
+        default:
+          description: Validation, access or a missing record
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        "200":
+          description: Up to 30 active students matching name or code, with their current class
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/EnrollmentStudent'}
+  /admin/enrollment/transfer:
+    post:
+      operationId: transferStudent
+      tags: [admin]
+      summary: Move a child to another class (FR28). Past answers, marks and attendance stay theirs.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/TransferInput'}
+      responses:
+        default:
+          description: Validation, access or a missing record
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        "201":
+          description: The recorded move
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EnrollmentChange'}
+  /admin/enrollment/class-teacher:
+    put:
+      operationId: setClassTeacher
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ClassTeacherInput'}
+      responses:
+        default:
+          description: Validation, access or a missing record
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        "200":
+          description: The class with its new class teacher
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/EnrollmentClass'}
+  /admin/enrollment/history:
+    get:
+      operationId: getEnrollmentHistory
+      tags: [admin]
+      parameters:
+        - {name: studentId, in: query, required: false, schema: {type: integer, minimum: 1}}
+      responses:
+        default:
+          description: Validation, access or a missing record
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        "200":
+          description: The most recent moves, newest first; one child's when studentId is given
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/EnrollmentChange'}
+  /admin/promotion/preview:
+    get:
+      operationId: getPromotionPreview
+      tags: [admin]
+      summary: What moving a school year up would do, before anything is changed (FR29)
+      parameters:
+        - {name: fromYear, in: query, required: true, schema: {type: string, pattern: '^\d{4}-\d{4}$'}}
+      responses:
+        default:
+          description: Validation, access or a missing record
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        "200":
+          description: One proposed row per active child
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PromotionPreview'}
+  /admin/promotion:
+    post:
+      operationId: applyPromotion
+      tags: [admin]
+      summary: Move the year up in one transaction, with the exceptions the administrator chose
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PromotionInput'}
+      responses:
+        default:
+          description: Validation, access or a missing record
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        "200":
+          description: What was done
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/PromotionResult'}
   /content/library:
     get:
       operationId: getLibraryBooks
@@ -3094,6 +3228,112 @@ components:
               skillName: {type: string, nullable: true}
               resourceTitle: {type: string, nullable: true}
               sourceMaterialId: {type: integer, nullable: true}
+    EnrollmentClass:
+      type: object
+      required: [classId, name, gradeLevel, schoolYear, classTeacherId, classTeacherName, students]
+      properties:
+        classId: {type: integer}
+        name: {type: string}
+        gradeLevel: {type: integer}
+        schoolYear: {type: string}
+        classTeacherId: {type: integer, nullable: true}
+        classTeacherName: {type: string, nullable: true}
+        students: {type: integer}
+    EnrollmentOverview:
+      type: object
+      required: [classes, teachers, schoolYears]
+      properties:
+        classes: {type: array, items: {$ref: '#/components/schemas/EnrollmentClass'}}
+        teachers:
+          type: array
+          items:
+            type: object
+            required: [teacherId, name]
+            properties:
+              teacherId: {type: integer}
+              name: {type: string}
+        schoolYears: {type: array, items: {type: string}}
+    EnrollmentStudent:
+      type: object
+      required: [studentId, studentCode, name, classId, className]
+      properties:
+        studentId: {type: integer}
+        studentCode: {type: string}
+        name: {type: string}
+        classId: {type: integer, nullable: true}
+        className: {type: string, nullable: true}
+    TransferInput:
+      type: object
+      required: [studentId, toClassId, effectiveOn, reason]
+      properties:
+        studentId: {type: integer, minimum: 1}
+        toClassId: {type: integer, minimum: 1}
+        effectiveOn: {type: string, pattern: '^\d{4}-\d{2}-\d{2}$'}
+        reason: {type: string, maxLength: 1000}
+    ClassTeacherInput:
+      type: object
+      required: [classId, teacherId, effectiveOn]
+      properties:
+        classId: {type: integer, minimum: 1}
+        teacherId: {type: integer, minimum: 1, nullable: true}
+        effectiveOn: {type: string, pattern: '^\d{4}-\d{2}-\d{2}$'}
+    EnrollmentChange:
+      type: object
+      required: [id, kind, studentId, studentName, fromClass, toClass, effectiveOn, reason, changedBy, changedAt]
+      properties:
+        id: {type: integer}
+        kind: {type: string, enum: [TRANSFER, PROMOTE, REPEAT, GRADUATE]}
+        studentId: {type: integer}
+        studentName: {type: string}
+        fromClass: {type: string, nullable: true}
+        toClass: {type: string, nullable: true}
+        effectiveOn: {type: string}
+        reason: {type: string}
+        changedBy: {type: string, nullable: true}
+        changedAt: {type: string}
+    PromotionRow:
+      type: object
+      required: [studentId, name, fromClass, gradeLevel, proposed, toClass]
+      properties:
+        studentId: {type: integer}
+        name: {type: string}
+        fromClass: {type: string}
+        gradeLevel: {type: integer}
+        proposed: {type: string, enum: [PROMOTE, GRADUATE, MANUAL]}
+        toClass: {type: string, nullable: true, description: The next year's class name for PROMOTE}
+    PromotionPreview:
+      type: object
+      required: [fromYear, toYear, rows, newClasses]
+      properties:
+        fromYear: {type: string}
+        toYear: {type: string}
+        rows: {type: array, items: {$ref: '#/components/schemas/PromotionRow'}}
+        newClasses: {type: array, items: {type: string}, description: Next-year classes that do not exist yet and would be created}
+    PromotionInput:
+      type: object
+      required: [fromYear, effectiveOn, decisions]
+      properties:
+        fromYear: {type: string, pattern: '^\d{4}-\d{4}$'}
+        effectiveOn: {type: string, pattern: '^\d{4}-\d{2}-\d{2}$'}
+        decisions:
+          type: array
+          maxItems: 5000
+          items:
+            type: object
+            required: [studentId, action]
+            properties:
+              studentId: {type: integer, minimum: 1}
+              action: {type: string, enum: [PROMOTE, REPEAT, GRADUATE, SKIP]}
+    PromotionResult:
+      type: object
+      required: [toYear, promoted, repeated, graduated, skipped, createdClasses]
+      properties:
+        toYear: {type: string}
+        promoted: {type: integer}
+        repeated: {type: integer}
+        graduated: {type: integer}
+        skipped: {type: integer}
+        createdClasses: {type: array, items: {type: string}}
     LibraryBook:
       type: object
       required: [id, title, subjectName, grades, hasFile, hasCover, filePages]

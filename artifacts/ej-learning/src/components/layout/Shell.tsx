@@ -5,6 +5,7 @@ import {
   CalendarDays, Sun, KeyRound, ClipboardCheck, Library, PenLine, Network, BarChart3,
   BookMarked, Bell, Users,
   ListChecks,
+  ArrowRightLeft,
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -74,6 +75,7 @@ const TEACHING_ONLY = [
 const ADMIN_ONLY = [
   { href: "/teacher/staff", label: "Ажилтны бүртгэл", icon: Users },
   { href: "/teacher/guardians", label: "Эцэг эхийн бүртгэл", icon: Users },
+  { href: "/teacher/enrollment", label: "Анги шилжилт", icon: ArrowRightLeft },
   { href: "/teacher/books", label: "Ном ба сэдэв", icon: Library },
   { href: "/teacher/content-links", label: "Сэдвийн холбоо", icon: Network },
   { href: "/teacher/integrations", label: "Холболтууд", icon: Database },

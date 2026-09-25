@@ -77,6 +77,7 @@ const TeacherClassDay = page(() => import('@/pages/teacher/ClassDay'));
 const TeacherProfile = page(() => import('@/pages/teacher/Profile'));
 const AdminStaff = page(() => import('@/pages/admin/Staff'));
 const AdminGuardians = page(() => import('@/pages/admin/Guardians'));
+const AdminEnrollment = page(() => import('@/pages/admin/Enrollment'));
 const TeacherProductive = page(() => import('@/pages/teacher/Productive'));
 const GuardianChild = page(() => import('@/pages/guardian/Child'));
 
@@ -142,6 +143,7 @@ function StaffRoutes({ admin, takesLessons }: { admin: boolean; takesLessons: bo
       <Route path="/teacher/profile" component={TeacherProfile} />
       {admin ? <Route path="/teacher/staff" component={AdminStaff} /> : null}
       {admin ? <Route path="/teacher/guardians" component={AdminGuardians} /> : null}
+      {admin ? <Route path="/teacher/enrollment" component={AdminEnrollment} /> : null}
       <Route path="/teacher/password" component={Password} />
       <Route component={NotFound} />
     </Switch>
