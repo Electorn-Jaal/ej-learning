@@ -1057,6 +1057,303 @@ describe("EJ Learning API", { concurrency: false }, () => {
     });
   });
 
+  describe("extra work: given to many, handed in more than once, late allowed", () => {
+    let admin, teacher, child, other, klass, subject, studentId, homeworkId;
+    before(async () => {
+      admin = createClient(harness.baseUrl);
+      teacher = createClient(harness.baseUrl);
+      child = createClient(harness.baseUrl);
+      other = createClient(harness.baseUrl);
+      await admin.signIn(accountsByRole.ADMIN);
+      await teacher.signIn(byName["demo-teacher"]);
+      await child.signIn(accountsByRole.STUDENT);
+      await other.signIn(byName["demo-teacher-b"]);
+      [{ id: klass }] = await harness.sql(
+        "SELECT id::int FROM core.classes WHERE class_code = 'MOCK-LOCAL-9A'");
+      [{ id: subject }] = await harness.sql("SELECT id::int FROM core.subjects WHERE code = 'MATH'");
+      [{ id: studentId }] = await harness.sql(
+        "SELECT student_id::int AS id FROM core.users WHERE username = 'demo-student'");
+    });
+    after(async () => {
+      await harness.sql("DELETE FROM learning.homework WHERE title LIKE 'TEST-HW%'");
+    });
+
+    it("goes to the whole class when nobody is named", async () => {
+      const made = await teacher.request("/teacher/homework", { method: "POST", body: {
+        classId: klass, subjectId: subject, title: "TEST-HW бүх анги",
+        instructions: "41-44 хуудсыг уншаад тэмдэглэл хий.",
+      } });
+      assert.equal(made.status, 201, JSON.stringify(made.payload));
+      homeworkId = made.payload.homeworkId;
+      assert.equal(made.payload.given, null, "naming nobody means everybody");
+
+      const list = await teacher.request(`/teacher/homework?classId=${klass}&subjectId=${subject}`);
+      const found = list.payload.find((row) => row.homeworkId === homeworkId);
+      assert.ok(found, "the work is missing from the list");
+      assert.equal(found.wholeClass, true);
+      // Two counts, not one: "given to N, handed in by M" is the sentence a
+      // teacher needs, and a percentage hides which half moved. N is the
+      // register, read from the database rather than assumed - the fixture
+      // class is small.
+      const [{ roster }] = await harness.sql(
+        `SELECT count(*)::int AS roster FROM core.student_enrollments e
+           JOIN core.students s ON s.id = e.student_id AND s.is_active
+          WHERE e.class_id = $1 AND e.is_active`, [klass]);
+      assert.equal(found.given, roster, "a whole-class task goes to the whole register");
+      assert.equal(found.handedIn, 0);
+    });
+
+    it("keeps every go rather than replacing the last", async () => {
+      const first = await child.request(`/student/homework/${homeworkId}/submit`, {
+        method: "POST", body: { body: "Эхний хувилбар", minutes: 20 },
+      });
+      assert.equal(first.status, 201, JSON.stringify(first.payload));
+      assert.equal(first.payload.attemptNo, 1);
+      assert.equal(first.payload.isLate, false, "no deadline means nothing is late");
+
+      const second = await child.request(`/student/homework/${homeworkId}/submit`, {
+        method: "POST", body: { body: "Дахин бодож үзээд зассан" },
+      });
+      assert.equal(second.status, 201);
+      assert.equal(second.payload.attemptNo, 2, "a second go must not overwrite the first");
+
+      // The teacher sees both, because which one counts is their judgement to
+      // make from seeing both.
+      const board = await teacher.request(`/teacher/homework/${homeworkId}`);
+      assert.equal(board.status, 200);
+      const row = board.payload.students.find((entry) => entry.studentId === studentId);
+      assert.equal(row.attempts.length, 2);
+      assert.deepEqual(row.attempts.map((a) => a.attemptNo), [1, 2]);
+      assert.equal(row.attempts[0].body, "Эхний хувилбар");
+      assert.equal(row.attempts[0].minutes, 20);
+
+      // Every child it was set for is a row, whether or not they handed
+      // anything in: "who has not handed it in" is the question this screen is
+      // opened for, and a list of the ones who did cannot answer it.
+      const [{ roster }] = await harness.sql(
+        `SELECT count(*)::int AS roster FROM core.student_enrollments e
+           JOIN core.students s ON s.id = e.student_id AND s.is_active
+          WHERE e.class_id = $1 AND e.is_active`, [klass]);
+      assert.equal(board.payload.students.length, roster);
+    });
+
+    it("records lateness instead of refusing it", async () => {
+      const [{ past }] = await harness.sql(
+        "SELECT (CURRENT_DATE - 3)::text AS past");
+      const made = await teacher.request("/teacher/homework", { method: "POST", body: {
+        classId: klass, subjectId: subject, title: "TEST-HW хугацаатай",
+        assignedOn: past, dueOn: past,
+      } });
+      assert.equal(made.status, 201, JSON.stringify(made.payload));
+      const late = made.payload.homeworkId;
+
+      const mine = await child.request("/student/homework");
+      const row = mine.payload.find((entry) => entry.homeworkId === late);
+      assert.ok(row, "the child cannot see the work");
+      assert.equal(row.isOverdue, true, "past its date with nothing handed in");
+
+      // A door that locks turns "I did it at the weekend" into "I did not do
+      // it" - the same child, a worse record. So it is taken and marked.
+      const handed = await child.request(`/student/homework/${late}/submit`, {
+        method: "POST", body: { body: "Амралтын өдөр хийлээ" },
+      });
+      assert.equal(handed.status, 201, JSON.stringify(handed.payload));
+      assert.equal(handed.payload.isLate, true);
+
+      const board = await teacher.request(`/teacher/homework/${late}`);
+      const entry = board.payload.students.find((x) => x.studentId === studentId);
+      assert.equal(entry.attempts[0].isLate, true);
+
+      const list = await teacher.request(`/teacher/homework?classId=${klass}&subjectId=${subject}`);
+      assert.equal(list.payload.find((x) => x.homeworkId === late).late, 1);
+    });
+
+    it("goes only to the children named, and refuses one from another class", async () => {
+      const named = await teacher.request("/teacher/homework", { method: "POST", body: {
+        classId: klass, subjectId: subject, title: "TEST-HW нэрсээр",
+        studentIds: [studentId],
+      } });
+      assert.equal(named.status, 201, JSON.stringify(named.payload));
+      assert.equal(named.payload.given, 1);
+
+      const board = await teacher.request(`/teacher/homework/${named.payload.homeworkId}`);
+      assert.equal(board.payload.students.length, 1, "only the named child is on the register");
+      assert.equal(board.payload.students[0].studentId, studentId);
+
+      const stranger = await teacher.request("/teacher/homework", { method: "POST", body: {
+        classId: klass, subjectId: subject, title: "TEST-HW гадны",
+        studentIds: [99999999],
+      } });
+      assert.equal(stranger.status, 400, JSON.stringify(stranger.payload));
+      assert.equal(stranger.payload.code, "STUDENT_NOT_IN_CLASS");
+    });
+
+    it("refuses a deadline before the day it was set, and empty work", async () => {
+      const [{ past }] = await harness.sql("SELECT (CURRENT_DATE - 3)::text AS past");
+      const backwards = await teacher.request("/teacher/homework", { method: "POST", body: {
+        classId: klass, subjectId: subject, title: "TEST-HW буруу", dueOn: past,
+      } });
+      assert.equal(backwards.status, 400, JSON.stringify(backwards.payload));
+      assert.equal(backwards.payload.code, "INVALID_DUE_DATE");
+
+      const empty = await child.request(`/student/homework/${homeworkId}/submit`, {
+        method: "POST", body: { body: "   " },
+      });
+      assert.equal(empty.status, 400, JSON.stringify(empty.payload));
+      assert.equal(empty.payload.code, "EMPTY_SUBMISSION");
+    });
+
+    it("closes to the child when the teacher withdraws it, without losing the goes", async () => {
+      const shut = await teacher.request(`/teacher/homework/${homeworkId}/active`, {
+        method: "PUT", body: { isActive: false },
+      });
+      assert.equal(shut.status, 200, JSON.stringify(shut.payload));
+
+      const refused = await child.request(`/student/homework/${homeworkId}/submit`, {
+        method: "POST", body: { body: "Дахиад" },
+      });
+      assert.equal(refused.status, 409, JSON.stringify(refused.payload));
+      assert.equal(refused.payload.code, "HOMEWORK_CLOSED");
+
+      const board = await teacher.request(`/teacher/homework/${homeworkId}`);
+      const row = board.payload.students.find((x) => x.studentId === studentId);
+      assert.equal(row.attempts.length, 2, "withdrawing must not discard what was handed in");
+    });
+
+    it("keeps another class's teacher and other children out", async () => {
+      assert.equal((await other.request(`/teacher/homework/${homeworkId}`)).status, 403);
+      assert.equal((await child.request(`/teacher/homework?classId=${klass}`)).status, 403);
+      assert.equal((await teacher.request("/student/homework")).status, 403);
+    });
+  });
+
+  describe("a club is not a class, and nobody is in one until somebody says so", () => {
+    let admin, teacher, child, studentId, clubId, weekday;
+    before(async () => {
+      admin = createClient(harness.baseUrl);
+      teacher = createClient(harness.baseUrl);
+      child = createClient(harness.baseUrl);
+      await admin.signIn(accountsByRole.ADMIN);
+      await teacher.signIn(byName["demo-teacher"]);
+      await child.signIn(accountsByRole.STUDENT);
+      [{ id: studentId }] = await harness.sql(
+        "SELECT student_id::int AS id FROM core.users WHERE username = 'demo-student'");
+      // Today's weekday: /student/today answers for today and takes no date,
+      // so a club on any other day would be untestable through it.
+      [{ weekday }] = await harness.sql(
+        "SELECT EXTRACT(ISODOW FROM CURRENT_DATE)::int AS weekday");
+    });
+    after(async () => {
+      await harness.sql("DELETE FROM learning.clubs WHERE name_mn LIKE 'TEST-CLUB%'");
+    });
+
+    it("is registered with its hours, and refuses one with none", async () => {
+      // An hour is what makes a club appear anywhere. Without one it is a row
+      // on a list that meets never, and the list would say it is running.
+      const empty = await teacher.request("/teacher/clubs", { method: "POST", body: {
+        nameMn: "TEST-CLUB-EMPTY", sessions: [],
+      } });
+      assert.equal(empty.status, 400, JSON.stringify(empty.payload));
+      assert.equal(empty.payload.code, "NO_SESSIONS");
+
+      const made = await teacher.request("/teacher/clubs", { method: "POST", body: {
+        nameMn: "TEST-CLUB", note: "Туршилт",
+        // A double session on a day the child's class has no ninth period:
+        // the club still has to reach them.
+        sessions: [{ weekdayNo: weekday, periodNo: 9 }, { weekdayNo: weekday, periodNo: 10 }],
+      } });
+      assert.equal(made.status, 201, JSON.stringify(made.payload));
+      clubId = made.payload.clubId;
+
+      const list = await teacher.request("/teacher/clubs");
+      const found = list.payload.find((row) => row.clubId === clubId);
+      assert.ok(found, "the club is missing from the list");
+      assert.equal(found.memberCount, 0, "a new club has nobody in it");
+      assert.equal(found.sessions.length, 2);
+    });
+
+    it("reaches nobody while it has no members", async () => {
+      // The difference from a split class, and the reason clubs needed their
+      // own shape: an unassigned half of 6а is still half of 6а, but a club
+      // nobody joined is empty. Silence means empty, not unknown.
+      const day = await child.request("/student/today");
+      assert.equal(day.status, 200);
+      assert.ok(
+        !day.payload.slots.some((slot) => slot.club?.clubId === clubId),
+        "a club with no members appeared on a child's day",
+      );
+    });
+
+    it("offers the whole school when picking members, not one class", async () => {
+      const res = await teacher.request(`/teacher/clubs/${clubId}/members`);
+      assert.equal(res.status, 200, JSON.stringify(res.payload));
+      assert.deepEqual(res.payload.members, []);
+      // A club of four children from 9а and two from 12а is the ordinary case,
+      // so the roster is the school.
+      const classes = new Set(res.payload.roster.map((row) => row.className));
+      assert.ok(classes.size > 1, "the roster should cross classes");
+      assert.ok(res.payload.roster.some((row) => row.studentId === studentId));
+    });
+
+    it("puts the club on the day of a child who joins, and takes it off again", async () => {
+      const joined = await teacher.request(`/teacher/clubs/${clubId}/members`, {
+        method: "PUT", body: { studentIds: [studentId] },
+      });
+      assert.equal(joined.status, 200, JSON.stringify(joined.payload));
+      assert.equal(joined.payload.members, 1);
+
+      const day = await child.request("/student/today");
+      const rows = day.payload.slots.filter((slot) => slot.club?.clubId === clubId);
+      assert.equal(rows.length, 2, "both hours of the club should be on the day");
+      assert.equal(rows[0].club.nameMn, "TEST-CLUB");
+      // It is not a lesson: no topic, no check.
+      assert.equal(rows[0].lesson, null);
+
+      // Unticked is left. The row is kept rather than deleted, because a child
+      // who stopped coming in November was in the club in October.
+      const left = await teacher.request(`/teacher/clubs/${clubId}/members`, {
+        method: "PUT", body: { studentIds: [] },
+      });
+      assert.equal(left.status, 200);
+      const [{ n }] = await harness.sql(
+        "SELECT count(*)::int AS n FROM learning.club_members WHERE club_id = $1", [clubId]);
+      assert.equal(n, 1, "the membership row should be kept");
+      const [{ live }] = await harness.sql(
+        "SELECT count(*)::int AS live FROM learning.club_members WHERE club_id = $1 AND is_active",
+        [clubId]);
+      assert.equal(live, 0);
+
+      const after = await child.request("/student/today");
+      assert.ok(!after.payload.slots.some((slot) => slot.club?.clubId === clubId));
+    });
+
+    it("refuses a child who is not in the school, and keeps children out of the screen", async () => {
+      const stranger = await teacher.request(`/teacher/clubs/${clubId}/members`, {
+        method: "PUT", body: { studentIds: [99999999] },
+      });
+      assert.equal(stranger.status, 400, JSON.stringify(stranger.payload));
+      assert.equal(stranger.payload.code, "STUDENT_NOT_FOUND");
+
+      assert.equal((await child.request("/teacher/clubs")).status, 403);
+      assert.equal((await child.request("/teacher/clubs", {
+        method: "POST", body: { nameMn: "TEST-CLUB-X", sessions: [{ weekdayNo: 1, periodNo: 1 }] },
+      })).status, 403);
+    });
+
+    it("stops a club without losing it", async () => {
+      const stopped = await admin.request(`/teacher/clubs/${clubId}/active`, {
+        method: "PUT", body: { isActive: false },
+      });
+      assert.equal(stopped.status, 200, JSON.stringify(stopped.payload));
+      assert.equal(stopped.payload.isActive, false);
+
+      const list = await teacher.request("/teacher/clubs");
+      const found = list.payload.find((row) => row.clubId === clubId);
+      assert.ok(found, "a stopped club should still be listed");
+      assert.equal(found.isActive, false);
+    });
+  });
+
   describe("the register is taken the way the school takes it", () => {
     let admin, teacher, klass, primary, subject, studentId, primaryStudent, slot, day;
     before(async () => {

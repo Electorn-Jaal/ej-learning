@@ -1945,6 +1945,355 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /teacher/clubs:
+    get:
+      operationId: getClubs
+      tags: [teacher]
+      summary: The clubs the school runs this year
+      responses:
+        "200":
+          description: Clubs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Club"
+        "403":
+          description: Staff only
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    post:
+      operationId: createClub
+      tags: [teacher]
+      summary: Register a club and the hours it meets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClubInput"
+      responses:
+        "201":
+          description: Registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClubCreated"
+        "400":
+          description: No name, or no hours
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Staff only
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /teacher/clubs/{clubId}/members:
+    get:
+      operationId: getClubMembers
+      tags: [teacher]
+      summary: Who is in a club, and everyone who could be
+      parameters:
+        - in: path
+          name: clubId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Members and the school roster
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClubMembers"
+        "403":
+          description: Staff only
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: No such club
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    put:
+      operationId: setClubMembers
+      tags: [teacher]
+      summary: Replace a club's membership
+      parameters:
+        - in: path
+          name: clubId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClubMembersInput"
+      responses:
+        "200":
+          description: Set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClubMembersResult"
+        "400":
+          description: A child who is not in the school
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Staff only
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /teacher/clubs/{clubId}/active:
+    put:
+      operationId: setClubActive
+      tags: [teacher]
+      summary: Stop or restart a club
+      parameters:
+        - in: path
+          name: clubId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClubActiveInput"
+      responses:
+        "200":
+          description: Set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClubActiveResult"
+        "403":
+          description: Staff only
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /teacher/homework:
+    get:
+      operationId: getClassHomework
+      tags: [teacher]
+      summary: Extra work set for a class
+      parameters:
+        - in: query
+          name: classId
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: subjectId
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Work, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/HomeworkSummary"
+        "403":
+          description: Not a teacher of that class
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    post:
+      operationId: createHomework
+      tags: [teacher]
+      summary: Set extra work for a class, a named few, or one child
+      description: >
+        A deadline is optional and never locks the door: work handed in after
+        the date is recorded as late rather than refused, because a door that
+        locks turns "I did it at the weekend" into "I did not do it" - the same
+        child, a worse record.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HomeworkInput"
+      responses:
+        "201":
+          description: Set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HomeworkCreated"
+        "400":
+          description: No title, a deadline before the day it was set, or a child not in the class
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Not a teacher of that class or subject
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /teacher/homework/{homeworkId}:
+    get:
+      operationId: getHomeworkDetail
+      tags: [teacher]
+      summary: One piece of work, and every go at it
+      parameters:
+        - in: path
+          name: homeworkId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The work and the register
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HomeworkDetail"
+        "403":
+          description: Not a teacher of that class or subject
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: No such work
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /teacher/homework/{homeworkId}/active:
+    put:
+      operationId: setHomeworkActive
+      tags: [teacher]
+      summary: Withdraw a piece of work, or put it back
+      parameters:
+        - in: path
+          name: homeworkId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HomeworkActiveInput"
+      responses:
+        "200":
+          description: Set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HomeworkActiveResult"
+        "403":
+          description: Not a teacher of that class or subject
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /student/homework:
+    get:
+      operationId: getMyHomework
+      tags: [student]
+      summary: The extra work set for me
+      responses:
+        "200":
+          description: Work, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StudentHomework"
+        "403":
+          description: Not linked to a student record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /student/homework/{homeworkId}:
+    get:
+      operationId: getMyHomeworkDetail
+      tags: [student]
+      summary: One piece of work and my own goes at it
+      parameters:
+        - in: path
+          name: homeworkId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The work
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentHomeworkDetail"
+        "403":
+          description: Not set for this child
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /student/homework/{homeworkId}/submit:
+    post:
+      operationId: submitHomework
+      tags: [student]
+      summary: Hand work in
+      description: >
+        Every go is kept, so handing in again adds an attempt rather than
+        replacing the last. Late is allowed and recorded; only work the teacher
+        has withdrawn is refused.
+      parameters:
+        - in: path
+          name: homeworkId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HomeworkSubmissionInput"
+      responses:
+        "201":
+          description: Handed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HomeworkSubmitted"
+        "400":
+          description: Nothing written
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Not set for this child
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: The teacher has withdrawn it
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /teacher/attendance:
     put:
       operationId: markAttendance
@@ -3892,6 +4241,309 @@ components:
       required: [linked]
       properties:
         linked: { type: boolean }
+    ClubSession:
+      type: object
+      required: [weekdayNo, periodNo]
+      properties:
+        weekdayNo:
+          description: 1 is Monday, the same numbering the timetable uses.
+          type: integer
+          minimum: 1
+          maximum: 7
+        periodNo:
+          type: integer
+          minimum: 1
+          maximum: 12
+    Club:
+      type: object
+      description: >
+        Something the school runs that is not a class. The school's own
+        timetable writes these into the box where a class name goes, which is
+        the only box there was - and it makes them unreadable, because that box
+        means "who is in the room" and a club's answer is "whoever signed up,
+        from anywhere".
+      required: [clubId, nameMn, subjectId, subjectName, teacherId, teacherName, note, isActive, memberCount, sessions]
+      properties:
+        clubId: { type: integer }
+        nameMn: { type: string }
+        subjectId: { type: ["integer", "null"] }
+        subjectName: { type: ["string", "null"] }
+        teacherId: { type: ["integer", "null"] }
+        teacherName: { type: ["string", "null"] }
+        note: { type: ["string", "null"] }
+        isActive: { type: boolean }
+        memberCount:
+          description: >
+            The one number that says whether a club is real. A club with hours
+            and no members is on nobody's timetable, which from the staff room
+            looks exactly like a club that is running fine.
+          type: integer
+        sessions:
+          type: ["array", "null"]
+          items:
+            $ref: "#/components/schemas/ClubSession"
+    ClubInput:
+      type: object
+      required: [nameMn, sessions]
+      properties:
+        nameMn:
+          type: string
+          maxLength: 200
+        subjectId:
+          description: A club need not be a school subject; a chess club is a chess club.
+          type: ["integer", "null"]
+        teacherId: { type: ["integer", "null"] }
+        note:
+          type: ["string", "null"]
+          maxLength: 1000
+        sessions:
+          description: At least one. An hour is what makes a club appear anywhere.
+          type: array
+          items:
+            $ref: "#/components/schemas/ClubSession"
+    ClubCreated:
+      type: object
+      required: [clubId]
+      properties:
+        clubId: { type: integer }
+    ClubMember:
+      type: object
+      required: [studentId, displayName, studentCode, className]
+      properties:
+        studentId: { type: integer }
+        displayName: { type: string }
+        studentCode: { type: string }
+        className: { type: ["string", "null"] }
+    ClubRosterEntry:
+      type: object
+      required: [studentId, displayName, studentCode, className, gradeNumber]
+      properties:
+        studentId: { type: integer }
+        displayName: { type: string }
+        studentCode: { type: string }
+        className: { type: ["string", "null"] }
+        gradeNumber: { type: ["integer", "null"] }
+    ClubMembers:
+      type: object
+      required: [clubId, nameMn, members, roster]
+      properties:
+        clubId: { type: integer }
+        nameMn: { type: string }
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClubMember"
+        roster:
+          description: >
+            Every child in the school. A club crosses classes, so a screen that
+            asked for a class first would be asking the wrong question.
+          type: array
+          items:
+            $ref: "#/components/schemas/ClubRosterEntry"
+    ClubMembersInput:
+      type: object
+      required: [studentIds]
+      properties:
+        studentIds:
+          description: >
+            The whole membership, not an addition. A child left out has left
+            the club; their row is kept but made inactive, because a child who
+            stopped coming in November was in the club in October.
+          type: array
+          items: { type: integer }
+    ClubMembersResult:
+      type: object
+      required: [members]
+      properties:
+        members: { type: integer }
+    ClubActiveInput:
+      type: object
+      required: [isActive]
+      properties:
+        isActive: { type: boolean }
+    ClubActiveResult:
+      type: object
+      required: [isActive]
+      properties:
+        isActive: { type: boolean }
+    HomeworkSummary:
+      type: object
+      required: [homeworkId, title, instructions, subjectId, subjectName, assignedOn, dueOn, wholeClass, isActive, teacherName, given, handedIn, late]
+      properties:
+        homeworkId: { type: integer }
+        title: { type: string }
+        instructions: { type: ["string", "null"] }
+        subjectId: { type: integer }
+        subjectName: { type: string }
+        assignedOn:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+        dueOn:
+          description: The date it is wanted by, or null. Never a door that locks.
+          type: ["string", "null"]
+        wholeClass: { type: boolean }
+        isActive: { type: boolean }
+        teacherName: { type: ["string", "null"] }
+        given:
+          description: How many children it was set for.
+          type: integer
+        handedIn:
+          description: How many have handed in at least once.
+          type: integer
+        late:
+          description: How many of those first handed in after the date.
+          type: integer
+    HomeworkInput:
+      type: object
+      required: [classId, subjectId, title]
+      properties:
+        classId: { type: integer }
+        subjectId: { type: integer }
+        title:
+          type: string
+          maxLength: 300
+        instructions:
+          type: ["string", "null"]
+          maxLength: 4000
+        dailyLessonId:
+          description: The lesson this hangs off, where it hangs off one.
+          type: ["integer", "null"]
+        assignedOn:
+          type: ["string", "null"]
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+        dueOn:
+          type: ["string", "null"]
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+        studentIds:
+          description: >
+            Named children. Empty or absent means the whole class, which is the
+            ordinary case - a teacher setting reading for the class should not
+            have to tick twenty-eight boxes.
+          type: ["array", "null"]
+          items: { type: integer }
+    HomeworkCreated:
+      type: object
+      required: [homeworkId, given]
+      properties:
+        homeworkId: { type: integer }
+        given:
+          description: How many were named, or null for the whole class.
+          type: ["integer", "null"]
+    HomeworkAttempt:
+      type: object
+      required: [submissionId, attemptNo, body, minutes, isLate, submittedAt]
+      properties:
+        submissionId: { type: integer }
+        attemptNo: { type: integer }
+        body: { type: ["string", "null"] }
+        minutes:
+          description: >
+            What the browser saw, and approximate by nature - a page left open
+            counts, a page thought about on paper does not.
+          type: ["integer", "null"]
+        isLate: { type: boolean }
+        submittedAt: { type: string }
+    HomeworkStudent:
+      type: object
+      required: [studentId, studentName, studentCode, attempts]
+      properties:
+        studentId: { type: integer }
+        studentName: { type: string }
+        studentCode: { type: string }
+        attempts:
+          description: >
+            Every go, oldest first. A child who redid the work has done it
+            twice, and which of the two counts is the teacher's judgement to
+            make from seeing both. Empty where nothing has been handed in - a
+            child with no submission is still a row, because "who has not
+            handed it in" is the question this screen is usually opened for.
+          type: array
+          items:
+            $ref: "#/components/schemas/HomeworkAttempt"
+    HomeworkDetail:
+      type: object
+      required: [homeworkId, classId, subjectId, title, instructions, assignedOn, dueOn, wholeClass, isActive, students]
+      properties:
+        homeworkId: { type: integer }
+        classId: { type: integer }
+        subjectId: { type: integer }
+        title: { type: string }
+        instructions: { type: ["string", "null"] }
+        assignedOn: { type: string }
+        dueOn: { type: ["string", "null"] }
+        wholeClass: { type: boolean }
+        isActive: { type: boolean }
+        students:
+          type: array
+          items:
+            $ref: "#/components/schemas/HomeworkStudent"
+    HomeworkActiveInput:
+      type: object
+      required: [isActive]
+      properties:
+        isActive: { type: boolean }
+    HomeworkActiveResult:
+      type: object
+      required: [isActive]
+      properties:
+        isActive: { type: boolean }
+    StudentHomework:
+      type: object
+      required: [homeworkId, title, instructions, subjectName, assignedOn, dueOn, teacherName, attempts, lastSubmittedAt, isOverdue]
+      properties:
+        homeworkId: { type: integer }
+        title: { type: string }
+        instructions: { type: ["string", "null"] }
+        subjectName: { type: string }
+        assignedOn: { type: string }
+        dueOn: { type: ["string", "null"] }
+        teacherName: { type: ["string", "null"] }
+        attempts:
+          description: How many times this child has handed it in.
+          type: integer
+        lastSubmittedAt: { type: ["string", "null"] }
+        isOverdue:
+          description: Past its date and nothing handed in. Still open.
+          type: boolean
+    StudentHomeworkAttempt:
+      type: object
+      required: [attemptNo, body, minutes, isLate, submittedAt]
+      properties:
+        attemptNo: { type: integer }
+        body: { type: ["string", "null"] }
+        minutes: { type: ["integer", "null"] }
+        isLate: { type: boolean }
+        submittedAt: { type: string }
+    StudentHomeworkDetail:
+      type: object
+      required: [homeworkId, title, instructions, assignedOn, dueOn, attempts]
+      properties:
+        homeworkId: { type: integer }
+        title: { type: string }
+        instructions: { type: ["string", "null"] }
+        assignedOn: { type: string }
+        dueOn: { type: ["string", "null"] }
+        attempts:
+          type: array
+          items:
+            $ref: "#/components/schemas/StudentHomeworkAttempt"
+    HomeworkSubmissionInput:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+          maxLength: 20000
+        minutes:
+          type: ["integer", "null"]
+          minimum: 0
+    HomeworkSubmitted:
+      type: object
+      required: [submissionId, attemptNo, isLate]
+      properties:
+        submissionId: { type: integer }
+        attemptNo: { type: integer }
+        isLate: { type: boolean }
     AttendanceState:
       description: >
         UNREGISTERED is never stored - it is the absence of a mark - but it may
@@ -4417,6 +5069,20 @@ components:
             Which half of a split class this slot is for, in the school's own
             words ("6а-1"). Null for a lesson the whole class attends.
           type: [string, "null"]
+        club:
+          description: >
+            The club that meets in this period, where the child is in one. A
+            club has no class, so it reaches a child's day through their own
+            membership and nobody else's.
+          oneOf:
+            - type: object
+              required: [clubId, nameMn, teacherName, note]
+              properties:
+                clubId: { type: integer }
+                nameMn: { type: string }
+                teacherName: { type: ["string", "null"] }
+                note: { type: ["string", "null"] }
+            - type: "null"
         notebook:
           description: >
             What the teacher found in this child's exercise book for this

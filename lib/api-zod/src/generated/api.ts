@@ -862,6 +862,12 @@ export const GetStudentTodayResponse = zod.object({
   "endsAt": zod.string().nullable(),
   "teacherName": zod.string().nullable().describe('Who takes this period, from the school\'s own timetable.'),
   "groupLabel": zod.string().nullable().describe('Which half of a split class this slot is for, in the school\'s own words ("6а-1"). Null for a lesson the whole class attends.\n'),
+  "club": zod.union([zod.object({
+  "clubId": zod.number().int(),
+  "nameMn": zod.string(),
+  "teacherName": zod.string().nullable(),
+  "note": zod.string().nullable()
+}),zod.null()]).optional().describe('The club that meets in this period, where the child is in one. A club has no class, so it reaches a child\'s day through their own membership and nobody else\'s.\n'),
   "notebook": zod.union([zod.object({
   "state": zod.enum(['DONE', 'PARTIAL', 'NOT_DONE', 'UNCHECKED']).describe('What the teacher found in the book. UNCHECKED is never stored - it is the absence of a mark - but it may be sent, to undo one.\n'),
   "comment": zod.string().nullable()
@@ -951,6 +957,12 @@ export const GetStudentScheduleResponse = zod.object({
   "endsAt": zod.string().nullable(),
   "teacherName": zod.string().nullable().describe('Who takes this period, from the school\'s own timetable.'),
   "groupLabel": zod.string().nullable().describe('Which half of a split class this slot is for, in the school\'s own words ("6а-1"). Null for a lesson the whole class attends.\n'),
+  "club": zod.union([zod.object({
+  "clubId": zod.number().int(),
+  "nameMn": zod.string(),
+  "teacherName": zod.string().nullable(),
+  "note": zod.string().nullable()
+}),zod.null()]).optional().describe('The club that meets in this period, where the child is in one. A club has no class, so it reaches a child\'s day through their own membership and nobody else\'s.\n'),
   "notebook": zod.union([zod.object({
   "state": zod.enum(['DONE', 'PARTIAL', 'NOT_DONE', 'UNCHECKED']).describe('What the teacher found in the book. UNCHECKED is never stored - it is the absence of a mark - but it may be sent, to undo one.\n'),
   "comment": zod.string().nullable()
@@ -2053,6 +2065,12 @@ export const GetChildDayResponse = zod.object({
   "endsAt": zod.string().nullable(),
   "teacherName": zod.string().nullable().describe('Who takes this period, from the school\'s own timetable.'),
   "groupLabel": zod.string().nullable().describe('Which half of a split class this slot is for, in the school\'s own words ("6а-1"). Null for a lesson the whole class attends.\n'),
+  "club": zod.union([zod.object({
+  "clubId": zod.number().int(),
+  "nameMn": zod.string(),
+  "teacherName": zod.string().nullable(),
+  "note": zod.string().nullable()
+}),zod.null()]).optional().describe('The club that meets in this period, where the child is in one. A club has no class, so it reaches a child\'s day through their own membership and nobody else\'s.\n'),
   "notebook": zod.union([zod.object({
   "state": zod.enum(['DONE', 'PARTIAL', 'NOT_DONE', 'UNCHECKED']).describe('What the teacher found in the book. UNCHECKED is never stored - it is the absence of a mark - but it may be sent, to undo one.\n'),
   "comment": zod.string().nullable()
@@ -2264,6 +2282,294 @@ export const UnlinkChildBody = zod.object({
 
 export const UnlinkChildResponse = zod.object({
   "linked": zod.boolean()
+})
+
+
+/**
+ * @summary The clubs the school runs this year
+ */
+export const getClubsResponseSessionsItemWeekdayNoMax = 7;
+
+export const getClubsResponseSessionsItemPeriodNoMax = 12;
+
+
+
+export const GetClubsResponseItem = zod.object({
+  "clubId": zod.number().int(),
+  "nameMn": zod.string(),
+  "subjectId": zod.number().int().nullable(),
+  "subjectName": zod.string().nullable(),
+  "teacherId": zod.number().int().nullable(),
+  "teacherName": zod.string().nullable(),
+  "note": zod.string().nullable(),
+  "isActive": zod.boolean(),
+  "memberCount": zod.number().int().describe('The one number that says whether a club is real. A club with hours and no members is on nobody\'s timetable, which from the staff room looks exactly like a club that is running fine.\n'),
+  "sessions": zod.array(zod.object({
+  "weekdayNo": zod.number().int().min(1).max(getClubsResponseSessionsItemWeekdayNoMax).describe('1 is Monday, the same numbering the timetable uses.'),
+  "periodNo": zod.number().int().min(1).max(getClubsResponseSessionsItemPeriodNoMax)
+})).nullable()
+}).describe('Something the school runs that is not a class. The school\'s own timetable writes these into the box where a class name goes, which is the only box there was - and it makes them unreadable, because that box means "who is in the room" and a club\'s answer is "whoever signed up, from anywhere".\n')
+export const GetClubsResponse = zod.array(GetClubsResponseItem)
+
+
+/**
+ * @summary Register a club and the hours it meets
+ */
+export const createClubBodyNameMnMax = 200;
+
+export const createClubBodyNoteMax = 1000;
+
+export const createClubBodySessionsItemWeekdayNoMax = 7;
+
+export const createClubBodySessionsItemPeriodNoMax = 12;
+
+
+
+export const CreateClubBody = zod.object({
+  "nameMn": zod.string().max(createClubBodyNameMnMax),
+  "subjectId": zod.number().int().nullish().describe('A club need not be a school subject; a chess club is a chess club.'),
+  "teacherId": zod.number().int().nullish(),
+  "note": zod.string().max(createClubBodyNoteMax).nullish(),
+  "sessions": zod.array(zod.object({
+  "weekdayNo": zod.number().int().min(1).max(createClubBodySessionsItemWeekdayNoMax).describe('1 is Monday, the same numbering the timetable uses.'),
+  "periodNo": zod.number().int().min(1).max(createClubBodySessionsItemPeriodNoMax)
+})).describe('At least one. An hour is what makes a club appear anywhere.')
+})
+
+export const CreateClubResponse = zod.object({
+  "clubId": zod.number().int()
+})
+
+
+/**
+ * @summary Who is in a club, and everyone who could be
+ */
+export const GetClubMembersParams = zod.object({
+  "clubId": zod.coerce.number().int()
+})
+
+export const GetClubMembersResponse = zod.object({
+  "clubId": zod.number().int(),
+  "nameMn": zod.string(),
+  "members": zod.array(zod.object({
+  "studentId": zod.number().int(),
+  "displayName": zod.string(),
+  "studentCode": zod.string(),
+  "className": zod.string().nullable()
+})),
+  "roster": zod.array(zod.object({
+  "studentId": zod.number().int(),
+  "displayName": zod.string(),
+  "studentCode": zod.string(),
+  "className": zod.string().nullable(),
+  "gradeNumber": zod.number().int().nullable()
+})).describe('Every child in the school. A club crosses classes, so a screen that asked for a class first would be asking the wrong question.\n')
+})
+
+
+/**
+ * @summary Replace a club's membership
+ */
+export const SetClubMembersParams = zod.object({
+  "clubId": zod.coerce.number().int()
+})
+
+export const SetClubMembersBody = zod.object({
+  "studentIds": zod.array(zod.number().int()).describe('The whole membership, not an addition. A child left out has left the club; their row is kept but made inactive, because a child who stopped coming in November was in the club in October.\n')
+})
+
+export const SetClubMembersResponse = zod.object({
+  "members": zod.number().int()
+})
+
+
+/**
+ * @summary Stop or restart a club
+ */
+export const SetClubActiveParams = zod.object({
+  "clubId": zod.coerce.number().int()
+})
+
+export const SetClubActiveBody = zod.object({
+  "isActive": zod.boolean()
+})
+
+export const SetClubActiveResponse = zod.object({
+  "isActive": zod.boolean()
+})
+
+
+/**
+ * @summary Extra work set for a class
+ */
+export const GetClassHomeworkQueryParams = zod.object({
+  "classId": zod.coerce.number().int(),
+  "subjectId": zod.coerce.number().int().optional()
+})
+
+export const getClassHomeworkResponseAssignedOnRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const GetClassHomeworkResponseItem = zod.object({
+  "homeworkId": zod.number().int(),
+  "title": zod.string(),
+  "instructions": zod.string().nullable(),
+  "subjectId": zod.number().int(),
+  "subjectName": zod.string(),
+  "assignedOn": zod.string().regex(getClassHomeworkResponseAssignedOnRegExp),
+  "dueOn": zod.string().nullable().describe('The date it is wanted by, or null. Never a door that locks.'),
+  "wholeClass": zod.boolean(),
+  "isActive": zod.boolean(),
+  "teacherName": zod.string().nullable(),
+  "given": zod.number().int().describe('How many children it was set for.'),
+  "handedIn": zod.number().int().describe('How many have handed in at least once.'),
+  "late": zod.number().int().describe('How many of those first handed in after the date.')
+})
+export const GetClassHomeworkResponse = zod.array(GetClassHomeworkResponseItem)
+
+
+/**
+ * A deadline is optional and never locks the door: work handed in after the date is recorded as late rather than refused, because a door that locks turns "I did it at the weekend" into "I did not do it" - the same child, a worse record.
+ * @summary Set extra work for a class, a named few, or one child
+ */
+export const createHomeworkBodyTitleMax = 300;
+
+export const createHomeworkBodyInstructionsMax = 4000;
+
+export const createHomeworkBodyAssignedOnRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const createHomeworkBodyDueOnRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const CreateHomeworkBody = zod.object({
+  "classId": zod.number().int(),
+  "subjectId": zod.number().int(),
+  "title": zod.string().max(createHomeworkBodyTitleMax),
+  "instructions": zod.string().max(createHomeworkBodyInstructionsMax).nullish(),
+  "dailyLessonId": zod.number().int().nullish().describe('The lesson this hangs off, where it hangs off one.'),
+  "assignedOn": zod.string().regex(createHomeworkBodyAssignedOnRegExp).nullish(),
+  "dueOn": zod.string().regex(createHomeworkBodyDueOnRegExp).nullish(),
+  "studentIds": zod.array(zod.number().int()).nullish().describe('Named children. Empty or absent means the whole class, which is the ordinary case - a teacher setting reading for the class should not have to tick twenty-eight boxes.\n')
+})
+
+export const CreateHomeworkResponse = zod.object({
+  "homeworkId": zod.number().int(),
+  "given": zod.number().int().nullable().describe('How many were named, or null for the whole class.')
+})
+
+
+/**
+ * @summary One piece of work, and every go at it
+ */
+export const GetHomeworkDetailParams = zod.object({
+  "homeworkId": zod.coerce.number().int()
+})
+
+export const GetHomeworkDetailResponse = zod.object({
+  "homeworkId": zod.number().int(),
+  "classId": zod.number().int(),
+  "subjectId": zod.number().int(),
+  "title": zod.string(),
+  "instructions": zod.string().nullable(),
+  "assignedOn": zod.string(),
+  "dueOn": zod.string().nullable(),
+  "wholeClass": zod.boolean(),
+  "isActive": zod.boolean(),
+  "students": zod.array(zod.object({
+  "studentId": zod.number().int(),
+  "studentName": zod.string(),
+  "studentCode": zod.string(),
+  "attempts": zod.array(zod.object({
+  "submissionId": zod.number().int(),
+  "attemptNo": zod.number().int(),
+  "body": zod.string().nullable(),
+  "minutes": zod.number().int().nullable().describe('What the browser saw, and approximate by nature - a page left open counts, a page thought about on paper does not.\n'),
+  "isLate": zod.boolean(),
+  "submittedAt": zod.string()
+})).describe('Every go, oldest first. A child who redid the work has done it twice, and which of the two counts is the teacher\'s judgement to make from seeing both. Empty where nothing has been handed in - a child with no submission is still a row, because "who has not handed it in" is the question this screen is usually opened for.\n')
+}))
+})
+
+
+/**
+ * @summary Withdraw a piece of work, or put it back
+ */
+export const SetHomeworkActiveParams = zod.object({
+  "homeworkId": zod.coerce.number().int()
+})
+
+export const SetHomeworkActiveBody = zod.object({
+  "isActive": zod.boolean()
+})
+
+export const SetHomeworkActiveResponse = zod.object({
+  "isActive": zod.boolean()
+})
+
+
+/**
+ * @summary The extra work set for me
+ */
+export const GetMyHomeworkResponseItem = zod.object({
+  "homeworkId": zod.number().int(),
+  "title": zod.string(),
+  "instructions": zod.string().nullable(),
+  "subjectName": zod.string(),
+  "assignedOn": zod.string(),
+  "dueOn": zod.string().nullable(),
+  "teacherName": zod.string().nullable(),
+  "attempts": zod.number().int().describe('How many times this child has handed it in.'),
+  "lastSubmittedAt": zod.string().nullable(),
+  "isOverdue": zod.boolean().describe('Past its date and nothing handed in. Still open.')
+})
+export const GetMyHomeworkResponse = zod.array(GetMyHomeworkResponseItem)
+
+
+/**
+ * @summary One piece of work and my own goes at it
+ */
+export const GetMyHomeworkDetailParams = zod.object({
+  "homeworkId": zod.coerce.number().int()
+})
+
+export const GetMyHomeworkDetailResponse = zod.object({
+  "homeworkId": zod.number().int(),
+  "title": zod.string(),
+  "instructions": zod.string().nullable(),
+  "assignedOn": zod.string(),
+  "dueOn": zod.string().nullable(),
+  "attempts": zod.array(zod.object({
+  "attemptNo": zod.number().int(),
+  "body": zod.string().nullable(),
+  "minutes": zod.number().int().nullable(),
+  "isLate": zod.boolean(),
+  "submittedAt": zod.string()
+}))
+})
+
+
+/**
+ * Every go is kept, so handing in again adds an attempt rather than replacing the last. Late is allowed and recorded; only work the teacher has withdrawn is refused.
+ * @summary Hand work in
+ */
+export const SubmitHomeworkParams = zod.object({
+  "homeworkId": zod.coerce.number().int()
+})
+
+export const submitHomeworkBodyBodyMax = 20000;
+
+export const submitHomeworkBodyMinutesMin = 0;
+
+
+
+export const SubmitHomeworkBody = zod.object({
+  "body": zod.string().max(submitHomeworkBodyBodyMax),
+  "minutes": zod.number().int().min(submitHomeworkBodyMinutesMin).nullish()
+})
+
+export const SubmitHomeworkResponse = zod.object({
+  "submissionId": zod.number().int(),
+  "attemptNo": zod.number().int(),
+  "isLate": zod.boolean()
 })
 
 

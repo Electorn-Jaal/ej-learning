@@ -1,6 +1,7 @@
 import { forbidden } from "../../shared/http-error";
 import { todayInUlaanbaatar } from "../../shared/school-date";
 import type { AuthenticatedUser } from "../identity/service";
+import { clubsForStudent } from "../club/service";
 import * as repository from "./repository";
 
 const longDate = (isoDate: string) =>
@@ -73,11 +74,14 @@ export async function studentToday(user: AuthenticatedUser, date = todayInUlaanb
  * Who may ask is settled before this is called. Nothing here checks it.
  */
 export async function dayForStudent(studentId: number, date: string) {
-  const [[enrolment], timetable, assignments, marks] = await Promise.all([
+  const [[enrolment], timetable, assignments, marks, clubs] = await Promise.all([
     repository.studentClass(studentId),
     repository.lessonsForDay(studentId, date),
     repository.assignmentsForDay(studentId, date),
     repository.notebookForDay(studentId, date),
+    // A club reaches a child through their own membership and nobody else's,
+    // which is why it is fetched by student rather than joined through a class.
+    clubsForStudent(studentId, date),
   ]);
 
   type Extra = {
@@ -106,6 +110,8 @@ export async function dayForStudent(studentId: number, date: string) {
     // What the teacher found in their book. Null where nobody has looked -
     // which is not the same as nothing done, and the child should not read it
     // as though it were.
+    // The club that meets in this period, where this child is in one.
+    club: clubs.find((entry) => entry.periodNo === row.periodNo) ?? null,
     notebook: marks.find((mark) =>
       mark.subjectCode === row.subjectCode
       && (mark.timetableSlotId === (row.timetableSlotId ?? null)
@@ -115,6 +121,28 @@ export async function dayForStudent(studentId: number, date: string) {
     lesson: row.id === null || row.held === false ? null : toLessonView(row),
     extra: null as Extra | null,
   }));
+
+  for (const club of clubs) {
+    if (slots.some((slot) => slot.periodNo === club.periodNo)) continue;
+    slots.push({
+      subjectCode: `CLUB-${club.clubId}`,
+      subjectName: club.nameMn,
+      periodNo: club.periodNo,
+      startsAt: null,
+      endsAt: null,
+      teacherName: club.teacherName ?? null,
+      groupLabel: null,
+      selectionPending: false,
+      timetableSlotId: null,
+      held: true,
+      notHeldReason: null,
+      isContinuation: false,
+      club,
+      notebook: null,
+      lesson: null,
+      extra: null,
+    });
+  }
 
   for (const assignment of assignments) {
     const extra: Extra = {
@@ -139,6 +167,7 @@ export async function dayForStudent(studentId: number, date: string) {
         held: true,
         notHeldReason: null,
         isContinuation: false,
+        club: null,
         notebook: null,
         lesson: null,
         extra,

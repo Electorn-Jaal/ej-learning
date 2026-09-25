@@ -7,6 +7,7 @@
  */
 import type { DailyLessonView } from './dailyLessonView';
 import type { ExtraWork } from './extraWork';
+import type { SubjectDayClub } from './subjectDayClub';
 import type { SubjectDayNotebook } from './subjectDayNotebook';
 
 export interface SubjectDay {
@@ -33,6 +34,8 @@ export interface SubjectDay {
      * @nullable
      */
   groupLabel: string | null;
+  /** The club that meets in this period, where the child is in one. A club has no class, so it reaches a child's day through their own membership and nobody else's. */
+  club?: SubjectDayClub;
   /** What the teacher found in this child's exercise book for this period, or null where nobody has looked. Null is not "nothing done": most periods are never marked, and a child should not read silence as a verdict. */
   notebook?: SubjectDayNotebook;
   /** False where the teacher struck this period off. The lesson then comes back null whatever was planned for it, and notHeldReason says why - there is nothing to study, and nothing to be checked on, in an hour that did not take place. */
