@@ -39,9 +39,10 @@ const PARTICIPATION: Record<string, string> = {
 /** What the child is doing today, read from the child's own day. */
 function Today({ studentId }: { studentId: number }) {
   const [date, setDate] = useState(schoolToday)
-  const { data, isLoading } = useGetChildDay({ studentId, on: date })
+  const { data, isLoading, error, refetch } = useGetChildDay({ studentId, on: date })
 
-  if (isLoading || !data) return <Skeleton className="h-64 w-full" />
+  if (isLoading) return <Skeleton className="h-64 w-full" />
+  if (!data || error) return <div role="alert" className="space-y-2 text-sm"><p>Хүүхдийн өдрийн мэдээллийг уншиж чадсангүй.</p><button className="underline" onClick={() => void refetch()}>Дахин оролдох</button></div>
 
   return (
     <div className="space-y-2">
@@ -118,8 +119,9 @@ function shift(iso: string, days: number) {
  * row is not an absence.
  */
 function Record({ studentId }: { studentId: number }) {
-  const { data, isLoading } = useGetChildRecord({ studentId })
-  if (isLoading || !data) return <Skeleton className="h-64 w-full" />
+  const { data, isLoading, error, refetch } = useGetChildRecord({ studentId })
+  if (isLoading) return <Skeleton className="h-64 w-full" />
+  if (!data || error) return <div role="alert" className="space-y-2 text-sm"><p>Сүүлийн хоёр долоо хоногийн мэдээллийг уншиж чадсангүй.</p><button className="underline" onClick={() => void refetch()}>Дахин оролдох</button></div>
 
   return (
     <div className="space-y-4">
@@ -227,11 +229,14 @@ function Record({ studentId }: { studentId: number }) {
  * wrong child off.
  */
 export default function GuardianChild() {
-  const { data: children, isLoading } = useGetMyChildren()
+  const { data: children, isLoading, error, refetch } = useGetMyChildren()
   const [chosen, setChosen] = useState<number | null>(null)
   const [view, setView] = useState<'day' | 'record'>('day')
 
   if (isLoading) return <Skeleton className="h-64 w-full" />
+  // A failed request is not "no child linked": that message sends a parent to
+  // the school office over what may only be a dropped connection.
+  if (error) return <div role="alert" className="space-y-2 text-sm"><p>Хүүхдийн мэдээллийг уншиж чадсангүй.</p><button className="underline" onClick={() => void refetch()}>Дахин оролдох</button></div>
   if (!children?.length) {
     return (
       <p className="rounded-[2px] border border-border bg-card p-6 text-sm text-muted-foreground">

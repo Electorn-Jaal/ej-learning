@@ -78,15 +78,24 @@ const ROLE_LABEL: Record<string, string> = {
 }
 
 export default function StudentProfile() {
-  const { data: user, isLoading } = useGetCurrentUser()
-  const { data: record } = useGetStudentRecord()
+  const { data: user, isLoading, refetch } = useGetCurrentUser()
+  const { data: record, error: recordError, refetch: refetchRecord } = useGetStudentRecord()
 
   if (isLoading) return <Skeleton className="h-96 w-full" />
-  if (!user) return null
+  if (!user) return <div role="alert" className="space-y-2"><p>Хувийн мэдээллийг уншиж чадсангүй.</p><button className="underline" onClick={() => void refetch()}>Дахин оролдох</button></div>
 
   return (
     <div className="space-y-4 pb-10">
       <BackLink />
+
+      {/* Without this a failed register read looks like a blank register:
+          the surname and the parents simply vanish from the page. */}
+      {recordError ? (
+        <div role="alert" className="space-y-2">
+          <p>Бүртгэлийн мэдээллийг уншиж чадсангүй.</p>
+          <button className="underline" onClick={() => void refetchRecord()}>Дахин оролдох</button>
+        </div>
+      ) : null}
 
       <Card>
         <CardContent className="flex flex-wrap items-center gap-5 p-6">
