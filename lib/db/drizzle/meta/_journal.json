@@ -288,6 +288,34 @@
       "when": 1790733600000,
       "tag": "0040_notebook_marks",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1790820000000,
+      "tag": "0041_exam_sittings",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1790906400000,
+      "tag": "0042_exam_on_paper",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1790992800000,
+      "tag": "0043_attendance_marks",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1791079200000,
+      "tag": "0044_guardian_accounts",
+      "breakpoints": true
     }
   ]
 }

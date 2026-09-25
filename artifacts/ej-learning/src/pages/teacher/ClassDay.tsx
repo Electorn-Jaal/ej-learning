@@ -7,11 +7,13 @@ import {
   useGetTeacherLessons,
   useSetScheduleDay,
   useMarkNotebooks,
+  useMarkAttendance,
   type ClassDayLesson,
   type ClassDayStudent,
   type ReplanProposal,
   type ClassDayLesson as ClassDayLessonType,
   type NotebookState,
+  type AttendanceState,
 } from '@workspace/api-client-react'
 import { ArrowLeft, Check, ChevronDown, ChevronUp, ClipboardList, Users, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -494,6 +496,21 @@ function LessonCard({ classId, date, lesson, editable, onSaved }: {
  * set takes it off again, which is how a teacher undoes a slip without having
  * to find a fourth control for "actually, I did not look".
  */
+/**
+ * The register, and the fifth state that is the absence of a mark.
+ *
+ * Pressing the state already set takes it off again - the same gesture as the
+ * exercise books - because "nobody took the register" needs to be reachable
+ * after a slip, and giving it a button of its own would invite a teacher to
+ * press it deliberately, which means nothing.
+ */
+const ATTENDANCE: Array<{ state: AttendanceState; label: string; short: string }> = [
+  { state: 'PRESENT', label: 'Ирсэн', short: '+' },
+  { state: 'LATE', label: 'Хоцорсон', short: 'Х' },
+  { state: 'ABSENT', label: 'Ирээгүй', short: '−' },
+  { state: 'EXCUSED', label: 'Чөлөөтэй', short: 'Ч' },
+]
+
 const MARKS: Array<{ state: NotebookState; label: string; short: string }> = [
   { state: 'DONE', label: 'Хийсэн', short: 'Х' },
   { state: 'PARTIAL', label: 'Дутуу', short: 'Д' },
@@ -501,13 +518,17 @@ const MARKS: Array<{ state: NotebookState; label: string; short: string }> = [
 ]
 
 /** One child, and how they answered - opened one at a time. */
-function StudentRow({ student, mark, comment, onMark, onComment, editable }: {
+function StudentRow({
+  student, mark, comment, onMark, onComment, editable, attendance, onAttendance,
+}: {
   student: ClassDayStudent
   mark: NotebookState | null
   comment: string
   onMark: (state: NotebookState | null) => void
   onComment: (text: string) => void
   editable: boolean
+  attendance: AttendanceState | null
+  onAttendance: (state: AttendanceState | null) => void
 }) {
   const [open, setOpen] = useState(false)
   const answered = student.attempts.length > 0
@@ -551,6 +572,33 @@ function StudentRow({ student, mark, comment, onMark, onComment, editable }: {
           </span>
         )}
       </button>
+
+      {/* Ирц, then the exercise book. The register comes first because it is
+          taken first, at the start of the hour, and a teacher working down the
+          class should not have to cross the row to do the two things. */}
+      {editable ? (
+        <div className="flex shrink-0 items-stretch self-stretch border-l border-border">
+          {ATTENDANCE.map((option) => (
+            <button
+              key={option.state}
+              type="button"
+              aria-pressed={attendance === option.state}
+              title={option.label}
+              onClick={() => onAttendance(attendance === option.state ? null : option.state)}
+              className={cn(
+                'w-8 text-xs transition-colors hover:bg-sidebar-active',
+                attendance === option.state && 'bg-sidebar font-semibold',
+              )}
+            >
+              {option.short}
+            </button>
+          ))}
+        </div>
+      ) : attendance ? (
+        <span className="flex shrink-0 items-center px-3 text-xs text-muted-foreground">
+          {ATTENDANCE.find((option) => option.state === attendance)?.label}
+        </span>
+      ) : null}
 
       {/* Дэвтэр. Three presses wide and no wider: a register is marked by
           looking at a book and tapping once, thirty times over, and anything
@@ -644,17 +692,21 @@ function StudentRow({ student, mark, comment, onMark, onComment, editable }: {
  * said nothing about the other twenty-five, and the difference between "not
  * done" and "not checked" is the whole reason this screen is worth having.
  */
-function NotebookRegister({ classId, date, lessons, students, editable, onSaved }: {
+function NotebookRegister({
+  classId, date, lessons, students, editable, perLesson, onSaved,
+}: {
   classId: number
   date: string
   lessons: ClassDayLessonType[]
   students: ClassDayStudent[]
   editable: boolean
+  perLesson: boolean
   onSaved: () => void
 }) {
   const [chosen, setChosen] = useState(0)
   const lesson = lessons[chosen] ?? lessons[0] ?? null
   const { mutate: save, isPending, error } = useMarkNotebooks()
+  const { mutate: register, isPending: registering, error: registerError } = useMarkAttendance()
 
   const markOf = (student: ClassDayStudent) =>
     lesson === null
@@ -672,17 +724,31 @@ function NotebookRegister({ classId, date, lessons, students, editable, onSaved 
     }]
   }))
 
+  // The register. Up to year 5 it belongs to the day and the period selector
+  // does not touch it; from year 6 it belongs to the period, like the books.
+  const slotForRegister = perLesson ? lesson?.timetableSlotId ?? null : null
+  const attendanceOf = (student: ClassDayStudent) =>
+    student.attendance.find((row) =>
+      perLesson ? row.timetableSlotId === slotForRegister : row.timetableSlotId === null,
+    ) ?? null
+
+  const savedRegister = new Map(students.map((student) =>
+    [student.studentId, (attendanceOf(student)?.state ?? null) as AttendanceState | null]))
+  const [here, setHere] = useState(savedRegister)
+
   const [draft, setDraft] = useState(server)
   // Re-seeded when the day, the period or the saved marks change underneath.
-  const key = [date, lesson?.timetableSlotId, lesson?.subjectId,
+  const key = [date, lesson?.timetableSlotId, lesson?.subjectId, perLesson,
     ...students.map((student) => {
       const found = markOf(student)
       return `${student.studentId}:${found?.state ?? ''}:${found?.comment ?? ''}`
+        + `:${attendanceOf(student)?.state ?? ''}`
     })].join('\u0000')
   const [seed, setSeed] = useState(key)
   if (seed !== key) {
     setSeed(key)
     setDraft(server)
+    setHere(savedRegister)
   }
 
   const changed = students.filter((student) => {
@@ -695,6 +761,25 @@ function NotebookRegister({ classId, date, lessons, students, editable, onSaved 
     const next = new Map(draft)
     next.set(studentId, { ...next.get(studentId)!, ...patch })
     setDraft(next)
+  }
+
+  const changedRegister = students.filter((student) =>
+    savedRegister.get(student.studentId) !== here.get(student.studentId))
+
+  const takeRegister = () => {
+    register({
+      data: {
+        classId,
+        onDate: date,
+        ...(perLesson ? { timetableSlotId: slotForRegister } : {}),
+        marks: changedRegister.map((student) => ({
+          studentId: student.studentId,
+          // Taking a mark off says nobody registered this child, which is the
+          // absence of a row rather than a fifth verdict.
+          state: (here.get(student.studentId) ?? 'UNREGISTERED') as AttendanceState,
+        })),
+      },
+    }, { onSuccess: onSaved })
   }
 
   const submit = () => {
@@ -749,9 +834,35 @@ function NotebookRegister({ classId, date, lessons, students, editable, onSaved 
             comment={draft.get(student.studentId)?.comment ?? ''}
             onMark={(state) => set(student.studentId, { state })}
             onComment={(comment) => set(student.studentId, { comment })}
+            attendance={here.get(student.studentId) ?? null}
+            onAttendance={(state) => {
+              const next = new Map(here)
+              next.set(student.studentId, state)
+              setHere(next)
+            }}
           />
         ))}
       </ul>
+
+      {editable ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            type="button" size="sm"
+            disabled={registering || changedRegister.length === 0 || (perLesson && lesson === null)}
+            onClick={takeRegister}
+          >
+            {registering ? 'Хадгалж байна…' : `Ирц хадгалах (${changedRegister.length})`}
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            {perLesson ? 'Хичээл бүрээр' : 'Өдрөөр нь нэг удаа'}
+          </span>
+          {registerError ? (
+            <span role="alert" className="text-xs text-destructive">
+              {registerError?.data?.error ?? 'Ирцийг хадгалж чадсангүй.'}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
 
       {editable && lesson !== null ? (
         <div className="flex flex-wrap items-center gap-3">
@@ -889,6 +1000,7 @@ export default function TeacherClassDay() {
           lessons={data.lessons}
           students={data.students}
           editable={data.date <= schoolToday()}
+          perLesson={data.attendancePerLesson}
           onSaved={refresh}
         />
       )}

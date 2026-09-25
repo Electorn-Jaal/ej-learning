@@ -508,6 +508,706 @@ describe("EJ Learning API", { concurrency: false }, () => {
     });
   });
 
+  describe("an exam is set, sat once, and counts", () => {
+    let admin, teacher, child, klass, subject, studentId, sittingId, paper;
+    const hour = 3600 * 1000;
+    before(async () => {
+      admin = createClient(harness.baseUrl);
+      teacher = createClient(harness.baseUrl);
+      child = createClient(harness.baseUrl);
+      await admin.signIn(accountsByRole.ADMIN);
+      await teacher.signIn(byName["demo-teacher"]);
+      await child.signIn(accountsByRole.STUDENT);
+      [{ id: klass }] = await harness.sql(
+        "SELECT id::int FROM core.classes WHERE class_code = 'MOCK-LOCAL-9A'");
+      [{ id: subject }] = await harness.sql("SELECT id::int FROM core.subjects WHERE code = 'MATH'");
+      [{ id: studentId }] = await harness.sql(
+        "SELECT student_id::int AS id FROM core.users WHERE username = 'demo-student'");
+    });
+    after(async () => {
+      // Attempts first: a question sitting on a paper, and a paper somebody
+      // sat, are both RESTRICT-ed on purpose - neither is safe to delete out
+      // from under the other while tidying.
+      if (sittingId) {
+        await harness.sql(
+          `DELETE FROM assessment.diagnostic_attempts
+            WHERE exam_paper_id IN (SELECT exam_paper_id FROM assessment.exam_sittings
+                                     WHERE class_id = $1)`, [klass]);
+        await harness.sql(
+          `DELETE FROM assessment.exam_paper_items
+            WHERE paper_id IN (SELECT exam_paper_id FROM assessment.exam_sittings
+                                WHERE class_id = $1)`, [klass]);
+        await harness.sql(
+          "DELETE FROM assessment.exam_papers WHERE id IN (SELECT exam_paper_id FROM assessment.exam_sittings WHERE class_id = $1)",
+          [klass]);
+      }
+      await harness.sql(
+        "DELETE FROM learning.student_skill_mastery WHERE student_id = $1", [studentId]);
+    });
+
+    it("draws a paper from the year's question bank and gives it a window", async () => {
+      const opensAt = new Date(Date.now() - hour).toISOString();
+      const closesAt = new Date(Date.now() + hour).toISOString();
+      const res = await teacher.request("/teacher/exams", { method: "POST", body: {
+        classId: klass, subjectId: subject, examKind: "UNIT",
+        title: "1-р улирлын шалгалт", opensAt, closesAt, drawCount: 3,
+      } });
+      assert.equal(res.status, 201, JSON.stringify(res.payload));
+      assert.ok(res.payload.questionCount > 0, "no questions were drawn");
+      sittingId = res.payload.sittingId;
+
+      const list = await teacher.request(`/teacher/exams?classId=${klass}&subjectId=${subject}`);
+      assert.equal(list.status, 200);
+      const found = list.payload.find((row) => row.sittingId === sittingId);
+      assert.ok(found, "the sitting is missing from the list");
+      assert.equal(found.sat, 0);
+      assert.ok(found.invited > 0, "nobody was invited");
+      assert.equal(found.wholeClass, true, "naming nobody should mean everybody");
+    });
+
+    it("refuses a window that never closes, and one with no questions in it", async () => {
+      const at = new Date().toISOString();
+      const backwards = await teacher.request("/teacher/exams", { method: "POST", body: {
+        classId: klass, subjectId: subject, examKind: "UNIT", title: "Буруу",
+        opensAt: at, closesAt: at, drawCount: 1,
+      } });
+      assert.equal(backwards.status, 400, JSON.stringify(backwards.payload));
+      assert.equal(backwards.payload.code, "INVALID_WINDOW");
+
+      const empty = await teacher.request("/teacher/exams", { method: "POST", body: {
+        classId: klass, subjectId: subject, examKind: "UNIT", title: "Хоосон",
+        opensAt: at, closesAt: new Date(Date.now() + hour).toISOString(), drawCount: 0,
+      } });
+      assert.equal(empty.status, 400, JSON.stringify(empty.payload));
+      assert.equal(empty.payload.code, "NO_QUESTIONS");
+    });
+
+    it("gives the child the paper without the key", async () => {
+      const mine = await child.request("/student/exams");
+      assert.equal(mine.status, 200);
+      const row = mine.payload.find((entry) => entry.sittingId === sittingId);
+      assert.ok(row, "the child cannot see the exam");
+      assert.equal(row.isOpen, true);
+      assert.equal(row.attemptsUsed, 0);
+      assert.equal(row.attemptsAllowed, 1);
+
+      const res = await child.request(`/student/exams/${sittingId}`);
+      assert.equal(res.status, 200);
+      paper = res.payload;
+      assert.ok(paper.questions.length > 0);
+      const serialized = JSON.stringify(paper);
+      for (const leak of ["isCorrect", "is_correct", "correctOptionIds"]) {
+        assert.ok(!serialized.includes(leak), `the paper leaked ${leak}`);
+      }
+    });
+
+    it("is sat once, marked, and refused a second time", async () => {
+      const answers = paper.questions.map((question) => ({
+        itemId: question.itemId,
+        optionId: question.options[0]?.optionId ?? null,
+      }));
+      const res = await child.request(`/student/exams/${sittingId}/attempt`, {
+        method: "POST", body: { answers },
+      });
+      assert.equal(res.status, 201, JSON.stringify(res.payload));
+      assert.ok(res.payload.maxScore > 0);
+      assert.equal(typeof res.payload.score, "number");
+
+      // The key is the teacher's to release, and it bites harder here than on
+      // the daily check: a paper is sat once, and a child who sees the answers
+      // while a classmate is still writing has been handed the marks.
+      assert.equal(res.payload.answersOpen, false);
+      assert.ok(res.payload.results.every((row) => row.correctOptionIds.length === 0));
+
+      // A paper a child can sit twice on their own is not a paper.
+      const again = await child.request(`/student/exams/${sittingId}/attempt`, {
+        method: "POST", body: { answers },
+      });
+      assert.equal(again.status, 409, JSON.stringify(again.payload));
+      assert.equal(again.payload.code, "EXAM_ALREADY_SAT");
+
+      // And the paper is off the screen once it is spent.
+      const spent = await child.request(`/student/exams/${sittingId}`);
+      assert.deepEqual(spent.payload.questions, []);
+    });
+
+    it("counts towards the child's skills, which the daily check does not", async () => {
+      // The other half of the daily-check change. Progress had to come from
+      // somewhere once five questions and three tries stopped feeding it, and
+      // this is the somewhere: one paper, one window, one go, marked against a
+      // key nobody could see.
+      const [{ n }] = await harness.sql(
+        "SELECT count(*)::int AS n FROM learning.student_skill_mastery WHERE student_id = $1",
+        [studentId]);
+      assert.ok(n > 0, "sitting an exam left no trace on the child's skills");
+    });
+
+    it("shows the teacher who sat it, and lets them set it again for one child", async () => {
+      const res = await teacher.request(`/teacher/exams/${sittingId}`);
+      assert.equal(res.status, 200);
+      assert.ok(res.payload.questions.length > 0);
+      // The teacher's copy carries the key: they are the person who has to
+      // judge whether a question is any good.
+      assert.ok(res.payload.questions[0].options.some((row) => "isCorrect" in row));
+      const sat = res.payload.results.find((row) => row.studentId === studentId);
+      assert.ok(sat?.attemptId, "the attempt is missing from the register");
+
+      const reopened = await teacher.request(`/teacher/exams/${sittingId}/reopen`, {
+        method: "POST", body: { studentIds: [studentId] },
+      });
+      assert.equal(reopened.status, 200, JSON.stringify(reopened.payload));
+
+      const mine = await child.request("/student/exams");
+      const row = mine.payload.find((entry) => entry.sittingId === sittingId);
+      assert.equal(row.attemptsAllowed, 2, "the teacher's second chance did not arrive");
+      assert.equal(row.isOpen, true);
+    });
+
+    it("hands over the key only when the teacher releases it", async () => {
+      const opened = await teacher.request(`/teacher/exams/${sittingId}/answers`, {
+        method: "PUT", body: { open: true },
+      });
+      assert.equal(opened.status, 200);
+      assert.equal(opened.payload.answersOpen, true);
+
+      const second = await child.request(`/student/exams/${sittingId}`);
+      const answers = second.payload.questions.map((question) => ({
+        itemId: question.itemId,
+        optionId: question.options[0]?.optionId ?? null,
+      }));
+      const res = await child.request(`/student/exams/${sittingId}/attempt`, {
+        method: "POST", body: { answers },
+      });
+      assert.equal(res.status, 201, JSON.stringify(res.payload));
+      assert.equal(res.payload.answersOpen, true);
+      assert.ok(
+        res.payload.results.some((row) => row.correctOptionIds.length > 0),
+        "the key was still withheld after the teacher released it",
+      );
+    });
+
+    it("keeps the exam away from another class's teacher and another child", async () => {
+      const stranger = createClient(harness.baseUrl);
+      await stranger.signIn(byName["demo-teacher-b"]);
+      assert.equal((await stranger.request(`/teacher/exams/${sittingId}`)).status, 403);
+      assert.equal((await child.request(`/teacher/exams/${sittingId}`)).status, 403);
+      assert.equal((await teacher.request(`/student/exams`)).status, 403);
+    });
+
+    it("will not be sat before it opens or after it closes", async () => {
+      const later = await teacher.request("/teacher/exams", { method: "POST", body: {
+        classId: klass, subjectId: subject, examKind: "TERM", title: "Дараа",
+        opensAt: new Date(Date.now() + hour).toISOString(),
+        closesAt: new Date(Date.now() + 2 * hour).toISOString(),
+        drawCount: 2,
+      } });
+      assert.equal(later.status, 201, JSON.stringify(later.payload));
+      const id = later.payload.sittingId;
+
+      const shut = await child.request(`/student/exams/${id}`);
+      assert.equal(shut.status, 200);
+      assert.equal(shut.payload.isOpen, false);
+      assert.deepEqual(shut.payload.questions, [], "questions before the window opened");
+
+      const early = await child.request(`/student/exams/${id}/attempt`, {
+        method: "POST", body: { answers: [] },
+      });
+      assert.equal(early.status, 409, JSON.stringify(early.payload));
+      assert.equal(early.payload.code, "EXAM_NOT_OPEN");
+
+      await harness.sql(
+        "UPDATE assessment.exam_sittings SET opens_at = now() - interval '2 hours', closes_at = now() - interval '1 hour' WHERE id = $1",
+        [id]);
+      const late = await child.request(`/student/exams/${id}/attempt`, {
+        method: "POST", body: { answers: [] },
+      });
+      assert.equal(late.status, 409, JSON.stringify(late.payload));
+      assert.equal(late.payload.code, "EXAM_CLOSED");
+    });
+
+    it("takes a paper exam the teacher types in, and keeps it off the child screen", async () => {
+      // UC10. The exam happened in the room; what reaches the system is the
+      // teacher reading each sheet. It has to be marked by the same rule as an
+      // online sitting, or the school has two systems rather than one.
+      const onPaper = await teacher.request("/teacher/exams", { method: "POST", body: {
+        classId: klass, subjectId: subject, examKind: "TERM", title: "Цаасан улирлын",
+        opensAt: new Date(Date.now() - hour).toISOString(),
+        closesAt: new Date(Date.now() + hour).toISOString(),
+        drawCount: 2, onPaper: true,
+      } });
+      assert.equal(onPaper.status, 201, JSON.stringify(onPaper.payload));
+      const id = onPaper.payload.sittingId;
+
+      // It is not on the child's list, and they cannot sit it if they find it.
+      const mine = await child.request("/student/exams");
+      assert.ok(
+        !mine.payload.some((row) => row.sittingId === id),
+        "a paper exam was offered online as well",
+      );
+      const tried = await child.request(`/student/exams/${id}/attempt`, {
+        method: "POST", body: { answers: [] },
+      });
+      assert.equal(tried.status, 409, JSON.stringify(tried.payload));
+      assert.equal(tried.payload.code, "EXAM_ON_PAPER");
+
+      // The teacher's copy carries the questions in printed order, which is
+      // how the sheet in front of them is laid out.
+      const board = await teacher.request(`/teacher/exams/${id}`);
+      assert.equal(board.status, 200);
+      assert.equal(board.payload.onPaper, true);
+      const questions = board.payload.questions;
+      assert.ok(questions.length > 0);
+      assert.deepEqual(
+        questions.map((row) => row.itemOrder),
+        [...questions.map((row) => row.itemOrder)].sort((a, b) => a - b),
+      );
+
+      // One child's sheet, question by question. The first answer is the right
+      // one, so the mark is not zero and a marking failure cannot pass for a
+      // storage failure.
+      const key = await harness.sql(
+        `SELECT o.diagnostic_item_id::int AS item, o.id::int AS option_id
+           FROM assessment.diagnostic_item_options o
+          WHERE o.is_correct AND o.diagnostic_item_id = ANY($1::bigint[])`,
+        [questions.map((row) => row.itemId)]);
+      const right = new Map(key.map((row) => [row.item, row.option_id]));
+      const entered = await teacher.request(`/teacher/exams/${id}/entry`, {
+        method: "POST",
+        body: {
+          studentId,
+          answers: questions.map((question, index) => ({
+            itemId: question.itemId,
+            optionId: index === 0 ? right.get(question.itemId) ?? null : null,
+          })),
+        },
+      });
+      assert.equal(entered.status, 201, JSON.stringify(entered.payload));
+      assert.ok(entered.payload.score > 0, "the right answer scored nothing");
+      // Only where the draw found more than one question: a one-question bank
+      // answered correctly is full marks, and that is not a failure.
+      if (questions.length > 1) {
+        assert.ok(
+          entered.payload.score < entered.payload.maxScore,
+          "the unanswered questions scored as though they were right",
+        );
+      }
+
+      // And it shows on the register like any other sitting.
+      const after = await teacher.request(`/teacher/exams/${id}`);
+      const row = after.payload.results.find((entry) => entry.studentId === studentId);
+      assert.ok(row?.attemptId, "the entered sheet is missing from the register");
+
+      // Typed twice is not allowed; another go is the teacher's to grant.
+      const twice = await teacher.request(`/teacher/exams/${id}/entry`, {
+        method: "POST",
+        body: { studentId, answers: questions.map((q) => ({ itemId: q.itemId, optionId: null })) },
+      });
+      assert.equal(twice.status, 409, JSON.stringify(twice.payload));
+      assert.equal(twice.payload.code, "EXAM_ALREADY_SAT");
+    });
+
+    it("refuses paper entry on an online sitting, and a score the question is not worth", async () => {
+      const online = await teacher.request(`/teacher/exams/${sittingId}/entry`, {
+        method: "POST", body: { studentId, answers: [] },
+      });
+      assert.equal(online.status, 400, JSON.stringify(online.payload));
+      assert.equal(online.payload.code, "EXAM_NOT_ON_PAPER");
+
+      const made = await teacher.request("/teacher/exams", { method: "POST", body: {
+        classId: klass, subjectId: subject, examKind: "UNIT", title: "Онооны хязгаар",
+        opensAt: new Date(Date.now() - hour).toISOString(),
+        closesAt: new Date(Date.now() + hour).toISOString(),
+        drawCount: 1, onPaper: true,
+      } });
+      const id = made.payload.sittingId;
+      const board = await teacher.request(`/teacher/exams/${id}`);
+      const first = board.payload.questions[0];
+      const tooMuch = await teacher.request(`/teacher/exams/${id}/entry`, {
+        method: "POST",
+        body: { studentId, answers: [{ itemId: first.itemId, awarded: first.maxScore + 10 }] },
+      });
+      assert.equal(tooMuch.status, 400, JSON.stringify(tooMuch.payload));
+      assert.equal(tooMuch.payload.code, "INVALID_SCORE");
+    });
+
+    it("sets a paper for named children only, and keeps it from the rest", async () => {
+      const named = await teacher.request("/teacher/exams", { method: "POST", body: {
+        classId: klass, subjectId: subject, examKind: "DIAGNOSTIC", title: "Нэрсээр",
+        opensAt: new Date(Date.now() - hour).toISOString(),
+        closesAt: new Date(Date.now() + hour).toISOString(),
+        drawCount: 2, studentIds: [studentId],
+      } });
+      assert.equal(named.status, 201, JSON.stringify(named.payload));
+      const list = await teacher.request(`/teacher/exams?classId=${klass}&subjectId=${subject}`);
+      const row = list.payload.find((entry) => entry.sittingId === named.payload.sittingId);
+      assert.equal(row.wholeClass, false);
+      assert.equal(row.invited, 1);
+
+      const stranger = await teacher.request("/teacher/exams", { method: "POST", body: {
+        classId: klass, subjectId: subject, examKind: "UNIT", title: "Гадны хүүхэд",
+        opensAt: new Date().toISOString(),
+        closesAt: new Date(Date.now() + hour).toISOString(),
+        drawCount: 1, studentIds: [99999999],
+      } });
+      assert.equal(stranger.status, 400, JSON.stringify(stranger.payload));
+      assert.equal(stranger.payload.code, "STUDENT_NOT_IN_CLASS");
+    });
+  });
+
+  describe("a parent reads their own child and nobody else's", () => {
+    let admin, parent, child, studentId, otherStudent, userId;
+    before(async () => {
+      admin = createClient(harness.baseUrl);
+      child = createClient(harness.baseUrl);
+      await admin.signIn(accountsByRole.ADMIN);
+      await child.signIn(accountsByRole.STUDENT);
+      [{ id: studentId }] = await harness.sql(
+        "SELECT student_id::int AS id FROM core.users WHERE username = 'demo-student'");
+      [otherStudent] = await harness.sql(
+        "SELECT id::int FROM core.students WHERE id <> $1 AND is_active LIMIT 1", [studentId]);
+
+      // A parent account. Made here rather than seeded, so the test says what
+      // a guardian account actually is: a login with the role and nothing else.
+      // The same password hash as the seeded student, so the test can sign in
+      // without a second way of making accounts.
+      [{ id: userId }] = await harness.sql(
+        `INSERT INTO core.users (username, display_name, password_hash, is_active)
+         SELECT 'test-guardian', 'Эцэг эх (тест)', password_hash, true
+           FROM core.users WHERE username = 'demo-student'
+         ON CONFLICT (username) DO UPDATE SET is_active = true
+         RETURNING id::int`);
+      await harness.sql(
+        `INSERT INTO core.user_roles (user_id, role) VALUES ($1, 'GUARDIAN')
+         ON CONFLICT DO NOTHING`, [userId]);
+      parent = createClient(harness.baseUrl);
+      await parent.signIn({
+        username: "test-guardian",
+        password: accountsByRole.STUDENT.password,
+      });
+    });
+    after(async () => {
+      if (userId) {
+        await harness.sql("DELETE FROM core.guardian_students WHERE user_id = $1", [userId]);
+        await harness.sql("DELETE FROM core.user_roles WHERE user_id = $1", [userId]);
+        await harness.sql("DELETE FROM core.sessions WHERE user_id = $1", [userId]);
+        await harness.sql("DELETE FROM core.users WHERE id = $1", [userId]);
+      }
+    });
+
+    it("sees no children until an administrator links one", async () => {
+      const res = await parent.request("/guardian/children");
+      assert.equal(res.status, 200, JSON.stringify(res.payload));
+      assert.deepEqual(res.payload, []);
+
+      // And cannot reach a child by asking for one.
+      const guessed = await parent.request(`/guardian/day?studentId=${studentId}`);
+      assert.equal(guessed.status, 403, JSON.stringify(guessed.payload));
+      assert.equal(guessed.payload.code, "NOT_YOUR_CHILD");
+    });
+
+    it("reads the child once linked, and the same day the child reads", async () => {
+      const linked = await admin.request("/admin/guardians/link", { method: "POST", body: {
+        userId, studentId, relation: "Ээж",
+      } });
+      assert.equal(linked.status, 200, JSON.stringify(linked.payload));
+
+      const mine = await parent.request("/guardian/children");
+      assert.equal(mine.status, 200);
+      assert.equal(mine.payload.length, 1);
+      assert.equal(mine.payload[0].studentId, studentId);
+      assert.equal(mine.payload[0].relation, "Ээж");
+
+      // The same assembly, not a parallel one: the day a parent is shown
+      // something their child is not is the day the screen stops being worth
+      // trusting.
+      const theirs = await parent.request(`/guardian/day?studentId=${studentId}`);
+      const own = await child.request("/student/today");
+      assert.equal(theirs.status, 200, JSON.stringify(theirs.payload));
+      assert.equal(own.status, 200);
+      assert.deepEqual(theirs.payload, own.payload);
+    });
+
+    it("gives the fortnight behind, without the exam questions", async () => {
+      const res = await parent.request(`/guardian/record?studentId=${studentId}`);
+      assert.equal(res.status, 200, JSON.stringify(res.payload));
+      assert.ok(Array.isArray(res.payload.attendance));
+      assert.ok(Array.isArray(res.payload.notebook));
+      assert.ok(Array.isArray(res.payload.exams));
+      assert.ok(Array.isArray(res.payload.teachers));
+
+      // Scores and dates only. A parent reading the answers over a child's
+      // shoulder is exactly how a paper the rest of the class is still
+      // sitting would leak.
+      const serialized = JSON.stringify(res.payload);
+      for (const leak of ["isCorrect", "correctOptionId", "options", "prompt"]) {
+        assert.ok(!serialized.includes(leak), `the parent's record leaked ${leak}`);
+      }
+    });
+
+    it("still refuses another family's child", async () => {
+      if (!otherStudent) return;
+      const res = await parent.request(`/guardian/day?studentId=${otherStudent.id}`);
+      assert.equal(res.status, 403, JSON.stringify(res.payload));
+      assert.equal(res.payload.code, "NOT_YOUR_CHILD");
+    });
+
+    it("writes nothing: the parent's account is refused everywhere a child acts", async () => {
+      // The role is a reading role, and the routes say so rather than the
+      // screens remembering to hide their buttons.
+      assert.equal((await parent.request("/student/today")).status, 403);
+      assert.equal((await parent.request("/teacher/class-day?classId=1")).status, 403);
+      assert.equal((await parent.request("/student/quiz-attempts", {
+        method: "POST", body: { lessonId: 1, answers: [] },
+      })).status, 403);
+      assert.equal((await parent.request("/admin/guardians")).status, 403);
+    });
+
+    it("makes a parent an account with the child attached, and says the password once", async () => {
+      const [klass] = await harness.sql(
+        "SELECT class_id::int AS id FROM core.student_enrollments WHERE student_id = $1 AND is_active",
+        [studentId]);
+      const roster = await admin.request(`/admin/guardians/class-children?classId=${klass.id}`);
+      assert.equal(roster.status, 200, JSON.stringify(roster.payload));
+      const listed = roster.payload.find((row) => row.studentId === studentId);
+      assert.ok(listed, "the child is missing from the class list");
+      assert.equal(listed.linked, true, "this child already has an account from the test above");
+
+      const [other] = await harness.sql(
+        `SELECT s.id::int FROM core.students s
+           JOIN core.student_enrollments e ON e.student_id = s.id AND e.is_active
+          WHERE e.class_id = $1 AND s.id <> $2 AND s.is_active
+            AND NOT EXISTS (SELECT 1 FROM core.guardian_students gs
+                             WHERE gs.student_id = s.id AND gs.is_active)
+          LIMIT 1`, [klass.id, studentId]);
+      if (!other) return;
+
+      const made = await admin.request("/admin/guardians/accounts", { method: "POST", body: {
+        username: "test-guardian-3", displayName: "Эцэг эх 3 (тест)",
+        password: "Parent-2026-Ej!", studentId: other.id,
+      } });
+      assert.equal(made.status, 201, JSON.stringify(made.payload));
+      assert.equal(made.payload.username, "test-guardian-3");
+      // The password is never echoed: a response that carries it back is a
+      // response that ends up in a log.
+      assert.ok(!JSON.stringify(made.payload).includes("Parent-2026-Ej!"));
+
+      // Made and linked in one step, so there is no half-finished account for
+      // an administrator to remember.
+      const fresh = createClient(harness.baseUrl);
+      await fresh.signIn({ username: "test-guardian-3", password: "Parent-2026-Ej!" });
+      const mine = await fresh.request("/guardian/children");
+      assert.equal(mine.status, 200);
+      assert.deepEqual(mine.payload.map((row) => row.studentId), [other.id]);
+
+      const taken = await admin.request("/admin/guardians/accounts", { method: "POST", body: {
+        username: "test-guardian-3", displayName: "Дахилт",
+        password: "Parent-2026-Ej!", studentId: other.id,
+      } });
+      assert.equal(taken.status, 400, JSON.stringify(taken.payload));
+      assert.equal(taken.payload.code, "USERNAME_TAKEN");
+
+      const short = await admin.request("/admin/guardians/accounts", { method: "POST", body: {
+        username: "test-guardian-4", displayName: "Богино", password: "short",
+      } });
+      assert.equal(short.status, 400);
+
+      const [{ id: third }] = await harness.sql(
+        "SELECT id::int FROM core.users WHERE username = 'test-guardian-3'");
+      await harness.sql("DELETE FROM core.guardian_students WHERE user_id = $1", [third]);
+      await harness.sql("DELETE FROM core.user_roles WHERE user_id = $1", [third]);
+      await harness.sql("DELETE FROM core.sessions WHERE user_id = $1", [third]);
+      await harness.sql("DELETE FROM core.users WHERE id = $1", [third]);
+    });
+
+    it("keeps one live account per child, retiring the old link", async () => {
+      // A second parent account for the same child. The school's rule is one
+      // live account, so linking the second retires the first - and the first
+      // loses access at once rather than at the next sign-in.
+      const [{ id: second }] = await harness.sql(
+        `INSERT INTO core.users (username, display_name, password_hash, is_active)
+         SELECT 'test-guardian-2', 'Эцэг эх 2 (тест)', password_hash, true
+           FROM core.users WHERE username = 'demo-student'
+         ON CONFLICT (username) DO UPDATE SET is_active = true
+         RETURNING id::int`);
+      await harness.sql(
+        `INSERT INTO core.user_roles (user_id, role) VALUES ($1, 'GUARDIAN')
+         ON CONFLICT DO NOTHING`, [second]);
+
+      assert.equal((await admin.request("/admin/guardians/link", { method: "POST", body: {
+        userId: second, studentId, relation: "Аав",
+      } })).status, 200);
+
+      const rows = await harness.sql(
+        "SELECT user_id::int AS id, is_active FROM core.guardian_students WHERE student_id = $1",
+        [studentId]);
+      const live = rows.filter((row) => row.is_active);
+      assert.equal(live.length, 1, "two accounts were live for one child");
+      assert.equal(live[0].id, second);
+      // The retired link stays, so a question in June about who could see
+      // what in March has an answer.
+      assert.ok(rows.some((row) => row.id === userId && !row.is_active));
+
+      const refused = await parent.request(`/guardian/day?studentId=${studentId}`);
+      assert.equal(refused.status, 403, JSON.stringify(refused.payload));
+
+      await harness.sql("DELETE FROM core.guardian_students WHERE user_id = $1", [second]);
+      await harness.sql("DELETE FROM core.user_roles WHERE user_id = $1", [second]);
+      await harness.sql("DELETE FROM core.sessions WHERE user_id = $1", [second]);
+      await harness.sql("DELETE FROM core.users WHERE id = $1", [second]);
+    });
+  });
+
+  describe("the register is taken the way the school takes it", () => {
+    let admin, teacher, klass, primary, subject, studentId, primaryStudent, slot, day;
+    before(async () => {
+      admin = createClient(harness.baseUrl);
+      teacher = createClient(harness.baseUrl);
+      await admin.signIn(accountsByRole.ADMIN);
+      await teacher.signIn(byName["demo-teacher"]);
+      [{ id: klass }] = await harness.sql(
+        "SELECT id::int FROM core.classes WHERE class_code = 'MOCK-LOCAL-9A'");
+      [{ id: subject }] = await harness.sql("SELECT id::int FROM core.subjects WHERE code = 'MATH'");
+      [{ id: studentId }] = await harness.sql(
+        "SELECT student_id::int AS id FROM core.users WHERE username = 'demo-student'");
+      [{ day }] = await harness.sql("SELECT CURRENT_DATE::text AS day");
+      // Its own period. The slots other suites make are torn down in their
+      // own hooks, so borrowing one makes this suite depend on the order it
+      // happens to run in.
+      [slot] = await harness.sql(
+        `INSERT INTO learning.timetable_slots
+           (class_id, subject_id, weekday_no, period_no, group_label, valid_from, valid_to)
+         VALUES ($1, $2, extract(isodow FROM CURRENT_DATE), 7, NULL, CURRENT_DATE, CURRENT_DATE)
+         RETURNING id::int`, [klass, subject]);
+
+      // A year-5 class and a child in it, to check the other half of the rule.
+      [primary] = await harness.sql(
+        `SELECT c.id::int FROM core.classes c
+           JOIN core.grade_levels g ON g.id = c.grade_level_id
+          WHERE g.grade_number <= 5 AND c.is_active LIMIT 1`);
+      if (primary) {
+        [primaryStudent] = await harness.sql(
+          `SELECT s.id::int FROM core.students s
+             JOIN core.student_enrollments e ON e.student_id = s.id AND e.is_active
+            WHERE e.class_id = $1 AND s.is_active LIMIT 1`, [primary.id]);
+      }
+    });
+    after(async () => {
+      await harness.sql("DELETE FROM learning.attendance_marks WHERE class_id = ANY($1::bigint[])",
+        [[klass, primary?.id].filter(Boolean)]);
+      if (slot) {
+        await harness.sql("DELETE FROM learning.timetable_slots WHERE id = $1", [slot.id]);
+      }
+    });
+
+    it("says on the day which kind of register this class keeps", async () => {
+      const res = await teacher.request(`/teacher/class-day?classId=${klass}&subjectId=${subject}`);
+      assert.equal(res.status, 200);
+      // Year 9: the children move between teachers, so the register is taken
+      // per lesson and one taken in the morning says nothing about physics
+      // after lunch.
+      assert.equal(res.payload.attendancePerLesson, true);
+      assert.ok(res.payload.students.every((row) => row.attendance.length === 0),
+        "nobody has taken this register yet");
+    });
+
+    it("refuses a whole-day register from year 6 upwards", async () => {
+      const res = await teacher.request("/teacher/attendance", { method: "PUT", body: {
+        classId: klass, onDate: day,
+        marks: [{ studentId, state: "PRESENT" }],
+      } });
+      assert.equal(res.status, 400, JSON.stringify(res.payload));
+      assert.equal(res.payload.code, "SLOT_REQUIRED");
+    });
+
+    it("takes a lesson's register, and tells absent from unregistered", async () => {
+      assert.ok(slot, "the fixture needs a timetabled period");
+      const res = await teacher.request("/teacher/attendance", { method: "PUT", body: {
+        classId: klass, onDate: day, timetableSlotId: slot.id,
+        marks: [{ studentId, state: "LATE", participation: "WATCH", note: "10 минут хоцорсон" }],
+      } });
+      assert.equal(res.status, 200, JSON.stringify(res.payload));
+
+      const board = await teacher.request(`/teacher/class-day?classId=${klass}&subjectId=${subject}`);
+      const row = board.payload.students.find((entry) => entry.studentId === studentId);
+      assert.equal(row.attendance.length, 1);
+      assert.equal(row.attendance[0].state, "LATE");
+      assert.equal(row.attendance[0].participation, "WATCH");
+      assert.equal(row.attendance[0].note, "10 минут хоцорсон");
+      assert.equal(row.attendance[0].timetableSlotId, slot.id);
+
+      // Everybody else is unregistered, which is a fact about the teacher's
+      // afternoon and not a verdict on a child.
+      const others = board.payload.students.filter((entry) => entry.studentId !== studentId);
+      assert.ok(others.every((entry) => entry.attendance.length === 0),
+        "children nobody marked were registered anyway");
+    });
+
+    it("takes a mark off again rather than storing a fifth state", async () => {
+      const res = await teacher.request("/teacher/attendance", { method: "PUT", body: {
+        classId: klass, onDate: day, timetableSlotId: slot.id,
+        marks: [{ studentId, state: "UNREGISTERED" }],
+      } });
+      assert.equal(res.status, 200);
+      const [{ n }] = await harness.sql(
+        "SELECT count(*)::int AS n FROM learning.attendance_marks WHERE student_id = $1",
+        [studentId]);
+      assert.equal(n, 0, "unregistered was stored instead of removed");
+    });
+
+    it("takes one register a day up to year 5, and refuses a per-lesson one", async () => {
+      if (!primary || !primaryStudent) return;
+      const res = await admin.request("/teacher/attendance", { method: "PUT", body: {
+        classId: primary.id, onDate: day,
+        marks: [{ studentId: primaryStudent.id, state: "PRESENT" }],
+      } });
+      assert.equal(res.status, 200, JSON.stringify(res.payload));
+
+      const [row] = await harness.sql(
+        `SELECT timetable_slot_id FROM learning.attendance_marks
+          WHERE student_id = $1 AND on_date = $2::date`, [primaryStudent.id, day]);
+      assert.equal(row.timetable_slot_id, null, "a whole-day register kept a period");
+
+      const [other] = await harness.sql(
+        "SELECT id::int FROM learning.timetable_slots WHERE class_id = $1 LIMIT 1", [primary.id]);
+      if (other) {
+        const perLesson = await admin.request("/teacher/attendance", { method: "PUT", body: {
+          classId: primary.id, onDate: day, timetableSlotId: other.id,
+          marks: [{ studentId: primaryStudent.id, state: "PRESENT" }],
+        } });
+        assert.equal(perLesson.status, 400, JSON.stringify(perLesson.payload));
+        assert.equal(perLesson.payload.code, "WHOLE_DAY_ONLY");
+      }
+    });
+
+    it("refuses tomorrow, a stranger's child, and a verdict nobody defined", async () => {
+      const base = { classId: klass, onDate: day, timetableSlotId: slot.id };
+      const [{ tomorrow }] = await harness.sql("SELECT (CURRENT_DATE + 1)::text AS tomorrow");
+
+      const early = await teacher.request("/teacher/attendance", { method: "PUT", body: {
+        ...base, onDate: tomorrow, marks: [{ studentId, state: "PRESENT" }],
+      } });
+      assert.equal(early.status, 400, JSON.stringify(early.payload));
+      assert.equal(early.payload.code, "FUTURE_DAY");
+
+      const stranger = await teacher.request("/teacher/attendance", { method: "PUT", body: {
+        ...base, marks: [{ studentId: 99999999, state: "PRESENT" }],
+      } });
+      assert.equal(stranger.status, 400);
+      assert.equal(stranger.payload.code, "STUDENT_NOT_IN_CLASS");
+
+      const nonsense = await teacher.request("/teacher/attendance", { method: "PUT", body: {
+        ...base, marks: [{ studentId, state: "TRUANT" }],
+      } });
+      assert.equal(nonsense.status, 400);
+
+      const other = createClient(harness.baseUrl);
+      await other.signIn(byName["demo-teacher-b"]);
+      assert.equal((await other.request("/teacher/attendance", { method: "PUT", body: {
+        ...base, marks: [{ studentId, state: "PRESENT" }],
+      } })).status, 403);
+    });
+  });
+
   describe("the exercise book is marked, and silence is not a verdict", () => {
     let admin, teacher, child, klass, subject, studentId, day;
     before(async () => {

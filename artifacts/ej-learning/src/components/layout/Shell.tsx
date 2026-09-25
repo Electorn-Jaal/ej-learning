@@ -26,7 +26,15 @@ const STUDENT_NAV = [
   { href: "/", label: "Өнөөдрийн хичээл", icon: Sun },
   { href: "/schedule", label: "Хуваарь", icon: CalendarDays },
   { href: "/subjects", label: "Миний хичээлүүд", icon: BookOpen },
+  { href: "/exams", label: "Шалгалт", icon: ClipboardCheck },
   { href: "/progress", label: "Миний ахиц", icon: TrendingUp },
+]
+
+// A parent's whole product. One page, because a parent came to find out how
+// their child is getting on, and a menu of five ways to ask that question is
+// four ways to pick the wrong one.
+const GUARDIAN_NAV = [
+  { href: "/", label: "Миний хүүхэд", icon: Users },
 ]
 
 // What every teacher gets. Looking at a class is not the same as taking one
@@ -35,7 +43,8 @@ const STUDENT_NAV = [
 const TEACHER_NAV = [
   { href: "/teacher", label: "Хяналтын самбар", icon: LayoutDashboard },
   { href: "/teacher/schedule", label: "Хуваарь", icon: CalendarDays },
-  { href: "/teacher/results", label: "Шалгалт", icon: ClipboardCheck },
+  { href: "/teacher/exams", label: "Шалгалт", icon: ClipboardCheck },
+  { href: "/teacher/results", label: "Өдрийн сорил", icon: ClipboardCheck },
   { href: "/teacher/analytics", label: "Дүн шинжилгээ", icon: BarChart3 },
   { href: "/teacher/productive", label: "Бичих, ярих дүгнэлт", icon: PenLine },
   { href: "/teacher/catalog", label: "Хичээлийн агуулга", icon: BookOpen },
@@ -56,6 +65,7 @@ const TEACHING_ONLY = [
 // is not connected to anything.
 const ADMIN_ONLY = [
   { href: "/teacher/staff", label: "Ажилтны бүртгэл", icon: Users },
+  { href: "/teacher/guardians", label: "Эцэг эхийн бүртгэл", icon: Users },
   { href: "/teacher/books", label: "Ном ба сэдэв", icon: Library },
   { href: "/teacher/content-links", label: "Сэдвийн холбоо", icon: Network },
   { href: "/teacher/integrations", label: "Холболтууд", icon: Database },
@@ -106,6 +116,7 @@ const TODAY = new Intl.DateTimeFormat("mn-MN", {
 const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Админ",
   TEACHER: "Багш",
+  GUARDIAN: "Эцэг эх",
   STUDENT: "Сурагч",
 }
 
@@ -240,17 +251,22 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   const staff = hasRole(user, "TEACHER", "ADMIN")
   const admin = hasRole(user, "ADMIN")
+  // Staff first: an administrator who is also somebody's parent is at work
+  // when they sign in here.
+  const guardian = !staff && hasRole(user, "GUARDIAN")
   const navItems = staff
     ? [
         ...TEACHER_NAV,
         ...(user.takesLessons || admin ? TEACHING_ONLY : []),
         ...(admin ? ADMIN_ONLY : []),
       ]
-    : STUDENT_NAV
+    : guardian
+      ? GUARDIAN_NAV
+      : STUDENT_NAV
   // An account can hold several roles; name the most privileged one.
   const roleLabel =
     ROLE_LABEL[
-      (["ADMIN", "TEACHER", "STUDENT"] as const).find((role) =>
+      (["ADMIN", "TEACHER", "GUARDIAN", "STUDENT"] as const).find((role) =>
         user.roles.includes(role),
       ) ?? "STUDENT"
     ]

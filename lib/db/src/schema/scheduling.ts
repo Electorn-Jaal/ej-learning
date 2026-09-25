@@ -408,6 +408,102 @@ export const notebookMarksInLearning = learning.table(
 );
 
 /**
+ * Who was in the room.
+ *
+ * Four states are written down - present, late, absent, excused - and a fifth
+ * is the absence of a row. The fifth is why this is a table of marks and not a
+ * column with a default, the same reason the exercise book has one: "not
+ * registered" and "did not come" are different facts about a child, and a
+ * school that collapses them tells a parent their child truanted when the
+ * truth is that nobody took the register.
+ *
+ * timetableSlotId is how the school's own rule is written down. Up to year 5
+ * a class is with one teacher all day and the register is taken once, so the
+ * slot is null and the row is the day. From year 6 the children move between
+ * teachers and the register is taken per lesson, so the slot is the period.
+ * The service decides which by the class's year; the column just records it.
+ *
+ * Participation is a separate axis and deliberately toothless: three words a
+ * teacher may leave unsaid, worth no marks, and not a second attendance state.
+ * A child who was present and quiet is present.
+ */
+export const attendanceMarksInLearning = learning.table(
+  "attendance_marks",
+  {
+    id: bigint({ mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity({
+        name: "learning.attendance_marks_id_seq",
+        startWith: 1,
+        increment: 1,
+        minValue: 1,
+        cache: 1,
+      }),
+    classId: bigint("class_id", { mode: "number" }).notNull(),
+    studentId: bigint("student_id", { mode: "number" }).notNull(),
+    onDate: date("on_date").notNull(),
+    // Null for a whole-day register, which is what years 1 to 5 keep.
+    timetableSlotId: bigint("timetable_slot_id", { mode: "number" }),
+    subjectId: bigint("subject_id", { mode: "number" }),
+    state: varchar({ length: 16 }).notNull(),
+    participation: varchar({ length: 16 }),
+    note: text(),
+    markedBy: bigint("marked_by", { mode: "number" }),
+    markedAt: timestamp("marked_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("attendance_marks_key").on(
+      table.studentId, table.onDate, table.timetableSlotId,
+    ).nullsNotDistinct(),
+    check(
+      "attendance_marks_state_check",
+      sql`state IN ('PRESENT', 'LATE', 'ABSENT', 'EXCUSED')`,
+    ),
+    check(
+      "attendance_marks_participation_check",
+      sql`participation IS NULL OR participation IN ('HIGH', 'GOOD', 'WATCH')`,
+    ),
+    index("idx_attendance_marks_day").using(
+      "btree",
+      table.classId.asc().nullsLast(),
+      table.onDate.asc().nullsLast(),
+    ),
+    index("idx_attendance_marks_student").using(
+      "btree",
+      table.studentId.asc().nullsLast(),
+      table.onDate.desc().nullsLast(),
+    ),
+    foreignKey({
+      columns: [table.classId],
+      foreignColumns: [classesInCore.id],
+      name: "attendance_marks_class_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.studentId],
+      foreignColumns: [studentsInCore.id],
+      name: "attendance_marks_student_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.timetableSlotId],
+      foreignColumns: [timetableSlotsInLearning.id],
+      name: "attendance_marks_timetable_slot_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.subjectId],
+      foreignColumns: [subjectsInCore.id],
+      name: "attendance_marks_subject_id_fkey",
+    }),
+    foreignKey({
+      columns: [table.markedBy],
+      foreignColumns: [usersInCore.id],
+      name: "attendance_marks_marked_by_fkey",
+    }),
+  ],
+);
+
+/**
  * Work assigned to one student on one day.
  *
  * class_schedule answers "what is this class studying today", which is the

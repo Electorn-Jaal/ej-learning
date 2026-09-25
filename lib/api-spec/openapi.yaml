@@ -1404,6 +1404,582 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /teacher/exams:
+    get:
+      operationId: getTeacherExams
+      tags: [teacher]
+      summary: Exams set for a class
+      parameters:
+        - in: query
+          name: classId
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: subjectId
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Sittings, newest window first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ExamSummary"
+        "403":
+          description: Not a teacher of that class
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    post:
+      operationId: createExam
+      tags: [teacher]
+      summary: Set an exam for a class, a group, or named children
+      description: >
+        A paper is a set of questions; a sitting is a class, a window and an
+        audience. They are made together here because a paper nobody sits is
+        not a thing a teacher wants to have made.
+
+        Questions may be named, drawn at random, or both. Drawing is not a
+        shortcut: it is what stops a paper set once being the same paper next
+        year. Naming is how a teacher insists on the question they meant to
+        ask. What is named is asked, and the draw fills the rest.
+
+        An empty studentIds is the whole register, which is the ordinary case.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExamInput"
+      responses:
+        "201":
+          description: Set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExamCreated"
+        "400":
+          description: A bad window, no questions, or a child who is not in the class
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Not a teacher of that class or subject
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /teacher/exams/{sittingId}:
+    get:
+      operationId: getTeacherExam
+      tags: [teacher]
+      summary: One exam, with the key and who has sat it
+      parameters:
+        - in: path
+          name: sittingId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The paper and the register
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeacherExam"
+        "403":
+          description: Not a teacher of that class or subject
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: No such exam
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /teacher/exams/{sittingId}/reopen:
+    post:
+      operationId: reopenExam
+      tags: [teacher]
+      summary: Let named children sit again
+      description: >
+        A child cannot sit a paper twice on their own - that is what makes it a
+        paper rather than practice - so the only way to another go is a teacher
+        deciding there should be one. The attempt already made is kept.
+      parameters:
+        - in: path
+          name: sittingId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReopenExamInput"
+      responses:
+        "200":
+          description: Reopened
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReopenExamResult"
+        "400":
+          description: No children named, or one who is not in the class
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Not a teacher of that class or subject
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /teacher/exams/{sittingId}/answers:
+    put:
+      operationId: releaseExamAnswers
+      tags: [teacher]
+      summary: Release the key to the children, or take it back
+      description: >
+        The same rule the daily check follows, and it bites harder here: a
+        paper is sat once, and a child who sees the answers while a classmate
+        is still writing has been handed the marks.
+      parameters:
+        - in: path
+          name: sittingId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReleaseAnswersInput"
+      responses:
+        "200":
+          description: Set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReleaseAnswersResult"
+        "403":
+          description: Not a teacher of that class or subject
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /teacher/exams/{sittingId}/entry:
+    post:
+      operationId: enterPaperAnswers
+      tags: [teacher]
+      summary: Enter what one child wrote on a paper exam
+      description: >
+        The written half of UC10. A paper sitting has already happened by the
+        time anybody types it in, so there is no window here - a teacher
+        writing it up on Sunday evening is not sitting it late.
+
+        Marked by the same rule as an online sitting, because a school that
+        cannot compare a paper exam with an online one has two systems rather
+        than one. Re-entering is a second attempt, which is what a teacher gets
+        after reopening the sitting for that child.
+      parameters:
+        - in: path
+          name: sittingId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaperEntryInput"
+      responses:
+        "201":
+          description: Marked and stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExamResult"
+        "400":
+          description: Not a paper sitting, a child it was not set for, or a score outside the question
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Not a teacher of that class or subject
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: This child's answers are already in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /student/exams:
+    get:
+      operationId: getStudentExams
+      tags: [student]
+      summary: The exams set for me
+      responses:
+        "200":
+          description: Recent and current sittings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StudentExamSummary"
+        "403":
+          description: Not linked to a student record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /student/exams/{sittingId}:
+    get:
+      operationId: getStudentExam
+      tags: [student]
+      summary: One exam to sit
+      description: >
+        The questions come back only while the window is open and a go is
+        left. Before it opens there is nothing to read, and afterwards a paper
+        left on screen is a paper that leaves the room.
+      parameters:
+        - in: path
+          name: sittingId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: The paper, without the key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentExam"
+        "403":
+          description: Not set for this child
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: No such exam
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /student/exams/{sittingId}/attempt:
+    post:
+      operationId: submitExam
+      tags: [student]
+      summary: Sit the exam
+      parameters:
+        - in: path
+          name: sittingId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExamAttemptInput"
+      responses:
+        "201":
+          description: Marked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExamResult"
+        "403":
+          description: Not set for this child
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: No such exam
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: Outside the window, or already sat
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /guardian/children:
+    get:
+      operationId: getMyChildren
+      tags: [guardian]
+      summary: The children this account reads
+      description: >
+        One child is the ordinary case and the screen goes straight to them;
+        several means a switcher. Active links only - a second parent is added
+        by retiring the first, and a retired link is history rather than
+        access.
+      responses:
+        "200":
+          description: Children
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GuardianChild"
+        "403":
+          description: Not a guardian account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /guardian/day:
+    get:
+      operationId: getChildDay
+      tags: [guardian]
+      summary: One child's day, exactly as the child sees it
+      description: >
+        The same assembly the child's own screen uses, not a parallel one. The
+        day a parent is shown something their child is not is the day the
+        screen stops being worth trusting.
+      parameters:
+        - in: query
+          name: studentId
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: on
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+      responses:
+        "200":
+          description: The day
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentToday"
+        "403":
+          description: Not this account's child
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /guardian/record:
+    get:
+      operationId: getChildRecord
+      tags: [guardian]
+      summary: The fortnight behind - register, exercise books, exam scores, teachers
+      description: >
+        A fortnight by default, because the question a parent actually has is
+        about this week and last. Attendance rows come in whichever shape the
+        year keeps: one a day up to year 5, one a period from year 6.
+      parameters:
+        - in: query
+          name: studentId
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: from
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+        - in: query
+          name: to
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+      responses:
+        "200":
+          description: The record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChildRecord"
+        "403":
+          description: Not this account's child
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /admin/guardians:
+    get:
+      operationId: getGuardianAccounts
+      tags: [admin]
+      summary: Parent accounts and the children they read
+      responses:
+        "200":
+          description: Accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GuardianAccount"
+        "403":
+          description: Administrators only
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /admin/guardians/accounts:
+    post:
+      operationId: createGuardian
+      tags: [admin]
+      summary: Make a parent an account, and link it to a child
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GuardianAccountInput"
+      responses:
+        "201":
+          description: Made
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuardianAccountCreated"
+        "400":
+          description: A name already taken, or a password too short
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Administrators only
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /admin/guardians/class-children:
+    get:
+      operationId: getClassChildren
+      tags: [admin]
+      summary: A class's children, saying which already have a parent account
+      parameters:
+        - in: query
+          name: classId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Children
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClassChild"
+        "403":
+          description: Administrators only
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /admin/guardians/link:
+    post:
+      operationId: linkChild
+      tags: [admin]
+      summary: Point a parent's account at a child
+      description: >
+        Whatever link the child had is retired in the same breath: one live
+        account per child is the school's rule, held by the database rather
+        than by whoever remembers to check it. The retired link stays, so a
+        question in June about who could see what in March has an answer.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GuardianLinkInput"
+      responses:
+        "200":
+          description: Linked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuardianLinkResult"
+        "403":
+          description: Administrators only
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: No such child
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /admin/guardians/unlink:
+    post:
+      operationId: unlinkChild
+      tags: [admin]
+      summary: Retire a parent's link to a child
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GuardianLinkInput"
+      responses:
+        "200":
+          description: Retired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuardianLinkResult"
+        "403":
+          description: Administrators only
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /teacher/attendance:
+    put:
+      operationId: markAttendance
+      tags: [teacher]
+      summary: Take the register
+      description: >
+        Up to year 5 the class is with one teacher all day and the register is
+        taken once, so timetableSlotId is left out. From year 6 the children
+        move between teachers and it is taken per lesson, so it is required.
+        The system holds the rule rather than trusting the screen to.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttendanceInput"
+      responses:
+        "200":
+          description: Registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttendanceResult"
+        "400":
+          description: A day that has not happened, a child not in the class, or the wrong kind of register for the year
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Not a teacher of that class
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /teacher/notebook:
     put:
       operationId: markNotebooks
@@ -2755,7 +3331,13 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ClassDayStudent"
-      required: [classId, className, date, lessons, students]
+        attendancePerLesson:
+          description: >
+            Whether this class's register is taken per lesson or once a day.
+            The school's own rule, carried here so the screen does not have to
+            guess it from the year.
+          type: boolean
+      required: [classId, className, date, lessons, students, attendancePerLesson]
     ClassDayLesson:
       type: object
       properties:
@@ -2894,6 +3476,496 @@ components:
         fileUrl:
           type: ["string", "null"]
       required: [materialId, title, pageFrom, pageTo, bookPageFrom, bookPageTo, filePage, fileUrl]
+    ReopenExamInput:
+      type: object
+      required: [studentIds]
+      properties:
+        studentIds:
+          type: array
+          items: { type: integer }
+    ReopenExamResult:
+      type: object
+      required: [reopened]
+      properties:
+        reopened: { type: integer }
+    ReleaseAnswersInput:
+      type: object
+      required: [open]
+      properties:
+        open: { type: boolean }
+    ReleaseAnswersResult:
+      type: object
+      required: [answersOpen]
+      properties:
+        answersOpen: { type: boolean }
+    PaperEntryInput:
+      type: object
+      description: >
+        What one child wrote on paper, question by question, in the order the
+        paper was printed in. Entering a total instead would be quicker and
+        would throw away the only thing that makes an exam useful afterwards:
+        which questions the class got wrong.
+      required: [studentId, answers]
+      properties:
+        studentId: { type: integer }
+        answers:
+          type: array
+          items:
+            type: object
+            required: [itemId]
+            properties:
+              itemId: { type: integer }
+              optionId:
+                description: The option the child picked, for a question with a key.
+                type: ["integer", "null"]
+              awarded:
+                description: >
+                  A score the teacher awarded, for a question a key cannot
+                  settle - the ones with a rubric rather than four boxes. Where
+                  both arrive this wins: a person looked at the page.
+                type: ["number", "null"]
+    ExamAttemptInput:
+      type: object
+      required: [answers]
+      properties:
+        answers:
+          type: array
+          items:
+            type: object
+            required: [itemId]
+            properties:
+              itemId: { type: integer }
+              optionId:
+                type: ["integer", "null"]
+    ExamKind:
+      type: string
+      enum: [UNIT, TERM, YEAR, DIAGNOSTIC]
+    ExamInput:
+      type: object
+      required: [classId, subjectId, examKind, title, opensAt, closesAt]
+      properties:
+        classId: { type: integer }
+        subjectId: { type: integer }
+        examKind:
+          $ref: "#/components/schemas/ExamKind"
+        title:
+          type: string
+          maxLength: 300
+        instructions:
+          type: ["string", "null"]
+        opensAt:
+          description: ISO 8601 instant. Both ends are required - an exam that never closes is homework.
+          type: string
+        closesAt:
+          type: string
+        itemIds:
+          description: Questions the teacher insists on. Asked first; the draw fills the rest.
+          type: ["array", "null"]
+          items: { type: integer }
+        drawCount:
+          description: How many further questions to draw at random from the year's bank.
+          type: ["integer", "null"]
+          minimum: 0
+          maximum: 100
+        studentIds:
+          description: >
+            Named children. Empty or absent means the whole register, which is
+            the ordinary case.
+          type: ["array", "null"]
+          items: { type: integer }
+        onPaper:
+          description: >
+            Sat on paper, in the room, with the teacher entering afterwards
+            what each child wrote. The questions come from the same bank and
+            carry the same numbers, which is the point: a paper sitting the
+            system cannot line up question for question produces marks nobody
+            can trace. Such a sitting is never offered to a child online.
+          type: ["boolean", "null"]
+    ExamCreated:
+      type: object
+      required: [sittingId, questionCount]
+      properties:
+        sittingId: { type: integer }
+        questionCount: { type: integer }
+    ExamSummary:
+      type: object
+      required: [sittingId, paperId, title, examKind, subjectId, subjectName, opensAt, closesAt, answersOpen, wholeClass, onPaper, questionCount, invited, sat]
+      properties:
+        sittingId: { type: integer }
+        paperId: { type: integer }
+        title: { type: string }
+        examKind: { type: string }
+        subjectId: { type: integer }
+        subjectName: { type: string }
+        opensAt: { type: string }
+        closesAt: { type: string }
+        answersOpen: { type: boolean }
+        wholeClass: { type: boolean }
+        onPaper:
+          description: Sat in the room; the teacher enters the answers.
+          type: boolean
+        questionCount: { type: integer }
+        invited:
+          description: How many children it is set for.
+          type: integer
+        sat:
+          description: How many have sat it.
+          type: integer
+    ExamOption:
+      type: object
+      required: [optionId, text]
+      properties:
+        optionId: { type: integer }
+        text: { type: string }
+        isCorrect:
+          description: Present only on the teacher's copy.
+          type: boolean
+    ExamQuestion:
+      type: object
+      required: [itemId, itemOrder, title, stimulus, maxScore, options]
+      properties:
+        itemId: { type: integer }
+        itemOrder: { type: integer }
+        title: { type: string }
+        stimulus:
+          description: What the child is given before the question - a passage, a line read aloud.
+          type: ["string", "null"]
+        maxScore: { type: number }
+        options:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExamOption"
+    ExamStudentResult:
+      type: object
+      required: [studentId, studentName, studentCode, attemptId, score, maxScore, attemptedAt, extraAttempts]
+      properties:
+        studentId: { type: integer }
+        studentName: { type: string }
+        studentCode: { type: string }
+        attemptId: { type: ["integer", "null"] }
+        score: { type: ["number", "null"] }
+        maxScore: { type: ["number", "null"] }
+        attemptedAt: { type: ["string", "null"] }
+        extraAttempts:
+          description: How many further goes the teacher has granted.
+          type: integer
+    TeacherExam:
+      type: object
+      required: [sittingId, paperId, classId, subjectId, title, examKind, instructions, gradeLevelId, opensAt, closesAt, answersOpen, wholeClass, onPaper, questions, results]
+      properties:
+        sittingId: { type: integer }
+        paperId: { type: integer }
+        classId: { type: integer }
+        subjectId: { type: integer }
+        title: { type: string }
+        examKind: { type: string }
+        instructions: { type: ["string", "null"] }
+        gradeLevelId: { type: ["integer", "null"] }
+        opensAt: { type: string }
+        closesAt: { type: string }
+        answersOpen: { type: boolean }
+        wholeClass: { type: boolean }
+        onPaper: { type: boolean }
+        questions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExamQuestion"
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExamStudentResult"
+    StudentExamSummary:
+      type: object
+      required: [sittingId, title, examKind, subjectName, opensAt, closesAt, questionCount, attemptsUsed, attemptsAllowed, score, maxScore, answersOpen, isOpen]
+      properties:
+        sittingId: { type: integer }
+        title: { type: string }
+        examKind: { type: string }
+        subjectName: { type: string }
+        opensAt: { type: string }
+        closesAt: { type: string }
+        questionCount: { type: integer }
+        attemptsUsed: { type: integer }
+        attemptsAllowed: { type: integer }
+        score: { type: ["number", "null"] }
+        maxScore: { type: ["number", "null"] }
+        answersOpen: { type: boolean }
+        isOpen:
+          description: The window is open and a go is left.
+          type: boolean
+    StudentExam:
+      type: object
+      required: [sittingId, title, examKind, instructions, opensAt, closesAt, isOpen, attemptsUsed, attemptsAllowed, answersOpen, questions]
+      properties:
+        sittingId: { type: integer }
+        title: { type: string }
+        examKind: { type: string }
+        instructions: { type: ["string", "null"] }
+        opensAt: { type: string }
+        closesAt: { type: string }
+        isOpen: { type: boolean }
+        attemptsUsed: { type: integer }
+        attemptsAllowed: { type: integer }
+        answersOpen: { type: boolean }
+        questions:
+          description: Empty before the window opens and after the go is spent.
+          type: array
+          items:
+            $ref: "#/components/schemas/ExamQuestion"
+    ExamResult:
+      type: object
+      required: [attemptId, score, maxScore, answersOpen, results]
+      properties:
+        attemptId: { type: integer }
+        score: { type: number }
+        maxScore: { type: number }
+        answersOpen: { type: boolean }
+        results:
+          type: array
+          items:
+            type: object
+            required: [itemId, correct, correctOptionIds]
+            properties:
+              itemId: { type: integer }
+              correct: { type: boolean }
+              correctOptionIds:
+                description: Empty until the teacher releases the key.
+                type: array
+                items: { type: integer }
+    GuardianChild:
+      type: object
+      required: [studentId, displayName, studentCode, className, gradeLevel, relation]
+      properties:
+        studentId: { type: integer }
+        displayName: { type: string }
+        studentCode: { type: string }
+        className: { type: ["string", "null"] }
+        gradeLevel: { type: ["integer", "null"] }
+        relation:
+          description: What this account is to the child, where the school wrote it down.
+          type: ["string", "null"]
+    ChildAttendanceRow:
+      type: object
+      required: [onDate, timetableSlotId, periodNo, subjectName, state, participation, note]
+      properties:
+        onDate:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+        timetableSlotId:
+          description: Null on a whole-day register, which is what years 1 to 5 keep.
+          type: [integer, "null"]
+        periodNo: { type: [integer, "null"] }
+        subjectName: { type: ["string", "null"] }
+        state:
+          $ref: "#/components/schemas/AttendanceState"
+        participation:
+          oneOf:
+            - $ref: "#/components/schemas/ParticipationMark"
+            - type: "null"
+        note: { type: ["string", "null"] }
+    ChildNotebookRow:
+      type: object
+      required: [onDate, subjectName, state, comment]
+      properties:
+        onDate:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+        subjectName: { type: ["string", "null"] }
+        state:
+          $ref: "#/components/schemas/NotebookState"
+        comment: { type: ["string", "null"] }
+    ChildExamRow:
+      type: object
+      description: >
+        Scores and dates. The questions and the key are never here: a parent
+        reading the answers over a child's shoulder is exactly the route by
+        which a paper the rest of the class is still sitting leaks.
+      required: [sittingId, title, examKind, subjectName, satAt, score, maxScore]
+      properties:
+        sittingId: { type: integer }
+        title: { type: string }
+        examKind: { type: string }
+        subjectName: { type: string }
+        satAt: { type: ["string", "null"] }
+        score: { type: ["number", "null"] }
+        maxScore: { type: ["number", "null"] }
+    ChildTeacherRow:
+      type: object
+      required: [subjectName, teacherName, isClassTeacher]
+      properties:
+        subjectName: { type: ["string", "null"] }
+        teacherName: { type: string }
+        isClassTeacher: { type: boolean }
+    ChildRecord:
+      type: object
+      required: [studentId, from, to, attendance, notebook, exams, teachers]
+      properties:
+        studentId: { type: integer }
+        from:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+        to:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+        attendance:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChildAttendanceRow"
+        notebook:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChildNotebookRow"
+        exams:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChildExamRow"
+        teachers:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChildTeacherRow"
+    GuardianAccount:
+      type: object
+      required: [userId, username, displayName, isActive, children]
+      properties:
+        userId: { type: integer }
+        username: { type: string }
+        displayName: { type: string }
+        isActive: { type: boolean }
+        children:
+          type: array
+          items:
+            type: object
+            required: [studentId, studentName, relation]
+            properties:
+              studentId: { type: integer }
+              studentName: { type: string }
+              relation: { type: ["string", "null"] }
+    GuardianAccountInput:
+      type: object
+      description: >
+        The password is chosen by the administrator sitting with the parent,
+        because this school hands out credentials in person. It is never stored
+        in the clear and never returned again: a screen that can re-display a
+        password is a screen somebody will leave open.
+      required: [username, displayName, password]
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+        displayName:
+          type: string
+          maxLength: 300
+        password:
+          type: string
+          minLength: 8
+        studentId:
+          description: Link to this child at the same time, which is the ordinary case.
+          type: ["integer", "null"]
+    GuardianAccountCreated:
+      type: object
+      required: [userId, username]
+      properties:
+        userId: { type: integer }
+        username: { type: string }
+    ClassChild:
+      type: object
+      required: [studentId, displayName, studentCode, linked]
+      properties:
+        studentId: { type: integer }
+        displayName: { type: string }
+        studentCode: { type: string }
+        linked:
+          description: Whether a live guardian account already reads this child.
+          type: boolean
+    GuardianLinkInput:
+      type: object
+      required: [userId, studentId]
+      properties:
+        userId: { type: integer }
+        studentId: { type: integer }
+        relation:
+          type: ["string", "null"]
+          maxLength: 40
+    GuardianLinkResult:
+      type: object
+      required: [linked]
+      properties:
+        linked: { type: boolean }
+    AttendanceState:
+      description: >
+        UNREGISTERED is never stored - it is the absence of a mark - but it may
+        be sent, to take one off. "Not registered" and "did not come" are
+        different facts about a child, and a school that collapses them tells a
+        parent their child truanted when the truth is that nobody took the
+        register.
+      type: string
+      enum: [PRESENT, LATE, ABSENT, EXCUSED, UNREGISTERED]
+    ParticipationMark:
+      description: >
+        A separate axis and deliberately toothless: three words a teacher may
+        leave unsaid, worth no marks, and not a second attendance state. A
+        child who was present and quiet is present.
+      type: string
+      enum: [HIGH, GOOD, WATCH]
+    AttendanceMark:
+      type: object
+      description: >
+        One verdict on one child. timetableSlotId is null on a whole-day
+        register, which is what years 1 to 5 keep.
+      required: [timetableSlotId, state, participation, note]
+      properties:
+        timetableSlotId:
+          type: [integer, "null"]
+        state:
+          $ref: "#/components/schemas/AttendanceState"
+        participation:
+          oneOf:
+            - $ref: "#/components/schemas/ParticipationMark"
+            - type: "null"
+        note:
+          type: ["string", "null"]
+    AttendanceInput:
+      type: object
+      description: >
+        A whole register at once, because that is how it is taken: down the
+        class, then away. Children left out are left alone - unregistered is a
+        fact about the teacher's afternoon, not a verdict on a child.
+      required: [classId, onDate, marks]
+      properties:
+        classId: { type: integer }
+        onDate:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+        timetableSlotId:
+          description: >
+            The period. Required from year 6, where the children move between
+            teachers and a register taken in the morning says nothing about
+            who was in physics after lunch. Refused up to year 5, where the
+            class is with one teacher all day and six registers would be five
+            copies of one fact.
+          type: [integer, "null"]
+        marks:
+          type: array
+          items:
+            type: object
+            required: [studentId, state]
+            properties:
+              studentId: { type: integer }
+              state:
+                $ref: "#/components/schemas/AttendanceState"
+              participation:
+                oneOf:
+                  - $ref: "#/components/schemas/ParticipationMark"
+                  - type: "null"
+              note:
+                type: ["string", "null"]
+                maxLength: 500
+    AttendanceResult:
+      type: object
+      required: [marked]
+      properties:
+        marked: { type: integer }
     NotebookState:
       description: >
         What the teacher found in the book. UNCHECKED is never stored - it is
@@ -2937,7 +4009,14 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/NotebookMark"
-      required: [studentId, studentName, studentCode, attempts, notebook]
+        attendance:
+          description: >
+            The register entries for this child today - one for the day up to
+            year 5, one per period from year 6. Empty where nobody took it.
+          type: array
+          items:
+            $ref: "#/components/schemas/AttendanceMark"
+      required: [studentId, studentName, studentCode, attempts, notebook, attendance]
     NotebookInput:
       type: object
       description: >
@@ -3536,7 +4615,7 @@ components:
       required: [classId, className, gradeLevel, stage, days]
     UserRole:
       type: string
-      enum: [STUDENT, TEACHER, ADMIN]
+      enum: [STUDENT, TEACHER, ADMIN, GUARDIAN]
     AuthenticatedUser:
       type: object
       description: >
@@ -3616,7 +4695,7 @@ components:
         - status
     Role:
       type: string
-      enum: [student, teacher, admin]
+      enum: [student, teacher, admin, guardian]
     AssignmentStatus:
       type: string
       enum: [not_started, in_progress, pending_review, completed, unavailable]

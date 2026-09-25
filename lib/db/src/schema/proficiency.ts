@@ -6,6 +6,7 @@ import {
   foreignKey,
   index,
   numeric,
+  primaryKey,
   smallint,
   text,
   timestamp,
@@ -16,9 +17,12 @@ import { sql } from "drizzle-orm";
 import {
   answerSourceInAssessment,
   assessment,
+  classesInCore,
   content,
   diagnosticItemsInAssessment,
+  examPapersInAssessment,
   studentsInCore,
+  subjectsInCore,
 } from "./database";
 
 /**
@@ -106,6 +110,126 @@ export const diagnosticItemOptionsInAssessment = assessment.table(
       columns: [table.diagnosticItemId],
       foreignColumns: [diagnosticItemsInAssessment.id],
       name: "diagnostic_item_options_item_id_fkey",
+    }).onDelete("cascade"),
+  ],
+);
+
+/**
+ * One occasion on which a class sits a paper.
+ *
+ * A paper is a set of questions; a sitting is a class, a window, and an
+ * audience. The two are separate because the same term paper is given to 9а on
+ * Tuesday morning and to 9б on Wednesday afternoon, and a window written on the
+ * paper would make those the same event.
+ *
+ * The window has both ends. An exam that opens and never closes is not an
+ * exam - it is homework - and the closing time is what makes "sat it" mean the
+ * same thing for every child in the room.
+ *
+ * answersOpenAt is the same rule the daily check follows: the key waits for the
+ * teacher. Here it matters more, because a paper is sat once and a child who
+ * sees the answers before their classmate has finished has been handed the
+ * marks.
+ */
+export const examSittingsInAssessment = assessment.table(
+  "exam_sittings",
+  {
+    id: bigint({ mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity({
+        name: "assessment.exam_sittings_id_seq",
+        startWith: 1,
+        increment: 1,
+        minValue: 1,
+        cache: 1,
+      }),
+    examPaperId: bigint("exam_paper_id", { mode: "number" }).notNull(),
+    classId: bigint("class_id", { mode: "number" }).notNull(),
+    subjectId: bigint("subject_id", { mode: "number" }).notNull(),
+    opensAt: timestamp("opens_at", { withTimezone: true, mode: "string" }).notNull(),
+    closesAt: timestamp("closes_at", { withTimezone: true, mode: "string" }).notNull(),
+    answersOpenAt: timestamp("answers_open_at", { withTimezone: true, mode: "string" }),
+    // True: everybody on the register. False: only the children named in
+    // exam_sitting_students. Kept as a flag rather than inferred from an empty
+    // list, because "the whole class" and "nobody yet" are different
+    // intentions and a teacher building a sitting passes through both.
+    wholeClass: boolean("whole_class").default(true).notNull(),
+    // Sat on paper, in the room, with the teacher entering what each child
+    // wrote afterwards. The questions come from the same bank and are numbered
+    // the same way, which is the whole point: a paper sitting that the system
+    // cannot line up question for question produces marks nobody can trace.
+    //
+    // A paper sitting is never offered to a child online. It has already
+    // happened by the time anybody types it in.
+    onPaper: boolean("on_paper").default(false).notNull(),
+    // Who set it. No foreign key, for the reason exam_papers.created_by has
+    // none: core.users is declared in identity.ts, which already imports this
+    // side of the graph, and pointing back at it would make the two modules
+    // circular. The column is set from the application, which has the user row
+    // in hand when it writes it.
+    createdBy: bigint("created_by", { mode: "number" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    check("exam_sittings_window_check", sql`closes_at > opens_at`),
+    index("idx_exam_sittings_class").using(
+      "btree",
+      table.classId.asc().nullsLast(),
+      table.opensAt.desc().nullsLast(),
+    ),
+    foreignKey({
+      columns: [table.examPaperId],
+      foreignColumns: [examPapersInAssessment.id],
+      name: "exam_sittings_exam_paper_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.classId],
+      foreignColumns: [classesInCore.id],
+      name: "exam_sittings_class_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.subjectId],
+      foreignColumns: [subjectsInCore.id],
+      name: "exam_sittings_subject_id_fkey",
+    }),
+  ],
+);
+
+/**
+ * Who sits it, and who has been let in again.
+ *
+ * Two jobs in one table because they are the same fact seen twice: this child,
+ * on this sitting, is entitled to a go. When the sitting is for named children
+ * the row says they are one of them; when it is for the whole class the row
+ * appears only to record that a teacher gave somebody another chance.
+ *
+ * extraAttempts is how "the teacher may set it again" is written. A child
+ * cannot sit a paper twice on their own - that is what makes it a paper rather
+ * than practice - so the only way to a second go is a teacher deciding, and
+ * the decision is recorded next to the child it was made for.
+ */
+export const examSittingStudentsInAssessment = assessment.table(
+  "exam_sitting_students",
+  {
+    sittingId: bigint("sitting_id", { mode: "number" }).notNull(),
+    studentId: bigint("student_id", { mode: "number" }).notNull(),
+    invited: boolean().default(true).notNull(),
+    extraAttempts: smallint("extra_attempts").default(0).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.sittingId, table.studentId], name: "exam_sitting_students_pkey" }),
+    check("exam_sitting_students_extra_attempts_check", sql`extra_attempts >= 0`),
+    foreignKey({
+      columns: [table.sittingId],
+      foreignColumns: [examSittingsInAssessment.id],
+      name: "exam_sitting_students_sitting_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.studentId],
+      foreignColumns: [studentsInCore.id],
+      name: "exam_sitting_students_student_id_fkey",
     }).onDelete("cascade"),
   ],
 );

@@ -57,9 +57,11 @@ const StudentProfile = page(() => import('@/pages/student/Profile'));
 const StudentAssignment = page(() => import('@/pages/student/Assignment'));
 const StudentSubjectView = page(() => import('@/pages/student/SubjectView'));
 const StudentPlan = page(() => import('@/pages/student/Plan'));
+const StudentExams = page(() => import('@/pages/student/Exams'));
 const TeacherDashboard = page(() => import('@/pages/teacher/Dashboard'));
 const TeacherSchedule = page(() => import('@/pages/teacher/Schedule'));
 const TeacherQuizResults = page(() => import('@/pages/teacher/QuizResults'));
+const TeacherExams = page(() => import('@/pages/teacher/Exams'));
 const TeacherAnalytics = page(() => import('@/pages/teacher/Analytics'));
 const TeacherAssessment = page(() => import('@/pages/teacher/Assessment'));
 const AdminBooks = page(() => import('@/pages/admin/Books'));
@@ -69,7 +71,9 @@ const TeacherCatalog = page(() => import('@/pages/teacher/Catalog'));
 const TeacherClassDay = page(() => import('@/pages/teacher/ClassDay'));
 const TeacherProfile = page(() => import('@/pages/teacher/Profile'));
 const AdminStaff = page(() => import('@/pages/admin/Staff'));
+const AdminGuardians = page(() => import('@/pages/admin/Guardians'));
 const TeacherProductive = page(() => import('@/pages/teacher/Productive'));
+const GuardianChild = page(() => import('@/pages/guardian/Child'));
 
 const queryClient = new QueryClient();
 
@@ -88,6 +92,7 @@ function StudentRoutes() {
       <Route path="/" component={StudentToday} />
       <Route path="/schedule" component={StudentSchedule} />
       <Route path="/subjects" component={StudentSubjects} />
+      <Route path="/exams" component={StudentExams} />
       <Route path="/progress" component={StudentProgress} />
       <Route path="/profile" component={StudentProfile} />
       <Route path="/password" component={Password} />
@@ -114,6 +119,7 @@ function StaffRoutes({ admin, takesLessons }: { admin: boolean; takesLessons: bo
       {admin ? <Route path="/teacher/integrations" component={TeacherIntegrations} /> : null}
       <Route path="/teacher" component={TeacherDashboard} />
       <Route path="/teacher/schedule" component={TeacherSchedule} />
+      <Route path="/teacher/exams" component={TeacherExams} />
       <Route path="/teacher/results" component={TeacherQuizResults} />
       <Route path="/teacher/analytics" component={TeacherAnalytics} />
       {takesLessons || admin ? (
@@ -124,7 +130,23 @@ function StaffRoutes({ admin, takesLessons }: { admin: boolean; takesLessons: bo
       <Route path="/teacher/catalog" component={TeacherCatalog} />
       <Route path="/teacher/profile" component={TeacherProfile} />
       {admin ? <Route path="/teacher/staff" component={AdminStaff} /> : null}
+      {admin ? <Route path="/teacher/guardians" component={AdminGuardians} /> : null}
       <Route path="/teacher/password" component={Password} />
+      <Route component={NotFound} />
+    </Switch>
+  );
+}
+
+/**
+ * A parent reads and never writes, so their routes are a short list of their
+ * own rather than the student's with pieces taken out: a screen that has to
+ * remember to hide its buttons is a screen that will one day forget.
+ */
+function GuardianRoutes() {
+  return (
+    <Switch>
+      <Route path="/" component={GuardianChild} />
+      <Route path="/password" component={Password} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -138,16 +160,20 @@ function StaffRoutes({ admin, takesLessons }: { admin: boolean; takesLessons: bo
 function RoleRoutes({ user }: { user: AuthenticatedUser }) {
   const [location, navigate] = useLocation();
   const staff = hasRole(user, 'TEACHER', 'ADMIN');
+  // Staff first: an administrator who is also somebody's parent is at work
+  // when they sign in here, and their child's page is reachable through the
+  // register like any other.
+  const guardian = !staff && hasRole(user, 'GUARDIAN');
 
   useEffect(() => {
     if (staff && !location.startsWith('/teacher')) navigate('/teacher', { replace: true });
-  }, [staff, location, navigate]);
+    if (guardian && location.startsWith('/teacher')) navigate('/', { replace: true });
+  }, [staff, guardian, location, navigate]);
 
-  return staff ? (
-    <StaffRoutes admin={hasRole(user, 'ADMIN')} takesLessons={user.takesLessons} />
-  ) : (
-    <StudentRoutes />
-  );
+  if (staff) {
+    return <StaffRoutes admin={hasRole(user, 'ADMIN')} takesLessons={user.takesLessons} />;
+  }
+  return guardian ? <GuardianRoutes /> : <StudentRoutes />;
 }
 
 function RoutedErrorBoundary({ children }: { children: ReactNode }) {
