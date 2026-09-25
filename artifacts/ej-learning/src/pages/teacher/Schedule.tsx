@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'wouter'
+import { Link, useLocation, useSearch } from 'wouter'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   getGetTeacherLessonsQueryKey,
@@ -227,10 +227,19 @@ export default function TeacherSchedule() {
   const { user } = useSession()
   const admin = hasRole(user, 'ADMIN')
   const { data: classes, isLoading } = useGetTeacherClasses()
-  const [date, setDate] = useState(schoolToday)
-  const [selectedClass, setSelectedClass] = useState<string | null>(null)
-  const [selectedSubject, setSelectedSubject] = useState<string | null>(null)
-  const [view, setView] = useState<'list' | 'week'>('list')
+  const [, navigate] = useLocation()
+  const search = new URLSearchParams(useSearch())
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(search.get('on') ?? '') ? search.get('on')! : schoolToday()
+  const selectedClass = search.get('classId')
+  const selectedSubject = search.get('subjectId')
+  const view = search.get('view') === 'week' ? 'week' : 'list'
+  const update = (values: Record<string, string>) => {
+    const next = new URLSearchParams(search)
+    for (const [key, value] of Object.entries(values)) next.set(key, value)
+    navigate('/teacher/schedule?' + next.toString(), { replace: true })
+  }
+  const setDate = (on: string) => update({ on })
+  const setView = (view: string) => update({ view })
   const linked = useLinkedSelection()
 
   if (isLoading) return <Skeleton className="h-64 w-full" />
@@ -250,23 +259,27 @@ export default function TeacherSchedule() {
 
   return (
     <div className="space-y-2">
+      <nav aria-label="Журналын хэсгүүд" className="flex flex-wrap gap-2 pb-2 text-sm">
+        <span className="rounded bg-sidebar-active px-3 py-2 font-semibold" aria-current="page">Хичээл ба төлөвлөгөө</span>
+        <Link className="rounded px-3 py-2 hover:bg-sidebar-active" href={`/teacher/class/${classId}?subject=${subjectId ?? ''}&on=${date}&view=lesson`}>Өдрийн хичээл</Link>
+        <Link className="rounded px-3 py-2 hover:bg-sidebar-active" href={`/teacher/class/${classId}?subject=${subjectId ?? ''}&on=${date}&view=students`}>Ирц ба дэвтэр</Link>
+      </nav>
       {/* One row, and it stays one row: the pickers run along the left, the
           view sits on the right. It used to wrap, so on a narrower window the
           two view buttons dropped under the pickers and the toolbar read as a
           column. Nothing wraps now - the selects shrink instead, which is why
           they carry min-w-0. */}
-      <header className="flex items-center gap-2">
+      <header className="flex flex-wrap items-center gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <select id="schedule-class" aria-label="Анги" className={SELECT_STYLE + ' w-auto min-w-0'}
             value={String(classId)} onChange={(event) => {
-              setSelectedClass(event.target.value)
-              setSelectedSubject('all')
+              update({ classId: event.target.value, subjectId: 'all' })
             }}>
             {uniqueClasses.map((klass) => <option key={klass.id} value={String(klass.id)}>{klass.name}</option>)}
           </select>
           <select id="schedule-subject" aria-label="Хичээл" className={SELECT_STYLE + ' w-auto min-w-[10rem]'}
             value={subjectId === null ? 'all' : String(subjectId)}
-            onChange={(event) => setSelectedSubject(event.target.value)}>
+            onChange={(event) => update({ classId: String(classId), subjectId: event.target.value })}>
             {hasAll || subjects.length === 0 ? <option value="all">Бүх хичээл</option> : null}
             {subjects.map((entry) => <option key={entry.subjectId} value={String(entry.subjectId)}>{entry.subject}</option>)}
           </select>
@@ -276,11 +289,11 @@ export default function TeacherSchedule() {
         <div className="ml-auto flex shrink-0" role="group" aria-label="Хуваарийн харагдац">
           <Button type="button" size="sm" variant={view === 'list' ? 'default' : 'outline'}
             aria-pressed={view === 'list'} onClick={() => setView('list')}>
-            <List className="h-3.5 w-3.5" />Жагсаалт
+            <List className="h-3.5 w-3.5" />Сургалтын төлөвлөгөө
           </Button>
           <Button type="button" size="sm" variant={view === 'week' ? 'default' : 'outline'}
             aria-pressed={view === 'week'} onClick={() => setView('week')} className="border-l border-border">
-            <CalendarRange className="h-3.5 w-3.5" />7 хоног
+            <CalendarRange className="h-3.5 w-3.5" />Цагийн хуваарь
           </Button>
         </div>
       </header>

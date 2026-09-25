@@ -1,4 +1,4 @@
-import { Link, useLocation } from "wouter"
+import { Link, useLocation, useSearch } from "wouter"
 import { useGetCurrentTerm } from "@workspace/api-client-react"
 import {
   LayoutDashboard, BookOpen, TrendingUp, User, Database, LogOut,
@@ -17,16 +17,19 @@ import {
 import { appPath } from "@/lib/app-path"
 import { cn } from "@/lib/utils"
 import { hasRole, useSession } from "@/lib/session"
+import { Navigation, type NavGroup } from './Navigation'
 
 // "Хичээлийн сан" is not here. It listed every approved lesson in the school
 // for a child to browse, which is not what a school day asks of them: the work
 // they have been set is on Өнөөдрийн хичээл, and what they have covered is on
 // Миний хичээлүүд. The page and its endpoint stay in the tree.
 const STUDENT_NAV = [
-  { href: "/", label: "Өнөөдрийн хичээл", icon: Sun },
-  { href: "/schedule", label: "Хуваарь", icon: CalendarDays },
+  { href: "/", label: "Өнөөдөр", icon: Sun },
+  { href: "/schedule", label: "Цагийн хуваарь", icon: CalendarDays },
   { href: "/subjects", label: "Миний хичээлүүд", icon: BookOpen },
   { href: "/exams", label: "Шалгалт", icon: ClipboardCheck },
+  { href: "/homework", label: "Нэмэлт ажил", icon: PenLine },
+  { href: "/library", label: "Номын сан", icon: Library },
   { href: "/progress", label: "Миний ахиц", icon: TrendingUp },
 ]
 
@@ -41,9 +44,11 @@ const GUARDIAN_NAV = [
 // of its lessons, so a class teacher who takes none of theirs still belongs
 // here: they read the timetable and the results, they just cannot change them.
 const TEACHER_NAV = [
-  { href: "/teacher", label: "Хяналтын самбар", icon: LayoutDashboard },
-  { href: "/teacher/schedule", label: "Хуваарь", icon: CalendarDays },
+  { href: "/teacher", label: "Нүүр", icon: LayoutDashboard },
+  { href: "/teacher/schedule", label: "Хичээл ба төлөвлөгөө", icon: CalendarDays },
   { href: "/teacher/exams", label: "Шалгалт", icon: ClipboardCheck },
+  { href: "/teacher/homework", label: "Нэмэлт ажил", icon: PenLine },
+  { href: "/teacher/library", label: "Номын сан", icon: Library },
   { href: "/teacher/results", label: "Өдрийн сорил", icon: ClipboardCheck },
   { href: "/teacher/analytics", label: "Дүн шинжилгээ", icon: BarChart3 },
   { href: "/teacher/productive", label: "Бичих, ярих дүгнэлт", icon: PenLine },
@@ -78,6 +83,7 @@ const ADMIN_ONLY = [
  * /subjects nav entry.
  */
 const EXTRA_TITLES: [string, string][] = [
+  ["/teacher/class/", "Журнал"],
   ["/teacher/profile", "Миний бүртгэл"],
   ["/subjects/", "Хувийн төлөвлөгөө"],
   ["/subject/", "Хичээл"],
@@ -248,6 +254,7 @@ function AccountMenu({
 export function Shell({ children }: { children: React.ReactNode }) {
   const { user, signOut, signingOut } = useSession()
   const [location] = useLocation()
+  const search = useSearch()
   const { data: term } = useGetCurrentTerm()
 
   const staff = hasRole(user, "TEACHER", "ADMIN")
@@ -272,10 +279,45 @@ export function Shell({ children }: { children: React.ReactNode }) {
       ) ?? "STUDENT"
     ]
 
+  const select = (...paths: string[]) => navItems.filter((item) => paths.includes(item.href))
+  const groups: NavGroup[] = staff ? [
+    { label: '', items: select('/teacher') },
+    { label: 'Журнал', items: select('/teacher/schedule', '/teacher/assessment') },
+    { label: 'Ажил ба шалгалт', items: select('/teacher/homework', '/teacher/exams', '/teacher/results') },
+    { label: 'Сурагчдын ахиц', items: select('/teacher/analytics', '/teacher/productive') },
+    { label: 'Сургалтын материал', items: select('/teacher/library', '/teacher/catalog') },
+    { label: 'Сургуулийн мэдээлэл', items: select('/teacher/clubs') },
+    { label: 'Удирдлага', items: admin ? ADMIN_ONLY : [] },
+  ].filter((group) => group.items.length > 0) : guardian ? [
+    { label: '', items: navItems },
+  ] : [
+    { label: '', items: select('/') },
+    { label: 'Миний хичээлүүд', items: select('/subjects', '/schedule') },
+    { label: 'Миний ажлууд', items: select('/homework') },
+    { label: 'Шалгалт ба ахиц', items: select('/exams', '/progress') },
+    { label: 'Бие даан судлах', items: select('/library') },
+  ]
   const title = pageTitle(location, navItems)
 
-  const isActive = (href: string) =>
-    location === href || (href !== "/" && href !== "/teacher" && location.startsWith(href))
+  let activeHref = location.startsWith('/teacher/class/') ? '/teacher/schedule'
+    : location.startsWith('/subject/') || location.startsWith('/assignment/') ? '/subjects'
+    : navItems.filter((item) => location === item.href || (item.href !== '/' && item.href !== '/teacher' && location.startsWith(item.href + '/')))
+      .sort((a, b) => b.href.length - a.href.length)[0]?.href
+
+  // Keep the journal selection when returning through the sidebar too.
+  if (location.startsWith('/teacher/class/') || location === '/teacher/schedule') {
+    const params = new URLSearchParams(search)
+    if (location.startsWith('/teacher/class/')) {
+      params.set('classId', location.split('/').pop()!)
+      params.set('subjectId', params.get('subject') || 'all')
+      params.delete('subject')
+      params.delete('view')
+    }
+    const href = '/teacher/schedule?' + params.toString()
+    for (const group of groups) group.items = group.items.map((item) =>
+      item.href === '/teacher/schedule' ? { ...item, href } : item)
+    activeHref = href
+  }
 
   return (
     // A fixed frame, not a page that grows. It used to be min-h-screen while
@@ -320,33 +362,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             scrollbar for the case it cannot: an admin holds ten entries, and
             on a short window the list has to scroll here rather than make the
             sidebar taller than the screen. */}
-        <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto py-4">
-          {navItems.map((item) => {
-            const Icon = item.icon
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  // The active item is marked by a solid rule and weight, not
-                  // by a wash of the accent colour under text of that same
-                  // colour - that pairing is what makes a page look generated.
-                  "flex items-center gap-3 border-l-2 py-2 pl-3 pr-4 text-sm transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  // A lighter yellow, not white: the column is meant to be one
-                  // colour, and a white row would be a hole in it. That fill is
-                  // only 1.36:1 on its own, so the navy rule and the weight are
-                  // what actually say "you are here".
-                  isActive(item.href)
-                    ? "border-primary bg-sidebar-active font-semibold text-foreground"
-                    : "border-transparent font-medium text-foreground hover:bg-sidebar-active/60",
-                )}
-              >
-                <Icon className="h-4 w-4" />
-                <span>{item.label}</span>
-              </Link>
-            )
-          })}
-        </nav>
+        <Navigation groups={groups} activeHref={activeHref} />
         {/* The school year, not the account: the corner says what everything
             above it is about. Nothing is printed when today falls outside
             every recorded term - inventing a year from the month would be a
@@ -400,29 +416,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        <nav
-          className="md:hidden flex overflow-x-auto border-b border-border bg-card flex-shrink-0 hide-scrollbar scroll-smooth"
-          aria-label="Mobile Navigation"
-        >
-          {navItems.map((item) => {
-            const Icon = item.icon
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-2 px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-                  isActive(item.href)
-                    ? "border-b-2 border-primary font-semibold text-foreground"
-                    : "border-b-2 border-transparent text-muted-foreground",
-                )}
-              >
-                <Icon className="h-4 w-4" />
-                <span>{item.label}</span>
-              </Link>
-            )
-          })}
-        </nav>
+        <Navigation groups={groups} activeHref={activeHref} mobile />
 
         {/* The gutter is reserved whether or not the page is long enough to
             scroll. Without it a short screen has the full width and a long one
