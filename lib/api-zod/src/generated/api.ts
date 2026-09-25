@@ -8,6 +8,21 @@
 import * as zod from 'zod';
 
 
+/**
+ * @summary Approved textbooks for independent reading across all grades
+ */
+export const GetLibraryBooksResponseItem = zod.object({
+  "id": zod.number().int(),
+  "title": zod.string(),
+  "subjectName": zod.string(),
+  "grades": zod.array(zod.number().int()),
+  "hasFile": zod.boolean(),
+  "hasCover": zod.boolean(),
+  "filePages": zod.number().int().nullable()
+})
+export const GetLibraryBooksResponse = zod.array(GetLibraryBooksResponseItem)
+
+
 
 
 

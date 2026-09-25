@@ -1,6 +1,7 @@
 import express, { Router, type IRouter } from "express";
 import {
   GetAdminMaterialsResponse,
+  GetLibraryBooksResponse,
   GetMaterialOutlineResponse,
   GetSkillChainResponse,
   GetSkillMapResponse,
@@ -15,6 +16,8 @@ import { requireRole } from "../../middlewares/auth";
 import { badRequest, unauthorized } from "../../shared/http-error";
 import {
   listMaterials,
+  libraryBooks,
+  materialCover,
   materialFile,
   materialOutline,
   saveOutline,
@@ -27,6 +30,21 @@ import {
 
 const router: IRouter = Router();
 const asAdmin = requireRole("ADMIN");
+
+router.get("/content/library", requireRole("STUDENT", "TEACHER", "ADMIN"), async (_req, res, next) => {
+  try {
+    res.json(GetLibraryBooksResponse.parse(await libraryBooks()));
+  } catch (error) { next(error); }
+});
+
+router.get('/content/materials/:materialId/cover', requireRole('STUDENT', 'TEACHER', 'ADMIN'), async (req, res, next) => {
+  try {
+    const cover = await materialCover(materialId(req.params.materialId));
+    if (!cover) { res.status(404).json({ error: 'Номын хавтас бэлэн биш байна.', code: 'COVER_NOT_FOUND' }); return; }
+    res.type('image/jpeg').setHeader('Cache-Control', 'private, max-age=3600');
+    res.sendFile(cover, (error) => { if (error) next(error); });
+  } catch (error) { next(error); }
+});
 
 const materialId = (raw: unknown) => {
   const value = Number(raw);

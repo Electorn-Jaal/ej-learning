@@ -5,6 +5,17 @@
  * EJ Learning adaptive learning API
  * OpenAPI spec version: 0.1.0
  */
+export interface LibraryBook {
+  id: number;
+  title: string;
+  subjectName: string;
+  grades: number[];
+  hasFile: boolean;
+  hasCover: boolean;
+  /** @nullable */
+  filePages: number | null;
+}
+
 export interface TimetableStudentsInput {
   /** @items.minimum 1 */
   studentIds: number[];

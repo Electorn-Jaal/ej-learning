@@ -87,6 +87,7 @@ import type {
   HomeworkSubmitted,
   HomeworkSummary,
   ItemAnalysis,
+  LibraryBook,
   LoginInput,
   MarkableClass,
   MaterialOutline,
@@ -183,6 +184,83 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetLibraryBooksUrl = () => {
+
+
+
+
+  return `/api/content/library`
+}
+
+/**
+ * @summary Approved textbooks for independent reading across all grades
+ */
+export const getLibraryBooks = async ( options?: Parameters<typeof customFetch>[1]): Promise<LibraryBook[]> => {
+
+  return customFetch<LibraryBook[]>(getGetLibraryBooksUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLibraryBooksQueryKey = () => {
+    return [
+    `/api/content/library`
+    ] as const;
+    }
+
+
+export const getGetLibraryBooksQueryOptions = <TData = Awaited<ReturnType<typeof getLibraryBooks>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLibraryBooks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetLibraryBooksQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLibraryBooks>>> = ({ signal }) => getLibraryBooks({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLibraryBooks>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetLibraryBooksQueryResult = NonNullable<Awaited<ReturnType<typeof getLibraryBooks>>>
+export type GetLibraryBooksQueryError = ErrorType<void>
+
+
+/**
+ * @summary Approved textbooks for independent reading across all grades
+ */
+
+export function useGetLibraryBooks<TData = Awaited<ReturnType<typeof getLibraryBooks>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLibraryBooks>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetLibraryBooksQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetTimetableStudentsUrl = (slotId: number,) => {
 
