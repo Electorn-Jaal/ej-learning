@@ -16,3 +16,4 @@ export * from "./relations";
 export * from "./identity";
 export * from "./scheduling";
 export * from "./quiz";
+export * from "./diagnostic-plans";

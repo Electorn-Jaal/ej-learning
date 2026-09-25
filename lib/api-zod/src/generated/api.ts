@@ -8,6 +8,264 @@
 import * as zod from 'zod';
 
 
+
+
+
+
+export const GetDiagnosticCatalogQueryParams = zod.object({
+  "classId": zod.coerce.number().int().min(1),
+  "subjectId": zod.coerce.number().int().min(1)
+})
+
+export const getDiagnosticCatalogResponseResourcesItemOneTitleMax = 500;
+
+export const getDiagnosticCatalogResponseResourcesItemOneInstructionsMax = 10000;
+
+
+export const getDiagnosticCatalogResponseResourcesItemOneReferenceMax = 500;
+
+
+export const getDiagnosticCatalogResponseResourcesItemOneMapIdsMax = 100;
+
+
+
+export const GetDiagnosticCatalogResponse = zod.object({
+  "targets": zod.array(zod.object({
+  "mapId": zod.number().int(),
+  "topicId": zod.number().int(),
+  "topicName": zod.string(),
+  "skillId": zod.number().int(),
+  "skillName": zod.string()
+})),
+  "items": zod.array(zod.object({
+  "id": zod.number().int(),
+  "title": zod.string(),
+  "mapIds": zod.array(zod.number().int())
+})),
+  "resources": zod.array(zod.object({
+  "title": zod.string().min(1).max(getDiagnosticCatalogResponseResourcesItemOneTitleMax),
+  "kind": zod.enum(['CORE', 'SUPPLEMENT', 'EXERCISE', 'QUESTION']),
+  "instructions": zod.string().min(1).max(getDiagnosticCatalogResponseResourcesItemOneInstructionsMax),
+  "sourceMaterialId": zod.number().int().min(1).nullish(),
+  "reference": zod.string().max(getDiagnosticCatalogResponseResourcesItemOneReferenceMax).nullish(),
+  "mapIds": zod.array(zod.number().int().min(1)).min(1).max(getDiagnosticCatalogResponseResourcesItemOneMapIdsMax)
+}).and(zod.object({
+  "id": zod.number().int(),
+  "sourceTitle": zod.string().nullable()
+}))),
+  "sources": zod.array(zod.object({
+  "id": zod.number().int(),
+  "title": zod.string()
+}))
+})
+
+
+
+
+
+export const SetDiagnosticItemTargetsParams = zod.object({
+  "itemId": zod.coerce.number().int().min(1)
+})
+
+
+export const setDiagnosticItemTargetsBodyMapIdsMax = 100;
+
+
+
+export const SetDiagnosticItemTargetsBody = zod.object({
+  "mapIds": zod.array(zod.number().int().min(1)).max(setDiagnosticItemTargetsBodyMapIdsMax)
+})
+
+export const SetDiagnosticItemTargetsResponse = zod.object({
+  "id": zod.number().int()
+})
+
+
+export const createDiagnosticResourceBodyTitleMax = 500;
+
+export const createDiagnosticResourceBodyInstructionsMax = 10000;
+
+
+export const createDiagnosticResourceBodyReferenceMax = 500;
+
+
+export const createDiagnosticResourceBodyMapIdsMax = 100;
+
+
+
+export const CreateDiagnosticResourceBody = zod.object({
+  "title": zod.string().min(1).max(createDiagnosticResourceBodyTitleMax),
+  "kind": zod.enum(['CORE', 'SUPPLEMENT', 'EXERCISE', 'QUESTION']),
+  "instructions": zod.string().min(1).max(createDiagnosticResourceBodyInstructionsMax),
+  "sourceMaterialId": zod.number().int().min(1).nullish(),
+  "reference": zod.string().max(createDiagnosticResourceBodyReferenceMax).nullish(),
+  "mapIds": zod.array(zod.number().int().min(1)).min(1).max(createDiagnosticResourceBodyMapIdsMax)
+})
+
+export const CreateDiagnosticResourceResponse = zod.object({
+  "id": zod.number().int()
+})
+
+
+
+
+
+export const GetDiagnosticReportParams = zod.object({
+  "attemptId": zod.coerce.number().int().min(1)
+})
+
+export const getDiagnosticReportResponseResourcesItemOneTitleMax = 500;
+
+export const getDiagnosticReportResponseResourcesItemOneInstructionsMax = 10000;
+
+
+export const getDiagnosticReportResponseResourcesItemOneReferenceMax = 500;
+
+
+export const getDiagnosticReportResponseResourcesItemOneMapIdsMax = 100;
+
+
+
+export const getDiagnosticReportResponseEntriesItemTitleMax = 500;
+
+export const getDiagnosticReportResponseEntriesItemInstructionsMax = 10000;
+
+
+
+export const GetDiagnosticReportResponse = zod.object({
+  "attemptId": zod.number().int(),
+  "classId": zod.number().int(),
+  "subjectId": zod.number().int(),
+  "studentName": zod.string(),
+  "title": zod.string(),
+  "evidence": zod.array(zod.object({
+  "itemId": zod.number().int(),
+  "title": zod.string(),
+  "awarded": zod.number(),
+  "maxScore": zod.number(),
+  "targets": zod.array(zod.object({
+  "mapId": zod.number().int(),
+  "topicId": zod.number().int(),
+  "topicName": zod.string(),
+  "skillId": zod.number().int(),
+  "skillName": zod.string()
+}))
+})),
+  "resources": zod.array(zod.object({
+  "title": zod.string().min(1).max(getDiagnosticReportResponseResourcesItemOneTitleMax),
+  "kind": zod.enum(['CORE', 'SUPPLEMENT', 'EXERCISE', 'QUESTION']),
+  "instructions": zod.string().min(1).max(getDiagnosticReportResponseResourcesItemOneInstructionsMax),
+  "sourceMaterialId": zod.number().int().min(1).nullish(),
+  "reference": zod.string().max(getDiagnosticReportResponseResourcesItemOneReferenceMax).nullish(),
+  "mapIds": zod.array(zod.number().int().min(1)).min(1).max(getDiagnosticReportResponseResourcesItemOneMapIdsMax)
+}).and(zod.object({
+  "id": zod.number().int(),
+  "sourceTitle": zod.string().nullable()
+}))),
+  "revision": zod.number().int(),
+  "entries": zod.array(zod.object({
+  "mapId": zod.number().int().min(1),
+  "resourceId": zod.number().int().min(1).nullable(),
+  "title": zod.string().min(1).max(getDiagnosticReportResponseEntriesItemTitleMax),
+  "instructions": zod.string().min(1).max(getDiagnosticReportResponseEntriesItemInstructionsMax)
+})),
+  "note": zod.string(),
+  "updatedAt": zod.string().nullable()
+})
+
+
+
+
+
+export const SaveDiagnosticReviewParams = zod.object({
+  "attemptId": zod.coerce.number().int().min(1)
+})
+
+export const saveDiagnosticReviewBodyRevisionMin = 0;
+
+
+
+export const saveDiagnosticReviewBodyEntriesItemTitleMax = 500;
+
+export const saveDiagnosticReviewBodyEntriesItemInstructionsMax = 10000;
+
+export const saveDiagnosticReviewBodyEntriesMax = 100;
+
+export const saveDiagnosticReviewBodyNoteMax = 10000;
+
+
+
+export const SaveDiagnosticReviewBody = zod.object({
+  "revision": zod.number().int().min(saveDiagnosticReviewBodyRevisionMin),
+  "entries": zod.array(zod.object({
+  "mapId": zod.number().int().min(1),
+  "resourceId": zod.number().int().min(1).nullable(),
+  "title": zod.string().min(1).max(saveDiagnosticReviewBodyEntriesItemTitleMax),
+  "instructions": zod.string().min(1).max(saveDiagnosticReviewBodyEntriesItemInstructionsMax)
+})).max(saveDiagnosticReviewBodyEntriesMax),
+  "note": zod.string().max(saveDiagnosticReviewBodyNoteMax)
+})
+
+export const saveDiagnosticReviewResponseResourcesItemOneTitleMax = 500;
+
+export const saveDiagnosticReviewResponseResourcesItemOneInstructionsMax = 10000;
+
+
+export const saveDiagnosticReviewResponseResourcesItemOneReferenceMax = 500;
+
+
+export const saveDiagnosticReviewResponseResourcesItemOneMapIdsMax = 100;
+
+
+
+export const saveDiagnosticReviewResponseEntriesItemTitleMax = 500;
+
+export const saveDiagnosticReviewResponseEntriesItemInstructionsMax = 10000;
+
+
+
+export const SaveDiagnosticReviewResponse = zod.object({
+  "attemptId": zod.number().int(),
+  "classId": zod.number().int(),
+  "subjectId": zod.number().int(),
+  "studentName": zod.string(),
+  "title": zod.string(),
+  "evidence": zod.array(zod.object({
+  "itemId": zod.number().int(),
+  "title": zod.string(),
+  "awarded": zod.number(),
+  "maxScore": zod.number(),
+  "targets": zod.array(zod.object({
+  "mapId": zod.number().int(),
+  "topicId": zod.number().int(),
+  "topicName": zod.string(),
+  "skillId": zod.number().int(),
+  "skillName": zod.string()
+}))
+})),
+  "resources": zod.array(zod.object({
+  "title": zod.string().min(1).max(saveDiagnosticReviewResponseResourcesItemOneTitleMax),
+  "kind": zod.enum(['CORE', 'SUPPLEMENT', 'EXERCISE', 'QUESTION']),
+  "instructions": zod.string().min(1).max(saveDiagnosticReviewResponseResourcesItemOneInstructionsMax),
+  "sourceMaterialId": zod.number().int().min(1).nullish(),
+  "reference": zod.string().max(saveDiagnosticReviewResponseResourcesItemOneReferenceMax).nullish(),
+  "mapIds": zod.array(zod.number().int().min(1)).min(1).max(saveDiagnosticReviewResponseResourcesItemOneMapIdsMax)
+}).and(zod.object({
+  "id": zod.number().int(),
+  "sourceTitle": zod.string().nullable()
+}))),
+  "revision": zod.number().int(),
+  "entries": zod.array(zod.object({
+  "mapId": zod.number().int().min(1),
+  "resourceId": zod.number().int().min(1).nullable(),
+  "title": zod.string().min(1).max(saveDiagnosticReviewResponseEntriesItemTitleMax),
+  "instructions": zod.string().min(1).max(saveDiagnosticReviewResponseEntriesItemInstructionsMax)
+})),
+  "note": zod.string(),
+  "updatedAt": zod.string().nullable()
+})
+
+
 /**
  * @summary Approved textbooks for independent reading across all grades
  */

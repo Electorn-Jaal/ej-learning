@@ -46,6 +46,12 @@ import type {
   ClubMembersInput,
   ClubMembersResult,
   CurrentUser,
+  DiagnosticCatalog,
+  DiagnosticReport,
+  DiagnosticResourceInput,
+  DiagnosticReviewInput,
+  DiagnosticSaved,
+  DiagnosticTargetsInput,
   ExamAttemptInput,
   ExamCreated,
   ExamInput,
@@ -62,6 +68,7 @@ import type {
   GetClassDayParams,
   GetClassHomeworkParams,
   GetClassSkillsParams,
+  GetDiagnosticCatalogParams,
   GetItemAnalysisParams,
   GetStudentPlanParams,
   GetStudentScheduleParams,
@@ -184,6 +191,403 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   }
   return result;
 };
+
+export const getGetDiagnosticCatalogUrl = (params: GetDiagnosticCatalogParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/teacher/diagnostic-catalog?${stringifiedParams}` : `/api/teacher/diagnostic-catalog`
+}
+
+export const getDiagnosticCatalog = async (params: GetDiagnosticCatalogParams, options?: Parameters<typeof customFetch>[1]): Promise<DiagnosticCatalog> => {
+
+  return customFetch<DiagnosticCatalog>(getGetDiagnosticCatalogUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDiagnosticCatalogQueryKey = (params?: GetDiagnosticCatalogParams,) => {
+    return [
+    `/api/teacher/diagnostic-catalog`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetDiagnosticCatalogQueryOptions = <TData = Awaited<ReturnType<typeof getDiagnosticCatalog>>, TError = ErrorType<ApiError>>(params: GetDiagnosticCatalogParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDiagnosticCatalog>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDiagnosticCatalogQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDiagnosticCatalog>>> = ({ signal }) => getDiagnosticCatalog(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDiagnosticCatalog>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetDiagnosticCatalogQueryResult = NonNullable<Awaited<ReturnType<typeof getDiagnosticCatalog>>>
+export type GetDiagnosticCatalogQueryError = ErrorType<ApiError>
+
+
+
+export function useGetDiagnosticCatalog<TData = Awaited<ReturnType<typeof getDiagnosticCatalog>>, TError = ErrorType<ApiError>>(
+ params: GetDiagnosticCatalogParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDiagnosticCatalog>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetDiagnosticCatalogQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSetDiagnosticItemTargetsUrl = (itemId: number,) => {
+
+
+
+
+  return `/api/admin/diagnostic-items/${itemId}/targets`
+}
+
+export const setDiagnosticItemTargets = async (itemId: number,
+    diagnosticTargetsInput: DiagnosticTargetsInput, options?: Parameters<typeof customFetch>[1]): Promise<DiagnosticSaved> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<DiagnosticSaved>(getSetDiagnosticItemTargetsUrl(itemId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(diagnosticTargetsInput)
+  }
+);}
+
+
+
+
+
+export const getSetDiagnosticItemTargetsMutationKey = () => ['setDiagnosticItemTargets'] as const;
+
+export const getSetDiagnosticItemTargetsMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setDiagnosticItemTargets>>, TError,SetDiagnosticItemTargetsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setDiagnosticItemTargets>>, TError,SetDiagnosticItemTargetsMutationVariables, TContext> => {
+
+const mutationKey = getSetDiagnosticItemTargetsMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setDiagnosticItemTargets>>, SetDiagnosticItemTargetsMutationVariables> = (props) => {
+          const {itemId,data} = props ?? {};
+
+          return  setDiagnosticItemTargets(itemId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetDiagnosticItemTargetsMutationResult = NonNullable<Awaited<ReturnType<typeof setDiagnosticItemTargets>>>
+    export type SetDiagnosticItemTargetsMutationBody = BodyType<DiagnosticTargetsInput>
+    export type SetDiagnosticItemTargetsMutationError = ErrorType<ApiError>
+    export type SetDiagnosticItemTargetsMutationVariables = {itemId: number;data: BodyType<DiagnosticTargetsInput>}
+
+    export const useSetDiagnosticItemTargets = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setDiagnosticItemTargets>>, TError,SetDiagnosticItemTargetsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setDiagnosticItemTargets>>,
+        TError,
+        SetDiagnosticItemTargetsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSetDiagnosticItemTargetsMutationOptions(options));
+    }
+
+export const getCreateDiagnosticResourceUrl = () => {
+
+
+
+
+  return `/api/admin/diagnostic-resources`
+}
+
+export const createDiagnosticResource = async (diagnosticResourceInput: DiagnosticResourceInput, options?: Parameters<typeof customFetch>[1]): Promise<DiagnosticSaved> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<DiagnosticSaved>(getCreateDiagnosticResourceUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(diagnosticResourceInput)
+  }
+);}
+
+
+
+
+
+export const getCreateDiagnosticResourceMutationKey = () => ['createDiagnosticResource'] as const;
+
+export const getCreateDiagnosticResourceMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDiagnosticResource>>, TError,CreateDiagnosticResourceMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createDiagnosticResource>>, TError,CreateDiagnosticResourceMutationVariables, TContext> => {
+
+const mutationKey = getCreateDiagnosticResourceMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createDiagnosticResource>>, CreateDiagnosticResourceMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createDiagnosticResource(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateDiagnosticResourceMutationResult = NonNullable<Awaited<ReturnType<typeof createDiagnosticResource>>>
+    export type CreateDiagnosticResourceMutationBody = BodyType<DiagnosticResourceInput>
+    export type CreateDiagnosticResourceMutationError = ErrorType<ApiError>
+    export type CreateDiagnosticResourceMutationVariables = {data: BodyType<DiagnosticResourceInput>}
+
+    export const useCreateDiagnosticResource = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDiagnosticResource>>, TError,CreateDiagnosticResourceMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createDiagnosticResource>>,
+        TError,
+        CreateDiagnosticResourceMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateDiagnosticResourceMutationOptions(options));
+    }
+
+export const getGetDiagnosticReportUrl = (attemptId: number,) => {
+
+
+
+
+  return `/api/teacher/diagnostic-attempts/${attemptId}`
+}
+
+export const getDiagnosticReport = async (attemptId: number, options?: Parameters<typeof customFetch>[1]): Promise<DiagnosticReport> => {
+
+  return customFetch<DiagnosticReport>(getGetDiagnosticReportUrl(attemptId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDiagnosticReportQueryKey = (attemptId: number,) => {
+    return [
+    `/api/teacher/diagnostic-attempts/${attemptId}`
+    ] as const;
+    }
+
+
+export const getGetDiagnosticReportQueryOptions = <TData = Awaited<ReturnType<typeof getDiagnosticReport>>, TError = ErrorType<ApiError>>(attemptId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDiagnosticReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDiagnosticReportQueryKey(attemptId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDiagnosticReport>>> = ({ signal }) => getDiagnosticReport(attemptId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: attemptId !== null && attemptId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDiagnosticReport>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetDiagnosticReportQueryResult = NonNullable<Awaited<ReturnType<typeof getDiagnosticReport>>>
+export type GetDiagnosticReportQueryError = ErrorType<ApiError>
+
+
+
+export function useGetDiagnosticReport<TData = Awaited<ReturnType<typeof getDiagnosticReport>>, TError = ErrorType<ApiError>>(
+ attemptId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getDiagnosticReport>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetDiagnosticReportQueryOptions(attemptId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSaveDiagnosticReviewUrl = (attemptId: number,) => {
+
+
+
+
+  return `/api/teacher/diagnostic-attempts/${attemptId}`
+}
+
+export const saveDiagnosticReview = async (attemptId: number,
+    diagnosticReviewInput: DiagnosticReviewInput, options?: Parameters<typeof customFetch>[1]): Promise<DiagnosticReport> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<DiagnosticReport>(getSaveDiagnosticReviewUrl(attemptId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(diagnosticReviewInput)
+  }
+);}
+
+
+
+
+
+export const getSaveDiagnosticReviewMutationKey = () => ['saveDiagnosticReview'] as const;
+
+export const getSaveDiagnosticReviewMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveDiagnosticReview>>, TError,SaveDiagnosticReviewMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveDiagnosticReview>>, TError,SaveDiagnosticReviewMutationVariables, TContext> => {
+
+const mutationKey = getSaveDiagnosticReviewMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveDiagnosticReview>>, SaveDiagnosticReviewMutationVariables> = (props) => {
+          const {attemptId,data} = props ?? {};
+
+          return  saveDiagnosticReview(attemptId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveDiagnosticReviewMutationResult = NonNullable<Awaited<ReturnType<typeof saveDiagnosticReview>>>
+    export type SaveDiagnosticReviewMutationBody = BodyType<DiagnosticReviewInput>
+    export type SaveDiagnosticReviewMutationError = ErrorType<ApiError>
+    export type SaveDiagnosticReviewMutationVariables = {attemptId: number;data: BodyType<DiagnosticReviewInput>}
+
+    export const useSaveDiagnosticReview = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveDiagnosticReview>>, TError,SaveDiagnosticReviewMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof saveDiagnosticReview>>,
+        TError,
+        SaveDiagnosticReviewMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSaveDiagnosticReviewMutationOptions(options));
+    }
 
 export const getGetLibraryBooksUrl = () => {
 

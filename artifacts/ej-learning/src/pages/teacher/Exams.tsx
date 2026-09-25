@@ -18,6 +18,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { NATIVE_INPUT, NATIVE_SELECT } from '@/components/ui/native-select'
 import { hasRole, useSession } from '@/lib/session'
 import { cn } from '@/lib/utils'
+import DiagnosticReport from './DiagnosticReport'
+import DiagnosticCatalog from './DiagnosticCatalog'
 
 const WHEN = new Intl.DateTimeFormat('mn-MN', {
   month: 'numeric',
@@ -262,12 +264,14 @@ function ExamDetail({ sittingId, onBack }: { sittingId: number; onBack: () => vo
   const { mutate: reopen } = useReopenExam()
   const { mutate: release, isPending: releasing } = useReleaseExamAnswers()
   const [entering, setEntering] = useState<number | null>(null)
+  const [diagnosticAttempt, setDiagnosticAttempt] = useState<number | null>(null)
   const refresh = () => queryClient.invalidateQueries({
     predicate: (query) => typeof query.queryKey[0] === 'string'
       && query.queryKey[0].includes('/teacher/exams'),
   })
 
   if (isLoading || !data) return <Skeleton className="h-96 w-full" />
+  if (diagnosticAttempt !== null) return <DiagnosticReport attemptId={diagnosticAttempt} onBack={()=>setDiagnosticAttempt(null)}/>
 
   return (
     <div className="space-y-4">
@@ -302,6 +306,7 @@ function ExamDetail({ sittingId, onBack }: { sittingId: number; onBack: () => vo
                   <span className="shrink-0 text-sm font-semibold tabular-nums">
                     {row.score}/{row.maxScore}
                   </span>
+                  {data.examKind === 'DIAGNOSTIC' && <Button size="sm" variant="outline" onClick={()=>setDiagnosticAttempt(row.attemptId!)}>Оношлогоо ба төлөвлөгөө</Button>}
                   <Button
                     size="sm" variant="outline"
                     onClick={() => reopen(
@@ -393,6 +398,7 @@ export default function TeacherExams() {
   const [chosenSubject, setChosenSubject] = useState<string | null>(null)
   const [open, setOpen] = useState<number | null>(null)
   const [adding, setAdding] = useState(false)
+  const [catalogOpen, setCatalogOpen] = useState(false)
 
   if (isLoading) return <Skeleton className="h-64 w-full" />
   if (!classes?.length) {
@@ -415,6 +421,7 @@ export default function TeacherExams() {
   if (open !== null) {
     return <ExamDetail sittingId={open} onBack={() => setOpen(null)} />
   }
+  if (catalogOpen && subjectId !== null) return <DiagnosticCatalog classId={classId} subjectId={subjectId} onBack={()=>setCatalogOpen(false)}/>
 
   return (
     <div className="space-y-4">
@@ -446,6 +453,7 @@ export default function TeacherExams() {
         ) : null}
       </div>
 
+      {canEdit && subjectId !== null && <Button variant="outline" onClick={()=>setCatalogOpen(true)}>Оношлогооны асуулт, материалын холбоос</Button>}
       {adding && subjectId !== null ? (
         <NewExam
           classId={classId}
