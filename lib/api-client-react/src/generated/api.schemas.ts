@@ -1296,6 +1296,174 @@ export interface ClubActiveResult {
   isActive: boolean;
 }
 
+export interface HomeworkSummary {
+  homeworkId: number;
+  title: string;
+  /** @nullable */
+  instructions: string | null;
+  subjectId: number;
+  subjectName: string;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  assignedOn: string;
+  /**
+     * The date it is wanted by, or null. Never a door that locks.
+     * @nullable
+     */
+  dueOn: string | null;
+  wholeClass: boolean;
+  isActive: boolean;
+  /** @nullable */
+  teacherName: string | null;
+  /** How many children it was set for. */
+  given: number;
+  /** How many have handed in at least once. */
+  handedIn: number;
+  /** How many of those first handed in after the date. */
+  late: number;
+}
+
+export interface HomeworkInput {
+  classId: number;
+  subjectId: number;
+  /** @maxLength 300 */
+  title: string;
+  /**
+     * @maxLength 4000
+     * @nullable
+     */
+  instructions?: string | null;
+  /**
+     * The lesson this hangs off, where it hangs off one.
+     * @nullable
+     */
+  dailyLessonId?: number | null;
+  /**
+     * @nullable
+     * @pattern ^\d{4}-\d{2}-\d{2}$
+     */
+  assignedOn?: string | null;
+  /**
+     * @nullable
+     * @pattern ^\d{4}-\d{2}-\d{2}$
+     */
+  dueOn?: string | null;
+  /**
+     * Named children. Empty or absent means the whole class, which is the ordinary case - a teacher setting reading for the class should not have to tick twenty-eight boxes.
+     * @nullable
+     */
+  studentIds?: number[] | null;
+}
+
+export interface HomeworkCreated {
+  homeworkId: number;
+  /**
+     * How many were named, or null for the whole class.
+     * @nullable
+     */
+  given: number | null;
+}
+
+export interface HomeworkAttempt {
+  submissionId: number;
+  attemptNo: number;
+  /** @nullable */
+  body: string | null;
+  /**
+     * What the browser saw, and approximate by nature - a page left open counts, a page thought about on paper does not.
+     * @nullable
+     */
+  minutes: number | null;
+  isLate: boolean;
+  submittedAt: string;
+}
+
+export interface HomeworkStudent {
+  studentId: number;
+  studentName: string;
+  studentCode: string;
+  /** Every go, oldest first. A child who redid the work has done it twice, and which of the two counts is the teacher's judgement to make from seeing both. Empty where nothing has been handed in - a child with no submission is still a row, because "who has not handed it in" is the question this screen is usually opened for. */
+  attempts: HomeworkAttempt[];
+}
+
+export interface HomeworkDetail {
+  homeworkId: number;
+  classId: number;
+  subjectId: number;
+  title: string;
+  /** @nullable */
+  instructions: string | null;
+  assignedOn: string;
+  /** @nullable */
+  dueOn: string | null;
+  wholeClass: boolean;
+  isActive: boolean;
+  students: HomeworkStudent[];
+}
+
+export interface HomeworkActiveInput {
+  isActive: boolean;
+}
+
+export interface HomeworkActiveResult {
+  isActive: boolean;
+}
+
+export interface StudentHomework {
+  homeworkId: number;
+  title: string;
+  /** @nullable */
+  instructions: string | null;
+  subjectName: string;
+  assignedOn: string;
+  /** @nullable */
+  dueOn: string | null;
+  /** @nullable */
+  teacherName: string | null;
+  /** How many times this child has handed it in. */
+  attempts: number;
+  /** @nullable */
+  lastSubmittedAt: string | null;
+  /** Past its date and nothing handed in. Still open. */
+  isOverdue: boolean;
+}
+
+export interface StudentHomeworkAttempt {
+  attemptNo: number;
+  /** @nullable */
+  body: string | null;
+  /** @nullable */
+  minutes: number | null;
+  isLate: boolean;
+  submittedAt: string;
+}
+
+export interface StudentHomeworkDetail {
+  homeworkId: number;
+  title: string;
+  /** @nullable */
+  instructions: string | null;
+  assignedOn: string;
+  /** @nullable */
+  dueOn: string | null;
+  attempts: StudentHomeworkAttempt[];
+}
+
+export interface HomeworkSubmissionInput {
+  /** @maxLength 20000 */
+  body: string;
+  /**
+     * @minimum 0
+     * @nullable
+     */
+  minutes?: number | null;
+}
+
+export interface HomeworkSubmitted {
+  submissionId: number;
+  attemptNo: number;
+  isLate: boolean;
+}
+
 export type AttendanceInputMarksItem = {
   studentId: number;
   state: AttendanceState;
@@ -2905,6 +3073,11 @@ to?: string;
 
 export type GetClassChildrenParams = {
 classId: number;
+};
+
+export type GetClassHomeworkParams = {
+classId: number;
+subjectId?: number;
 };
 
 export type GetStudentSubjectOutlineParams = {

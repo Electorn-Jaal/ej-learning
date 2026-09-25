@@ -970,6 +970,174 @@ export const clubMembersInLearning = learning.table(
   ],
 );
 
+/**
+ * Extra work a teacher sets: a task, with a deadline it may outlive.
+ *
+ * Distinct from student_assignments, which is the one personal thing a child
+ * has in a subject on a day - one row per student per subject per date, and
+ * setting it again replaces it. That shape is right for "today's maths" and
+ * wrong for everything a teacher actually hands out: it cannot be given to a
+ * class, it has no deadline, and a second go overwrites the first.
+ *
+ * A task is given to a whole class, a named few, or one child. It may have a
+ * date it is wanted by, or none. And it keeps every attempt: a child who
+ * redoes the work has done it twice, and the teacher is the one who decides
+ * what that is worth.
+ *
+ * dueOn is nullable on purpose and lateness is recorded rather than refused.
+ * A deadline that locks the door turns "I did it at the weekend" into "I did
+ * not do it", which is a worse record of the same child.
+ */
+export const homeworkInLearning = learning.table(
+  "homework",
+  {
+    id: bigint({ mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity({
+        name: "learning.homework_id_seq",
+        startWith: 1,
+        increment: 1,
+        minValue: 1,
+        cache: 1,
+      }),
+    classId: bigint("class_id", { mode: "number" }).notNull(),
+    subjectId: bigint("subject_id", { mode: "number" }).notNull(),
+    // The lesson this hangs off, where it hangs off one. Null for work a
+    // teacher wrote themselves, which is most of it.
+    dailyLessonId: bigint("daily_lesson_id", { mode: "number" }),
+    title: varchar({ length: 300 }).notNull(),
+    instructions: text(),
+    assignedOn: date("assigned_on").notNull(),
+    dueOn: date("due_on"),
+    // True: everybody on the register. False: only the children named in
+    // task_students.
+    wholeClass: boolean("whole_class").default(true).notNull(),
+    teacherId: bigint("teacher_id", { mode: "number" }),
+    isActive: boolean("is_active").default(true).notNull(),
+    createdBy: bigint("created_by", { mode: "number" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    check("homework_due_check", sql`due_on IS NULL OR due_on >= assigned_on`),
+    index("idx_homework_class").using(
+      "btree",
+      table.classId.asc().nullsLast(),
+      table.assignedOn.desc().nullsLast(),
+    ),
+    foreignKey({
+      columns: [table.classId],
+      foreignColumns: [classesInCore.id],
+      name: "homework_class_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.subjectId],
+      foreignColumns: [subjectsInCore.id],
+      name: "homework_subject_id_fkey",
+    }),
+    foreignKey({
+      columns: [table.dailyLessonId],
+      foreignColumns: [dailyLessonsInLearning.id],
+      name: "homework_daily_lesson_id_fkey",
+    }),
+    foreignKey({
+      columns: [table.teacherId],
+      foreignColumns: [teachersInCore.id],
+      name: "homework_teacher_id_fkey",
+    }),
+    foreignKey({
+      columns: [table.createdBy],
+      foreignColumns: [usersInCore.id],
+      name: "homework_created_by_fkey",
+    }),
+  ],
+);
+
+/** Who a task was set for, when it was not set for the whole class. */
+export const homeworkStudentsInLearning = learning.table(
+  "homework_students",
+  {
+    homeworkId: bigint("homework_id", { mode: "number" }).notNull(),
+    studentId: bigint("student_id", { mode: "number" }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.homeworkId, table.studentId], name: "homework_students_pkey" }),
+    foreignKey({
+      columns: [table.homeworkId],
+      foreignColumns: [homeworkInLearning.id],
+      name: "homework_students_homework_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.studentId],
+      foreignColumns: [studentsInCore.id],
+      name: "homework_students_student_id_fkey",
+    }).onDelete("cascade"),
+  ],
+);
+
+/**
+ * Every go a child has had at a task.
+ *
+ * Every one, not the last. A child who redid the work has done it twice, and
+ * which of the two counts is a judgement the teacher makes from seeing both -
+ * a table that keeps only the newest has already made that judgement for them,
+ * silently, in favour of whichever was typed last.
+ *
+ * isLate is worked out at submission and stored, rather than compared against
+ * dueOn afterwards: a deadline the teacher later moves must not retroactively
+ * make a child punctual or tardy.
+ *
+ * minutes is what the browser saw, and is approximate by nature - a page left
+ * open counts, a page thought about on paper does not. It is recorded because
+ * a teacher asking "did they rush it" has nothing else, and labelled
+ * approximate everywhere it is shown.
+ */
+export const homeworkSubmissionsInLearning = learning.table(
+  "homework_submissions",
+  {
+    id: bigint({ mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity({
+        name: "learning.homework_submissions_id_seq",
+        startWith: 1,
+        increment: 1,
+        minValue: 1,
+        cache: 1,
+      }),
+    homeworkId: bigint("homework_id", { mode: "number" }).notNull(),
+    studentId: bigint("student_id", { mode: "number" }).notNull(),
+    attemptNo: smallint("attempt_no").notNull(),
+    body: text(),
+    minutes: smallint(),
+    isLate: boolean("is_late").default(false).notNull(),
+    submittedAt: timestamp("submitted_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("homework_submissions_attempt_key").on(
+      table.homeworkId, table.studentId, table.attemptNo,
+    ),
+    check("homework_submissions_attempt_check", sql`attempt_no > 0`),
+    index("idx_homework_submissions_task").using(
+      "btree",
+      table.homeworkId.asc().nullsLast(),
+      table.studentId.asc().nullsLast(),
+    ),
+    foreignKey({
+      columns: [table.homeworkId],
+      foreignColumns: [homeworkInLearning.id],
+      name: "homework_submissions_homework_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.studentId],
+      foreignColumns: [studentsInCore.id],
+      name: "homework_submissions_student_id_fkey",
+    }).onDelete("cascade"),
+  ],
+);
+
 export const timetableSlotsInLearning = learning.table(
   "timetable_slots",
   {

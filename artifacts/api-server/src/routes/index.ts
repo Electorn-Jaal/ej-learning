@@ -5,6 +5,7 @@ import classTopicRouter from "../modules/class-topic/routes";
 import clubRouter from "../modules/club/routes";
 import contentRouter from "../modules/content/routes";
 import guardianRouter from "../modules/guardian/routes";
+import homeworkRouter from "../modules/homework/routes";
 import identityRouter from "../modules/identity/routes";
 import schoolContextRouter from "../modules/school-context/routes";
 import staffProfileRouter from "../modules/staff-profile/routes";
@@ -25,6 +26,7 @@ const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(identityRouter);
+router.use(homeworkRouter);
 router.use(guardianRouter);
 router.use(contentRouter);
 router.use(classAccessRouter);

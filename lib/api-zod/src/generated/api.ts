@@ -2400,6 +2400,180 @@ export const SetClubActiveResponse = zod.object({
 
 
 /**
+ * @summary Extra work set for a class
+ */
+export const GetClassHomeworkQueryParams = zod.object({
+  "classId": zod.coerce.number().int(),
+  "subjectId": zod.coerce.number().int().optional()
+})
+
+export const getClassHomeworkResponseAssignedOnRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const GetClassHomeworkResponseItem = zod.object({
+  "homeworkId": zod.number().int(),
+  "title": zod.string(),
+  "instructions": zod.string().nullable(),
+  "subjectId": zod.number().int(),
+  "subjectName": zod.string(),
+  "assignedOn": zod.string().regex(getClassHomeworkResponseAssignedOnRegExp),
+  "dueOn": zod.string().nullable().describe('The date it is wanted by, or null. Never a door that locks.'),
+  "wholeClass": zod.boolean(),
+  "isActive": zod.boolean(),
+  "teacherName": zod.string().nullable(),
+  "given": zod.number().int().describe('How many children it was set for.'),
+  "handedIn": zod.number().int().describe('How many have handed in at least once.'),
+  "late": zod.number().int().describe('How many of those first handed in after the date.')
+})
+export const GetClassHomeworkResponse = zod.array(GetClassHomeworkResponseItem)
+
+
+/**
+ * A deadline is optional and never locks the door: work handed in after the date is recorded as late rather than refused, because a door that locks turns "I did it at the weekend" into "I did not do it" - the same child, a worse record.
+ * @summary Set extra work for a class, a named few, or one child
+ */
+export const createHomeworkBodyTitleMax = 300;
+
+export const createHomeworkBodyInstructionsMax = 4000;
+
+export const createHomeworkBodyAssignedOnRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const createHomeworkBodyDueOnRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const CreateHomeworkBody = zod.object({
+  "classId": zod.number().int(),
+  "subjectId": zod.number().int(),
+  "title": zod.string().max(createHomeworkBodyTitleMax),
+  "instructions": zod.string().max(createHomeworkBodyInstructionsMax).nullish(),
+  "dailyLessonId": zod.number().int().nullish().describe('The lesson this hangs off, where it hangs off one.'),
+  "assignedOn": zod.string().regex(createHomeworkBodyAssignedOnRegExp).nullish(),
+  "dueOn": zod.string().regex(createHomeworkBodyDueOnRegExp).nullish(),
+  "studentIds": zod.array(zod.number().int()).nullish().describe('Named children. Empty or absent means the whole class, which is the ordinary case - a teacher setting reading for the class should not have to tick twenty-eight boxes.\n')
+})
+
+export const CreateHomeworkResponse = zod.object({
+  "homeworkId": zod.number().int(),
+  "given": zod.number().int().nullable().describe('How many were named, or null for the whole class.')
+})
+
+
+/**
+ * @summary One piece of work, and every go at it
+ */
+export const GetHomeworkDetailParams = zod.object({
+  "homeworkId": zod.coerce.number().int()
+})
+
+export const GetHomeworkDetailResponse = zod.object({
+  "homeworkId": zod.number().int(),
+  "classId": zod.number().int(),
+  "subjectId": zod.number().int(),
+  "title": zod.string(),
+  "instructions": zod.string().nullable(),
+  "assignedOn": zod.string(),
+  "dueOn": zod.string().nullable(),
+  "wholeClass": zod.boolean(),
+  "isActive": zod.boolean(),
+  "students": zod.array(zod.object({
+  "studentId": zod.number().int(),
+  "studentName": zod.string(),
+  "studentCode": zod.string(),
+  "attempts": zod.array(zod.object({
+  "submissionId": zod.number().int(),
+  "attemptNo": zod.number().int(),
+  "body": zod.string().nullable(),
+  "minutes": zod.number().int().nullable().describe('What the browser saw, and approximate by nature - a page left open counts, a page thought about on paper does not.\n'),
+  "isLate": zod.boolean(),
+  "submittedAt": zod.string()
+})).describe('Every go, oldest first. A child who redid the work has done it twice, and which of the two counts is the teacher\'s judgement to make from seeing both. Empty where nothing has been handed in - a child with no submission is still a row, because "who has not handed it in" is the question this screen is usually opened for.\n')
+}))
+})
+
+
+/**
+ * @summary Withdraw a piece of work, or put it back
+ */
+export const SetHomeworkActiveParams = zod.object({
+  "homeworkId": zod.coerce.number().int()
+})
+
+export const SetHomeworkActiveBody = zod.object({
+  "isActive": zod.boolean()
+})
+
+export const SetHomeworkActiveResponse = zod.object({
+  "isActive": zod.boolean()
+})
+
+
+/**
+ * @summary The extra work set for me
+ */
+export const GetMyHomeworkResponseItem = zod.object({
+  "homeworkId": zod.number().int(),
+  "title": zod.string(),
+  "instructions": zod.string().nullable(),
+  "subjectName": zod.string(),
+  "assignedOn": zod.string(),
+  "dueOn": zod.string().nullable(),
+  "teacherName": zod.string().nullable(),
+  "attempts": zod.number().int().describe('How many times this child has handed it in.'),
+  "lastSubmittedAt": zod.string().nullable(),
+  "isOverdue": zod.boolean().describe('Past its date and nothing handed in. Still open.')
+})
+export const GetMyHomeworkResponse = zod.array(GetMyHomeworkResponseItem)
+
+
+/**
+ * @summary One piece of work and my own goes at it
+ */
+export const GetMyHomeworkDetailParams = zod.object({
+  "homeworkId": zod.coerce.number().int()
+})
+
+export const GetMyHomeworkDetailResponse = zod.object({
+  "homeworkId": zod.number().int(),
+  "title": zod.string(),
+  "instructions": zod.string().nullable(),
+  "assignedOn": zod.string(),
+  "dueOn": zod.string().nullable(),
+  "attempts": zod.array(zod.object({
+  "attemptNo": zod.number().int(),
+  "body": zod.string().nullable(),
+  "minutes": zod.number().int().nullable(),
+  "isLate": zod.boolean(),
+  "submittedAt": zod.string()
+}))
+})
+
+
+/**
+ * Every go is kept, so handing in again adds an attempt rather than replacing the last. Late is allowed and recorded; only work the teacher has withdrawn is refused.
+ * @summary Hand work in
+ */
+export const SubmitHomeworkParams = zod.object({
+  "homeworkId": zod.coerce.number().int()
+})
+
+export const submitHomeworkBodyBodyMax = 20000;
+
+export const submitHomeworkBodyMinutesMin = 0;
+
+
+
+export const SubmitHomeworkBody = zod.object({
+  "body": zod.string().max(submitHomeworkBodyBodyMax),
+  "minutes": zod.number().int().min(submitHomeworkBodyMinutesMin).nullish()
+})
+
+export const SubmitHomeworkResponse = zod.object({
+  "submissionId": zod.number().int(),
+  "attemptNo": zod.number().int(),
+  "isLate": zod.boolean()
+})
+
+
+/**
  * Up to year 5 the class is with one teacher all day and the register is taken once, so timetableSlotId is left out. From year 6 the children move between teachers and it is taken per lesson, so it is required. The system holds the rule rather than trusting the screen to.
  * @summary Take the register
  */
