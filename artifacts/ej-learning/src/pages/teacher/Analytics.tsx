@@ -38,12 +38,13 @@ const today = () =>
  * choice can be carried in from elsewhere in the address.
  */
 export default function TeacherAnalytics() {
-  const { data: classes, isLoading } = useGetTeacherClasses()
+  const { data: classes, isLoading, error, refetch } = useGetTeacherClasses()
   const [selectedClass, setSelectedClass] = useState<string | null>(null)
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null)
   const linked = useLinkedSelection()
 
   if (isLoading) return <Skeleton className="h-64 w-full" />
+  if (error) return <div role="alert" className="space-y-2"><p>Ангийн жагсаалтыг уншиж чадсангүй.</p><button className="underline" onClick={() => void refetch()}>Дахин оролдох</button></div>
   if (!classes?.length) return <p className="text-sm text-muted-foreground">Анги олдсонгүй.</p>
 
   const uniqueClasses = [...new Map(classes.map((entry) => [entry.id, entry])).values()]
@@ -185,7 +186,7 @@ function WhoNeedsHelp({ classId, subjectId }: { classId: number; subjectId: numb
 }
 
 function SkillStanding({ classId, subjectId }: { classId: number; subjectId: number | null }) {
-  const { data, isLoading } = useGetClassSkills({ classId, ...subjectParam(subjectId) })
+  const { data, isLoading, error, refetch } = useGetClassSkills({ classId, ...subjectParam(subjectId) })
   const skills = data?.skills ?? []
 
   // Worst first: the reason to open this page is to find what needs teaching
@@ -214,6 +215,13 @@ function SkillStanding({ classId, subjectId }: { classId: number; subjectId: num
       <CardContent className="space-y-4">
         {isLoading ? (
           <Skeleton className="h-40 w-full" />
+        ) : error ? (
+          // WhoNeedsHelp reads the same query and says nothing on failure,
+          // so this is the one place the teacher hears about it.
+          <div role="alert" className="space-y-2 text-sm">
+            <p>Чадварын мэдээллийг уншиж чадсангүй.</p>
+            <button className="underline" onClick={() => void refetch()}>Дахин оролдох</button>
+          </div>
         ) : skills.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             Энэ ангид хэмжигдсэн чадвар одоогоор алга.
@@ -244,7 +252,7 @@ function SkillStanding({ classId, subjectId }: { classId: number; subjectId: num
 
 function TodayScores({ classId, subjectId }: { classId: number; subjectId: number | null }) {
   const day = today()
-  const { data, isLoading } = useGetTeacherQuizAttempts({
+  const { data, isLoading, error, refetch } = useGetTeacherQuizAttempts({
     classId,
     ...subjectParam(subjectId),
     from: day,
@@ -266,7 +274,16 @@ function TodayScores({ classId, subjectId }: { classId: number; subjectId: numbe
         </p>
       </CardHeader>
       <CardContent>
-        {isLoading ? <Skeleton className="h-40 w-full" /> : <ScoreBands percentages={percentages} />}
+        {isLoading ? (
+          <Skeleton className="h-40 w-full" />
+        ) : error ? (
+          <div role="alert" className="space-y-2 text-sm">
+            <p>Өнөөдрийн сорилын дүнг уншиж чадсангүй.</p>
+            <button className="underline" onClick={() => void refetch()}>Дахин оролдох</button>
+          </div>
+        ) : (
+          <ScoreBands percentages={percentages} />
+        )}
       </CardContent>
     </Card>
   )

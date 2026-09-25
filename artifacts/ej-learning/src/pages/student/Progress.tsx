@@ -52,7 +52,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export default function StudentProgress() {
-  const { data: progress, isLoading } = useGetStudentProgress()
+  const { data: progress, isLoading, refetch } = useGetStudentProgress()
 
   if (isLoading) {
     return (
@@ -62,7 +62,7 @@ export default function StudentProgress() {
       </div>
     )
   }
-  if (!progress) return <p role="alert">Ахицын мэдээллийг уншиж чадсангүй.</p>
+  if (!progress) return <div role="alert" className="space-y-2"><p>Ахицын мэдээллийг уншиж чадсангүй.</p><button className="underline" onClick={() => void refetch()}>Дахин оролдох</button></div>
 
   // Only what has actually been assessed. A subject whose skills are all
   // unmeasured contributes no bar, because a bar of nothing is a claim.
