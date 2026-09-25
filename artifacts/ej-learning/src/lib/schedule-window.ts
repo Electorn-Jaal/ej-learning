@@ -1,5 +1,12 @@
 export const schoolToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ulaanbaatar' }).format(new Date())
 
+/** A date read from the address bar, or null when it is not a real day - 2026-13-45 has the right shape and no calendar. */
+export function calendarDate(value: string | null): string | null {
+  if (value === null || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
+  const date = new Date(value + 'T00:00:00Z')
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value ? value : null
+}
+
 export function shiftDay(day: string, offset: number) {
   const date = new Date(day + 'T00:00:00Z')
   date.setUTCDate(date.getUTCDate() + offset)

@@ -1,7 +1,7 @@
 import { authorisedClass, editableSubjects, viewableSubjects } from "../class-access/service";
 import { badRequest } from "../../shared/http-error";
 import type { AuthenticatedUser } from "../identity/service";
-import { isIsoDate, todayInUlaanbaatar } from "../../shared/school-date";
+import { isIsoDate, todayInUlaanbaatar, validIsoDate } from "../../shared/school-date";
 import * as repository from "./repository";
 
 /**
@@ -22,7 +22,12 @@ export async function classDay(
 ) {
   const klass = await authorisedClass(user, query.classId);
   const subjectIds = await viewableSubjects(user, klass.classId, query.subjectId);
-  const date = isIsoDate(query.on) ? query.on : todayInUlaanbaatar();
+  // The date now comes from the address bar, so a hand-edited 2026-13-45 is a
+  // bad request, not a database error.
+  if (query.on !== undefined && !validIsoDate(query.on)) {
+    throw badRequest("Огноо буруу байна.", "INVALID_DATE");
+  }
+  const date = validIsoDate(query.on) ? query.on : todayInUlaanbaatar();
 
   const [lessonRows, answerRows, coverageRows, markRows, registerRows, [year]] =
     await Promise.all([

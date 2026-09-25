@@ -905,6 +905,17 @@ describe("EJ Learning API", { concurrency: false }, () => {
       assert.equal(guessed.payload.code, "NOT_YOUR_CHILD");
     });
 
+    it("cannot open the library or a book file by its id (FR21)", async () => {
+      const [book] = await harness.sql(
+        "SELECT id::int FROM content.source_materials WHERE status = 'APPROVED' ORDER BY id LIMIT 1");
+      assert.ok(book, "expected a seeded approved material");
+      assert.equal((await parent.request("/content/library")).status, 403);
+      assert.equal((await parent.request(`/content/materials/${book.id}/cover`, { raw: true })).status, 403);
+      assert.equal((await parent.request(`/content/materials/${book.id}/file`, { raw: true })).status, 403);
+      // The child still can.
+      assert.equal((await child.request(`/content/materials/${book.id}/file`, { raw: true })).status, 200);
+    });
+
     it("reads the child once linked, and the same day the child reads", async () => {
       const linked = await admin.request("/admin/guardians/link", { method: "POST", body: {
         userId, studentId, relation: "Ээж",
@@ -1394,6 +1405,13 @@ describe("EJ Learning API", { concurrency: false }, () => {
       if (slot) {
         await harness.sql("DELETE FROM learning.timetable_slots WHERE id = $1", [slot.id]);
       }
+    });
+
+    it("refuses a date that does not exist rather than failing in the database", async () => {
+      // The journal keeps its date in the address bar, where anyone can type.
+      const res = await teacher.request(`/teacher/class-day?classId=${klass}&subjectId=${subject}&on=2026-13-45`);
+      assert.equal(res.status, 400, JSON.stringify(res.payload));
+      assert.equal(res.payload.code, "INVALID_DATE");
     });
 
     it("says on the day which kind of register this class keeps", async () => {
@@ -3550,6 +3568,48 @@ ${run.output}`);
         },
       });
       assert.equal(submitted.status, 403, "nor is the mark theirs to enter");
+    });
+
+    it("shows a subject teacher only their own subject's questions in item analysis", async () => {
+      // One maths and one physics question, both answered in 9А. demo-teacher
+      // takes only maths here; demo-teacher-b is the class teacher.
+      const [grade] = await harness.sql("SELECT id FROM core.grade_levels WHERE grade_number = 9");
+      const items = await harness.sql(
+        `INSERT INTO assessment.diagnostic_items
+           (item_code, subject_id, grade_level_id, item_order, title_mn, max_score, status)
+         VALUES ('TEST-IA-MATH', $1, $3, 90, 'TEST-IA maths', 1, 'APPROVED'),
+                ('TEST-IA-PHYS', $2, $3, 91, 'TEST-IA physics', 1, 'APPROVED')
+         RETURNING id::int, item_code`, [mathsId, physicsId, grade.id]);
+      const id = (code) => items.find((row) => row.item_code === code).id;
+      const [student] = await harness.sql(
+        `SELECT e.student_id FROM core.student_enrollments e
+          WHERE e.class_id = $1 AND e.is_active LIMIT 1`, [classA]);
+      const [lesson] = await harness.sql("SELECT id, lesson_code FROM learning.daily_lessons LIMIT 1");
+      const answers = JSON.stringify([
+        { questionId: String(id("TEST-IA-MATH")), correct: true, chosenText: "a" },
+        { questionId: String(id("TEST-IA-PHYS")), correct: false, chosenText: "b" },
+      ]);
+      const [attempt] = await harness.sql(
+        `INSERT INTO learning.quiz_attempts
+           (student_id, daily_lesson_id, lesson_code, answers, score, max_score, submitted_at)
+         VALUES ($1, $2, $3, $4::jsonb, 1, 2, now()) RETURNING id`,
+        [student.student_id, lesson.id, lesson.lesson_code, answers]);
+      try {
+        const prompts = async (username) => {
+          const client = createClient(harness.baseUrl);
+          await client.signIn(byName[username]);
+          const res = await client.request(`/teacher/item-analysis?classId=${classA}`);
+          assert.equal(res.status, 200, JSON.stringify(res.payload));
+          return res.payload.items.map((row) => row.prompt).filter((p) => p.startsWith("TEST-IA"));
+        };
+        assert.deepEqual(await prompts("demo-teacher"), ["TEST-IA maths"],
+          "the physics in a class they share is not theirs to read");
+        assert.deepEqual((await prompts("demo-teacher-b")).sort(), ["TEST-IA maths", "TEST-IA physics"],
+          "the class teacher reads the whole class");
+      } finally {
+        await harness.sql("DELETE FROM learning.quiz_attempts WHERE id = $1", [attempt.id]);
+        await harness.sql("DELETE FROM assessment.diagnostic_items WHERE item_code LIKE 'TEST-IA-%'");
+      }
     });
 
     it("still lets the subject teacher mark their own", async () => {

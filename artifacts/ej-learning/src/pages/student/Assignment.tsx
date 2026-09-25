@@ -45,7 +45,7 @@ export default function StudentAssignment() {
   const [, setLocation] = useLocation()
   const id = params?.id || ""
   
-  const { data: assignment, isLoading } = useGetStudentAssignment(id, { query: { enabled: !!id, queryKey: getGetStudentAssignmentQueryKey(id) } })
+  const { data: assignment, isLoading, error, refetch } = useGetStudentAssignment(id, { query: { enabled: !!id, queryKey: getGetStudentAssignmentQueryKey(id) } })
   const startMutation = useStartStudentAssignment()
   const saveStepMutation = useSaveStudentAssignmentStep()
   const submitMutation = useSubmitStudentAssignment()
@@ -111,6 +111,11 @@ export default function StudentAssignment() {
     return <div className="space-y-6"><Skeleton className="h-32 w-full" /><Skeleton className="h-64 w-full" /></div>
   }
   
+  // Only a 404 means the assignment is not there; anything else is a request
+  // that failed and may well succeed on a second try.
+  if (error && error.status !== 404) {
+    return <div role="alert" className="space-y-2"><p>Даалгаврыг уншиж чадсангүй.</p><button className="underline" onClick={() => void refetch()}>Дахин оролдох</button></div>
+  }
   if (!assignment) return <div className="p-8 text-destructive font-bold">Материал олдсонгүй</div>
 
   if (assignment.status === 'unavailable') {
