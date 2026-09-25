@@ -89,6 +89,7 @@ local-data/
 # Database dumps and generated account lists. May hold real student data and
 # plaintext passwords; restore from these, don't commit them.
 backups/
+/roster-passwords.txt
 
 # Uploaded content files the running API serves (PDFs and the like).
 # Regenerate the mock book with scripts/src/make-mock-pdf.py.
