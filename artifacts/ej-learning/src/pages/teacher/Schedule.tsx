@@ -25,7 +25,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useLinkedSelection } from '@/lib/linked-selection'
 import { subjectParam } from '@/lib/teacher-class'
 import { hasRole, useSession } from '@/lib/session'
-import { dayName, isWeekend, schoolToday, scheduleWindow, subjectSlots } from '@/lib/schedule-window'
+import { calendarDate, dayName, isWeekend, schoolToday, scheduleWindow, subjectSlots } from '@/lib/schedule-window'
 import { cn } from '@/lib/utils'
 
 const DAY = new Intl.DateTimeFormat('mn-MN', { month: 'short', day: 'numeric', timeZone: 'UTC' })
@@ -229,7 +229,7 @@ export default function TeacherSchedule() {
   const { data: classes, isLoading } = useGetTeacherClasses()
   const [, navigate] = useLocation()
   const search = new URLSearchParams(useSearch())
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(search.get('on') ?? '') ? search.get('on')! : schoolToday()
+  const date = calendarDate(search.get('on')) ?? schoolToday()
   const selectedClass = search.get('classId')
   const selectedSubject = search.get('subjectId')
   const view = search.get('view') === 'week' ? 'week' : 'list'

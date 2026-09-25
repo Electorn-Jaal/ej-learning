@@ -905,6 +905,17 @@ describe("EJ Learning API", { concurrency: false }, () => {
       assert.equal(guessed.payload.code, "NOT_YOUR_CHILD");
     });
 
+    it("cannot open the library or a book file by its id (FR21)", async () => {
+      const [book] = await harness.sql(
+        "SELECT id::int FROM content.source_materials WHERE status = 'APPROVED' ORDER BY id LIMIT 1");
+      assert.ok(book, "expected a seeded approved material");
+      assert.equal((await parent.request("/content/library")).status, 403);
+      assert.equal((await parent.request(`/content/materials/${book.id}/cover`, { raw: true })).status, 403);
+      assert.equal((await parent.request(`/content/materials/${book.id}/file`, { raw: true })).status, 403);
+      // The child still can.
+      assert.equal((await child.request(`/content/materials/${book.id}/file`, { raw: true })).status, 200);
+    });
+
     it("reads the child once linked, and the same day the child reads", async () => {
       const linked = await admin.request("/admin/guardians/link", { method: "POST", body: {
         userId, studentId, relation: "Ээж",
@@ -1394,6 +1405,13 @@ describe("EJ Learning API", { concurrency: false }, () => {
       if (slot) {
         await harness.sql("DELETE FROM learning.timetable_slots WHERE id = $1", [slot.id]);
       }
+    });
+
+    it("refuses a date that does not exist rather than failing in the database", async () => {
+      // The journal keeps its date in the address bar, where anyone can type.
+      const res = await teacher.request(`/teacher/class-day?classId=${klass}&subjectId=${subject}&on=2026-13-45`);
+      assert.equal(res.status, 400, JSON.stringify(res.payload));
+      assert.equal(res.payload.code, "INVALID_DATE");
     });
 
     it("says on the day which kind of register this class keeps", async () => {
