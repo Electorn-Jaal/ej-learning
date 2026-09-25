@@ -48,7 +48,8 @@ solid only), amber #FBC260 (navigation column and every button, ink text on
 it), active nav row #FFEAB8 with 2px navy left rule, success #2F6A4E,
 pending #A16A2B, destructive #AB3E36, focus ring #B17E43.
 Font Plus Jakarta Sans (UI), Lora (long reading). Radius 2px everywhere.
-No shadows, no pill badges, no pale tinted backgrounds behind same-hue text.
+No shadows on cards, no pale tinted backgrounds behind same-hue text. Badges are
+pills (rounded-full), as in the code.
 Dense working tool: 12px control text, ~28px table rows.
 
 Layout: 256px amber navigation column on the left, 56px top bar with the page
@@ -248,6 +249,6 @@ Design System components. Goal: <нэг өгүүлбэр>. Do not change other s
 ## Prompt бүрийн дараа шалгах
 
 - Бичвэр бүгд монголоор, цэсний нэр кодынхтой ижил байна уу?
-- Shadow, pill хэлбэрийн badge, цайвар өнгөт дэвсгэр нэмэгдсэн үү? Хасуулна.
+- Card-д shadow, цайвар өнгөт дэвсгэр нэмэгдсэн үү? Хасуулна. Badge нь кодынх шиг pill хэлбэртэй.
 - Хоосон, ачаалж байгаа, алдаатай төлөв байна уу?
 - Өөр дэлгэц өөрчлөгдсөн үү? Тийм бол буцаана (Make-ийн version history).
