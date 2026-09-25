@@ -83,10 +83,14 @@ export async function submitAssessment(
 
 export async function itemAnalysis(user: AuthenticatedUser, classId: number) {
   const klass = await authorisedClass(user, classId);
+  // The class alone let a subject teacher read every other subject's questions
+  // in a class they share. Same rule as the skills view: a subject teacher sees
+  // their own subjects, a class teacher and an administrator the whole class.
+  const subjectIds = await viewableSubjects(user, klass.classId, null);
   return {
     classId: klass.classId,
     className: klass.className,
-    items: await repository.itemAnalysisForClass(klass.classId),
+    items: await repository.itemAnalysisForClass(klass.classId, subjectIds),
   };
 }
 

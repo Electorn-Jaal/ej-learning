@@ -99,7 +99,7 @@ export type ItemAnalysisRow = {
   percentCorrect: number; commonWrongAnswer: string | null; commonWrongCount: number;
 };
 
-export const itemAnalysisForClass = (classId: number) =>
+export const itemAnalysisForClass = (classId: number, subjectIds: number[] | null) =>
   readRows<ItemAnalysisRow>(
     `WITH latest AS (
        SELECT DISTINCT ON (qa.student_id, answer->>'questionId')
@@ -125,11 +125,12 @@ export const itemAnalysisForClass = (classId: number) =>
        COALESCE(max(w.n) FILTER (WHERE w.rank = 1), 0)::int AS "commonWrongCount"
      FROM latest l
      JOIN assessment.diagnostic_items i ON i.id = l.item_id
+      AND ($2::bigint[] IS NULL OR i.subject_id = ANY($2::bigint[]))
      LEFT JOIN content.skills sk ON sk.id = i.skill_id
      LEFT JOIN wrong w ON w.item_id = l.item_id AND w.rank = 1
      GROUP BY i.id, i.title_mn, sk.name_mn, i.item_order
      ORDER BY "percentCorrect", i.item_order`,
-    [classId],
+    [classId, subjectIds],
   );
 /**
  * Work waiting to be marked, for this teacher's students only. Each row
