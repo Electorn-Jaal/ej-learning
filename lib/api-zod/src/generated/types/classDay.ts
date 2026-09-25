@@ -14,4 +14,6 @@ export interface ClassDay {
   date: string;
   lessons: ClassDayLesson[];
   students: ClassDayStudent[];
+  /** Whether this class's register is taken per lesson or once a day. The school's own rule, carried here so the screen does not have to guess it from the year. */
+  attendancePerLesson: boolean;
 }

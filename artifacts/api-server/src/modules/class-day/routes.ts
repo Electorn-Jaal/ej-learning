@@ -1,8 +1,14 @@
 import { Router, type IRouter } from "express";
-import { GetClassDayResponse, MarkNotebooksBody, MarkNotebooksResponse } from "@workspace/api-zod";
+import {
+  GetClassDayResponse,
+  MarkNotebooksBody,
+  MarkNotebooksResponse,
+  MarkAttendanceBody,
+  MarkAttendanceResponse,
+} from "@workspace/api-zod";
 import { requireRole } from "../../middlewares/auth";
 import { badRequest } from "../../shared/http-error";
-import { classDay, markNotebooks } from "./service";
+import { classDay, markAttendance, markNotebooks } from "./service";
 
 const router: IRouter = Router();
 
@@ -35,6 +41,16 @@ router.put("/teacher/notebook", requireRole("TEACHER", "ADMIN"), async (req, res
     const parsed = MarkNotebooksBody.safeParse(req.body);
     if (!parsed.success) throw badRequest("Тэмдэглэгээ буруу байна.", "INVALID_INPUT");
     res.json(MarkNotebooksResponse.parse(await markNotebooks(req.user!, parsed.data)));
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.put("/teacher/attendance", requireRole("TEACHER", "ADMIN"), async (req, res, next) => {
+  try {
+    const parsed = MarkAttendanceBody.safeParse(req.body);
+    if (!parsed.success) throw badRequest("Ирцийн мэдээлэл буруу байна.", "INVALID_INPUT");
+    res.json(MarkAttendanceResponse.parse(await markAttendance(req.user!, parsed.data)));
   } catch (error) {
     next(error);
   }

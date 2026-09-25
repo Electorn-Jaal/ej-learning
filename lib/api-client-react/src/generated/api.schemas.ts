@@ -770,6 +770,44 @@ export interface NotebookMark {
   comment: string | null;
 }
 
+/**
+ * UNREGISTERED is never stored - it is the absence of a mark - but it may be sent, to take one off. "Not registered" and "did not come" are different facts about a child, and a school that collapses them tells a parent their child truanted when the truth is that nobody took the register.
+ */
+export type AttendanceState = typeof AttendanceState[keyof typeof AttendanceState];
+
+
+export const AttendanceState = {
+  PRESENT: 'PRESENT',
+  LATE: 'LATE',
+  ABSENT: 'ABSENT',
+  EXCUSED: 'EXCUSED',
+  UNREGISTERED: 'UNREGISTERED',
+} as const;
+
+/**
+ * A separate axis and deliberately toothless: three words a teacher may leave unsaid, worth no marks, and not a second attendance state. A child who was present and quiet is present.
+ */
+export type ParticipationMark = typeof ParticipationMark[keyof typeof ParticipationMark];
+
+
+export const ParticipationMark = {
+  HIGH: 'HIGH',
+  GOOD: 'GOOD',
+  WATCH: 'WATCH',
+} as const;
+
+/**
+ * One verdict on one child. timetableSlotId is null on a whole-day register, which is what years 1 to 5 keep.
+ */
+export interface AttendanceMark {
+  /** @nullable */
+  timetableSlotId: number | null;
+  state: AttendanceState;
+  participation: ParticipationMark | null;
+  /** @nullable */
+  note: string | null;
+}
+
 export interface ClassDayStudent {
   studentId: number;
   studentName: string;
@@ -777,6 +815,8 @@ export interface ClassDayStudent {
   attempts: ClassDayAttempt[];
   /** The marks written for this child today, one per period. Empty where nobody looked - which is not the same as nothing done, and is the reason this is a list rather than a field with a default. */
   notebook: NotebookMark[];
+  /** The register entries for this child today - one for the day up to year 5, one per period from year 6. Empty where nobody took it. */
+  attendance: AttendanceMark[];
 }
 
 export interface ClassDay {
@@ -785,6 +825,402 @@ export interface ClassDay {
   date: string;
   lessons: ClassDayLesson[];
   students: ClassDayStudent[];
+  /** Whether this class's register is taken per lesson or once a day. The school's own rule, carried here so the screen does not have to guess it from the year. */
+  attendancePerLesson: boolean;
+}
+
+export interface ReopenExamInput {
+  studentIds: number[];
+}
+
+export interface ReopenExamResult {
+  reopened: number;
+}
+
+export interface ReleaseAnswersInput {
+  open: boolean;
+}
+
+export interface ReleaseAnswersResult {
+  answersOpen: boolean;
+}
+
+export type PaperEntryInputAnswersItem = {
+  itemId: number;
+  /**
+     * The option the child picked, for a question with a key.
+     * @nullable
+     */
+  optionId?: number | null;
+  /**
+     * A score the teacher awarded, for a question a key cannot settle - the ones with a rubric rather than four boxes. Where both arrive this wins: a person looked at the page.
+     * @nullable
+     */
+  awarded?: number | null;
+};
+
+/**
+ * What one child wrote on paper, question by question, in the order the paper was printed in. Entering a total instead would be quicker and would throw away the only thing that makes an exam useful afterwards: which questions the class got wrong.
+ */
+export interface PaperEntryInput {
+  studentId: number;
+  answers: PaperEntryInputAnswersItem[];
+}
+
+export type ExamAttemptInputAnswersItem = {
+  itemId: number;
+  /** @nullable */
+  optionId?: number | null;
+};
+
+export interface ExamAttemptInput {
+  answers: ExamAttemptInputAnswersItem[];
+}
+
+export type ExamKind = typeof ExamKind[keyof typeof ExamKind];
+
+
+export const ExamKind = {
+  UNIT: 'UNIT',
+  TERM: 'TERM',
+  YEAR: 'YEAR',
+  DIAGNOSTIC: 'DIAGNOSTIC',
+} as const;
+
+export interface ExamInput {
+  classId: number;
+  subjectId: number;
+  examKind: ExamKind;
+  /** @maxLength 300 */
+  title: string;
+  /** @nullable */
+  instructions?: string | null;
+  /** ISO 8601 instant. Both ends are required - an exam that never closes is homework. */
+  opensAt: string;
+  closesAt: string;
+  /**
+     * Questions the teacher insists on. Asked first; the draw fills the rest.
+     * @nullable
+     */
+  itemIds?: number[] | null;
+  /**
+     * How many further questions to draw at random from the year's bank.
+     * @minimum 0
+     * @maximum 100
+     * @nullable
+     */
+  drawCount?: number | null;
+  /**
+     * Named children. Empty or absent means the whole register, which is the ordinary case.
+     * @nullable
+     */
+  studentIds?: number[] | null;
+  /**
+     * Sat on paper, in the room, with the teacher entering afterwards what each child wrote. The questions come from the same bank and carry the same numbers, which is the point: a paper sitting the system cannot line up question for question produces marks nobody can trace. Such a sitting is never offered to a child online.
+     * @nullable
+     */
+  onPaper?: boolean | null;
+}
+
+export interface ExamCreated {
+  sittingId: number;
+  questionCount: number;
+}
+
+export interface ExamSummary {
+  sittingId: number;
+  paperId: number;
+  title: string;
+  examKind: string;
+  subjectId: number;
+  subjectName: string;
+  opensAt: string;
+  closesAt: string;
+  answersOpen: boolean;
+  wholeClass: boolean;
+  /** Sat in the room; the teacher enters the answers. */
+  onPaper: boolean;
+  questionCount: number;
+  /** How many children it is set for. */
+  invited: number;
+  /** How many have sat it. */
+  sat: number;
+}
+
+export interface ExamOption {
+  optionId: number;
+  text: string;
+  /** Present only on the teacher's copy. */
+  isCorrect?: boolean;
+}
+
+export interface ExamQuestion {
+  itemId: number;
+  itemOrder: number;
+  title: string;
+  /**
+     * What the child is given before the question - a passage, a line read aloud.
+     * @nullable
+     */
+  stimulus: string | null;
+  maxScore: number;
+  options: ExamOption[];
+}
+
+export interface ExamStudentResult {
+  studentId: number;
+  studentName: string;
+  studentCode: string;
+  /** @nullable */
+  attemptId: number | null;
+  /** @nullable */
+  score: number | null;
+  /** @nullable */
+  maxScore: number | null;
+  /** @nullable */
+  attemptedAt: string | null;
+  /** How many further goes the teacher has granted. */
+  extraAttempts: number;
+}
+
+export interface TeacherExam {
+  sittingId: number;
+  paperId: number;
+  classId: number;
+  subjectId: number;
+  title: string;
+  examKind: string;
+  /** @nullable */
+  instructions: string | null;
+  /** @nullable */
+  gradeLevelId: number | null;
+  opensAt: string;
+  closesAt: string;
+  answersOpen: boolean;
+  wholeClass: boolean;
+  onPaper: boolean;
+  questions: ExamQuestion[];
+  results: ExamStudentResult[];
+}
+
+export interface StudentExamSummary {
+  sittingId: number;
+  title: string;
+  examKind: string;
+  subjectName: string;
+  opensAt: string;
+  closesAt: string;
+  questionCount: number;
+  attemptsUsed: number;
+  attemptsAllowed: number;
+  /** @nullable */
+  score: number | null;
+  /** @nullable */
+  maxScore: number | null;
+  answersOpen: boolean;
+  /** The window is open and a go is left. */
+  isOpen: boolean;
+}
+
+export interface StudentExam {
+  sittingId: number;
+  title: string;
+  examKind: string;
+  /** @nullable */
+  instructions: string | null;
+  opensAt: string;
+  closesAt: string;
+  isOpen: boolean;
+  attemptsUsed: number;
+  attemptsAllowed: number;
+  answersOpen: boolean;
+  /** Empty before the window opens and after the go is spent. */
+  questions: ExamQuestion[];
+}
+
+export type ExamResultResultsItem = {
+  itemId: number;
+  correct: boolean;
+  /** Empty until the teacher releases the key. */
+  correctOptionIds: number[];
+};
+
+export interface ExamResult {
+  attemptId: number;
+  score: number;
+  maxScore: number;
+  answersOpen: boolean;
+  results: ExamResultResultsItem[];
+}
+
+export interface GuardianChild {
+  studentId: number;
+  displayName: string;
+  studentCode: string;
+  /** @nullable */
+  className: string | null;
+  /** @nullable */
+  gradeLevel: number | null;
+  /**
+     * What this account is to the child, where the school wrote it down.
+     * @nullable
+     */
+  relation: string | null;
+}
+
+export interface ChildAttendanceRow {
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  onDate: string;
+  /**
+     * Null on a whole-day register, which is what years 1 to 5 keep.
+     * @nullable
+     */
+  timetableSlotId: number | null;
+  /** @nullable */
+  periodNo: number | null;
+  /** @nullable */
+  subjectName: string | null;
+  state: AttendanceState;
+  participation: ParticipationMark | null;
+  /** @nullable */
+  note: string | null;
+}
+
+export interface ChildNotebookRow {
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  onDate: string;
+  /** @nullable */
+  subjectName: string | null;
+  state: NotebookState;
+  /** @nullable */
+  comment: string | null;
+}
+
+/**
+ * Scores and dates. The questions and the key are never here: a parent reading the answers over a child's shoulder is exactly the route by which a paper the rest of the class is still sitting leaks.
+ */
+export interface ChildExamRow {
+  sittingId: number;
+  title: string;
+  examKind: string;
+  subjectName: string;
+  /** @nullable */
+  satAt: string | null;
+  /** @nullable */
+  score: number | null;
+  /** @nullable */
+  maxScore: number | null;
+}
+
+export interface ChildTeacherRow {
+  /** @nullable */
+  subjectName: string | null;
+  teacherName: string;
+  isClassTeacher: boolean;
+}
+
+export interface ChildRecord {
+  studentId: number;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  from: string;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  to: string;
+  attendance: ChildAttendanceRow[];
+  notebook: ChildNotebookRow[];
+  exams: ChildExamRow[];
+  teachers: ChildTeacherRow[];
+}
+
+export type GuardianAccountChildrenItem = {
+  studentId: number;
+  studentName: string;
+  /** @nullable */
+  relation: string | null;
+};
+
+export interface GuardianAccount {
+  userId: number;
+  username: string;
+  displayName: string;
+  isActive: boolean;
+  children: GuardianAccountChildrenItem[];
+}
+
+/**
+ * The password is chosen by the administrator sitting with the parent, because this school hands out credentials in person. It is never stored in the clear and never returned again: a screen that can re-display a password is a screen somebody will leave open.
+ */
+export interface GuardianAccountInput {
+  /**
+     * @minLength 3
+     * @maxLength 50
+     */
+  username: string;
+  /** @maxLength 300 */
+  displayName: string;
+  /** @minLength 8 */
+  password: string;
+  /**
+     * Link to this child at the same time, which is the ordinary case.
+     * @nullable
+     */
+  studentId?: number | null;
+}
+
+export interface GuardianAccountCreated {
+  userId: number;
+  username: string;
+}
+
+export interface ClassChild {
+  studentId: number;
+  displayName: string;
+  studentCode: string;
+  /** Whether a live guardian account already reads this child. */
+  linked: boolean;
+}
+
+export interface GuardianLinkInput {
+  userId: number;
+  studentId: number;
+  /**
+     * @maxLength 40
+     * @nullable
+     */
+  relation?: string | null;
+}
+
+export interface GuardianLinkResult {
+  linked: boolean;
+}
+
+export type AttendanceInputMarksItem = {
+  studentId: number;
+  state: AttendanceState;
+  participation?: ParticipationMark | null;
+  /**
+     * @maxLength 500
+     * @nullable
+     */
+  note?: string | null;
+};
+
+/**
+ * A whole register at once, because that is how it is taken: down the class, then away. Children left out are left alone - unregistered is a fact about the teacher's afternoon, not a verdict on a child.
+ */
+export interface AttendanceInput {
+  classId: number;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  onDate: string;
+  /**
+     * The period. Required from year 6, where the children move between teachers and a register taken in the morning says nothing about who was in physics after lunch. Refused up to year 5, where the class is with one teacher all day and six registers would be five copies of one fact.
+     * @nullable
+     */
+  timetableSlotId?: number | null;
+  marks: AttendanceInputMarksItem[];
+}
+
+export interface AttendanceResult {
+  marked: number;
 }
 
 export type NotebookInputMarksItem = {
@@ -1149,6 +1585,7 @@ export const UserRole = {
   STUDENT: 'STUDENT',
   TEACHER: 'TEACHER',
   ADMIN: 'ADMIN',
+  GUARDIAN: 'GUARDIAN',
 } as const;
 
 /**
@@ -1199,6 +1636,7 @@ export const Role = {
   student: 'student',
   teacher: 'teacher',
   admin: 'admin',
+  guardian: 'guardian',
 } as const;
 
 export type AssignmentStatus = typeof AssignmentStatus[keyof typeof AssignmentStatus];
@@ -2321,6 +2759,35 @@ classId: number;
  * Narrow to one subject the teacher holds in this class. Omitted means every subject they hold there, which for a class teacher or a primary-grade teacher is every subject the class runs.
  */
 subjectId?: number;
+};
+
+export type GetTeacherExamsParams = {
+classId: number;
+subjectId?: number;
+};
+
+export type GetChildDayParams = {
+studentId: number;
+/**
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+on?: string;
+};
+
+export type GetChildRecordParams = {
+studentId: number;
+/**
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+from?: string;
+/**
+ * @pattern ^\d{4}-\d{2}-\d{2}$
+ */
+to?: string;
+};
+
+export type GetClassChildrenParams = {
+classId: number;
 };
 
 export type GetStudentSubjectOutlineParams = {

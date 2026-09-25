@@ -38,6 +38,10 @@ export const userRoleInCore = core.enum("user_role", [
   "STUDENT",
   "TEACHER",
   "ADMIN",
+  // A parent's own login. Distinct from STUDENT because a parent reads a
+  // child's work and never does it: nothing a guardian can reach writes an
+  // answer, sits a paper, or appears in a register as the child.
+  "GUARDIAN",
 ]);
 
 export const usersInCore = core.table(
@@ -390,6 +394,68 @@ export const studentGuardiansInCore = core.table(
       foreignColumns: [studentsInCore.id],
       name: "student_guardians_student_id_fkey",
     }).onDelete("cascade"),
+  ],
+);
+
+/**
+ * A parent's login, and the child it reads.
+ *
+ * Separate from student_guardians, which is the phone book the admissions
+ * sheet fills in: a number to ring, and sometimes a name. This is an account -
+ * somebody who signs in - and most of the numbers in that table will never
+ * have one. Joining the two would mean either inventing logins for phone
+ * numbers or losing the numbers that have no login.
+ *
+ * One active account per child, which is the school's rule: a parents' evening
+ * arranged twice because two people both had the password is worse than one
+ * arranged badly. A second parent is added by making the first inactive, and
+ * the history stays.
+ *
+ * A guardian reads; they never write anything the child is answerable for.
+ * That is enforced route by route, but the shape here says it too - there is
+ * no column on this table that a child's work could hang from.
+ */
+export const guardianStudentsInCore = core.table(
+  "guardian_students",
+  {
+    id: bigint({ mode: "number" }).primaryKey().generatedAlwaysAsIdentity({
+      name: "core.guardian_students_id_seq",
+      startWith: 1,
+      increment: 1,
+      minValue: 1,
+      cache: 1,
+    }),
+    userId: bigint("user_id", { mode: "number" }).notNull(),
+    studentId: bigint("student_id", { mode: "number" }).notNull(),
+    relationMn: varchar("relation_mn", { length: 40 }),
+    isActive: boolean("is_active").default(true).notNull(),
+    linkedBy: bigint("linked_by", { mode: "number" }),
+    linkedAt: timestamp("linked_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("guardian_students_user_student_key").on(table.userId, table.studentId),
+    index("idx_guardian_students_student").using(
+      "btree",
+      table.studentId.asc().nullsLast(),
+    ),
+    index("idx_guardian_students_user").using("btree", table.userId.asc().nullsLast()),
+    foreignKey({
+      columns: [table.userId],
+      foreignColumns: [usersInCore.id],
+      name: "guardian_students_user_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.studentId],
+      foreignColumns: [studentsInCore.id],
+      name: "guardian_students_student_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.linkedBy],
+      foreignColumns: [usersInCore.id],
+      name: "guardian_students_linked_by_fkey",
+    }),
   ],
 );
 

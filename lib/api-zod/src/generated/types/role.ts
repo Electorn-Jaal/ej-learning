@@ -13,4 +13,5 @@ export const Role = {
   student: 'student',
   teacher: 'teacher',
   admin: 'admin',
+  guardian: 'guardian',
 } as const;

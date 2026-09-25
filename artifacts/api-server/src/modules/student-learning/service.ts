@@ -59,12 +59,25 @@ export async function studentToday(user: AuthenticatedUser, date = todayInUlaanb
       "NO_STUDENT_LINK",
     );
   }
+  return dayForStudent(user.studentId, date);
+}
 
+/**
+ * One child's day, whoever is looking at it.
+ *
+ * Taken out of studentToday so a parent reads exactly what their child reads -
+ * the same lessons, the same notes, the same marks. Two assemblies of the same
+ * day would drift, and the day a parent is shown something their child is not
+ * is the day the screen stops being worth trusting.
+ *
+ * Who may ask is settled before this is called. Nothing here checks it.
+ */
+export async function dayForStudent(studentId: number, date: string) {
   const [[enrolment], timetable, assignments, marks] = await Promise.all([
-    repository.studentClass(user.studentId),
-    repository.lessonsForDay(user.studentId, date),
-    repository.assignmentsForDay(user.studentId, date),
-    repository.notebookForDay(user.studentId, date),
+    repository.studentClass(studentId),
+    repository.lessonsForDay(studentId, date),
+    repository.assignmentsForDay(studentId, date),
+    repository.notebookForDay(studentId, date),
   ]);
 
   type Extra = {

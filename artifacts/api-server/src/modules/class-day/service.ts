@@ -24,12 +24,36 @@ export async function classDay(
   const subjectIds = await viewableSubjects(user, klass.classId, query.subjectId);
   const date = isIsoDate(query.on) ? query.on : todayInUlaanbaatar();
 
-  const [lessonRows, answerRows, coverageRows, markRows] = await Promise.all([
-    repository.lessonsForClassDay(klass.classId, subjectIds, date),
-    repository.answersForClassDay(klass.classId, subjectIds, date),
-    repository.coverageForClassDay(klass.classId, subjectIds, date),
-    repository.notebookMarksForClassDay(klass.classId, subjectIds, date),
-  ]);
+  const [lessonRows, answerRows, coverageRows, markRows, registerRows, [year]] =
+    await Promise.all([
+      repository.lessonsForClassDay(klass.classId, subjectIds, date),
+      repository.answersForClassDay(klass.classId, subjectIds, date),
+      repository.coverageForClassDay(klass.classId, subjectIds, date),
+      repository.notebookMarksForClassDay(klass.classId, subjectIds, date),
+      repository.attendanceForClassDay(klass.classId, date),
+      repository.classGradeLevel(klass.classId),
+    ]);
+
+  // The school's own rule, which the screen has to know before it can draw a
+  // register: up to year 5 a class is with one teacher all day and the
+  // register is taken once; from year 6 the children move between teachers
+  // and it is taken per lesson.
+  const perLesson = registerPerLesson(year?.gradeLevel ?? 12);
+
+  const register = new Map<number, Array<{
+    timetableSlotId: number | null;
+    state: string;
+    participation: string | null;
+    note: string | null;
+  }>>();
+  for (const row of registerRows) {
+    register.set(row.studentId, [...(register.get(row.studentId) ?? []), {
+      timetableSlotId: row.timetableSlotId,
+      state: row.state,
+      participation: row.participation,
+      note: row.note,
+    }]);
+  }
 
   // What a teacher said each period got through, so the screen can show their
   // own answer back rather than asking it again from scratch. Keyed by period
@@ -150,11 +174,109 @@ export async function classDay(
     className: klass.className,
     date,
     lessons,
+    attendancePerLesson: perLesson,
     students: [...byStudent.values()].map((student) => ({
       ...student,
       notebook: notebook.get(student.studentId) ?? [],
+      attendance: register.get(student.studentId) ?? [],
     })),
   };
+}
+
+/**
+ * Whether this year's register is taken per lesson or once a day.
+ *
+ * The school's answer, not a guess: up to year 5 the class is with one teacher
+ * all day, so one register is the truth and six would be five copies of it.
+ * From year 6 the children move between teachers, and a register taken once in
+ * the morning says nothing about who was in physics after lunch.
+ */
+export const registerPerLesson = (gradeLevel: number) => gradeLevel > 5;
+
+const ATTENDANCE_STATES = ["PRESENT", "LATE", "ABSENT", "EXCUSED", "UNREGISTERED"];
+const PARTICIPATION = ["HIGH", "GOOD", "WATCH"];
+
+/**
+ * Take the register.
+ *
+ * The whole period at once, like the exercise books, because that is how it is
+ * done: down the class, then away. Children left out of the list are left
+ * alone - unregistered is a fact about the teacher's afternoon, not a verdict
+ * on a child, and inventing one to fill the grid would turn every unmarked
+ * lesson into a truancy.
+ */
+export async function markAttendance(
+  user: AuthenticatedUser,
+  input: {
+    classId: number;
+    onDate: string;
+    timetableSlotId?: number | null;
+    marks: Array<{
+      studentId: number;
+      state: string;
+      participation?: string | null;
+      note?: string | null;
+    }>;
+  },
+) {
+  const klass = await authorisedClass(user, input.classId);
+  if (!isIsoDate(input.onDate)) throw badRequest("Огноо буруу байна.", "INVALID_DATE");
+  if (input.onDate > todayInUlaanbaatar()) {
+    throw badRequest("Ирээдүйн өдрийн ирц бүртгэх боломжгүй.", "FUTURE_DAY");
+  }
+
+  const [year] = await repository.classGradeLevel(klass.classId);
+  const perLesson = registerPerLesson(year?.gradeLevel ?? 12);
+  const slotId = input.timetableSlotId ?? null;
+  // The rule is the school's and the system holds it: a whole-day register in
+  // year 9 would claim a child who left at lunch sat through physics, and six
+  // registers in year 2 would be five copies of one fact for a teacher to
+  // keep in step.
+  if (perLesson && slotId === null) {
+    throw badRequest("Энэ ангийн ирцийг хичээл бүрээр бүртгэнэ.", "SLOT_REQUIRED");
+  }
+  if (!perLesson && slotId !== null) {
+    throw badRequest("Энэ ангийн ирцийг өдрөөр нь нэг удаа бүртгэнэ.", "WHOLE_DAY_ONLY");
+  }
+
+  let subjectId: number | null = null;
+  if (slotId !== null) {
+    const [slot] = await repository.slotForClass(slotId, klass.classId);
+    if (!slot) throw badRequest("Хуваарийн цаг энэ ангид тохирохгүй байна.", "INVALID_SLOT");
+    await editableSubjects(user, klass.classId, slot.subjectId);
+    subjectId = slot.subjectId;
+  }
+
+  const roster = new Set(await repository.rosterIds(klass.classId));
+  const marks = input.marks.map((mark) => {
+    if (!roster.has(mark.studentId)) {
+      throw badRequest("Энэ ангид бүртгэлгүй сурагч байна.", "STUDENT_NOT_IN_CLASS");
+    }
+    if (!ATTENDANCE_STATES.includes(mark.state)) {
+      throw badRequest("Ирцийн тэмдэглэгээ буруу байна.", "INVALID_STATE");
+    }
+    const participation = mark.participation ?? null;
+    if (participation !== null && !PARTICIPATION.includes(participation)) {
+      throw badRequest("Оролцооны тэмдэглэгээ буруу байна.", "INVALID_PARTICIPATION");
+    }
+    const note = typeof mark.note === "string" ? mark.note.trim() : null;
+    if (note !== null && note.length > MAX_COMMENT) {
+      throw badRequest(`Тайлбар ${MAX_COMMENT} тэмдэгтээс урт байна.`, "COMMENT_TOO_LONG");
+    }
+    return {
+      studentId: mark.studentId,
+      state: mark.state,
+      // Participation is an observation about a lesson, so it goes with the
+      // attendance state and leaves with it.
+      participation: mark.state === "UNREGISTERED" ? null : participation,
+      note: note === "" ? null : note,
+    };
+  });
+
+  await repository.setAttendance(
+    klass.classId, input.onDate, slotId, subjectId, user.id, marks,
+  );
+  return { marked: marks.length };
 }
 
 const NOTEBOOK_STATES = ["DONE", "PARTIAL", "NOT_DONE", "UNCHECKED"];

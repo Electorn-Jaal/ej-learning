@@ -1,6 +1,7 @@
 import { and, eq, gt, isNotNull, isNull, lt, ne, or } from "drizzle-orm";
 import {
   classTeachersInCore,
+  guardianStudentsInCore,
   db,
   readRows,
   sessionsInCore,
@@ -9,7 +10,7 @@ import {
   usersInCore,
 } from "@workspace/db";
 
-export type UserRole = "STUDENT" | "TEACHER" | "ADMIN";
+export type UserRole = "STUDENT" | "TEACHER" | "ADMIN" | "GUARDIAN";
 
 export type AuthenticatedUser = {
   id: number;
@@ -22,6 +23,15 @@ export type AuthenticatedUser = {
   takesLessons: boolean;
   /** Where to fetch this person's own photograph, or null when they have none. */
   photoUrl: string | null;
+  /**
+   * The children this account may read, for a parent.
+   *
+   * Carried on the session rather than looked up per request, because every
+   * guardian route needs it and a check that costs a query is a check somebody
+   * eventually skips. Empty for everybody else, which is what makes
+   * "guardianOf.includes(id)" safe to write without asking about roles first.
+   */
+  guardianOf: number[];
 };
 
 async function decorate(row: {
@@ -66,6 +76,18 @@ async function decorate(row: {
   // A URL rather than the storage key. The shell draws the avatar from the
   // session it already has, so carrying it here saves every screen a second
   // request for a picture that never changes between page loads.
+  // The children a parent may read. Active links only: a second parent is
+  // added by making the first inactive, and an inactive link is history.
+  const children = await db
+    .select({ studentId: guardianStudentsInCore.studentId })
+    .from(guardianStudentsInCore)
+    .where(
+      and(
+        eq(guardianStudentsInCore.userId, row.id),
+        eq(guardianStudentsInCore.isActive, true),
+      ),
+    );
+
   const { photoKey, ...rest } = row;
   return {
     ...rest,
@@ -73,6 +95,7 @@ async function decorate(row: {
     teacherId,
     takesLessons,
     photoUrl: photoKey === null ? null : "/api/me/photo",
+    guardianOf: children.map((entry) => entry.studentId),
   };
 }
 

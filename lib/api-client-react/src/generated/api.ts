@@ -28,27 +28,46 @@ import type {
   AssignmentState,
   AssignmentStepInput,
   AssignmentSubmissionInput,
+  AttendanceInput,
+  AttendanceResult,
   CatalogItem,
+  ChildRecord,
+  ClassChild,
   ClassDay,
   ClassSkills,
   ClassTopic,
   ClassTopicInput,
   CurrentUser,
+  ExamAttemptInput,
+  ExamCreated,
+  ExamInput,
+  ExamResult,
+  ExamSummary,
   ExtraWorkInput,
   ExtraWorkResult,
   GenerateScheduleInput,
   GenerateScheduleResult,
   GetAssessmentSheetParams,
+  GetChildDayParams,
+  GetChildRecordParams,
+  GetClassChildrenParams,
   GetClassDayParams,
   GetClassSkillsParams,
   GetItemAnalysisParams,
   GetStudentPlanParams,
   GetStudentScheduleParams,
   GetStudentSubjectOutlineParams,
+  GetTeacherExamsParams,
   GetTeacherLessonsParams,
   GetTeacherQuizAttemptsParams,
   GetTeacherQuizPaperParams,
   GetTeacherScheduleParams,
+  GuardianAccount,
+  GuardianAccountCreated,
+  GuardianAccountInput,
+  GuardianChild,
+  GuardianLinkInput,
+  GuardianLinkResult,
   HealthStatus,
   ItemAnalysis,
   LoginInput,
@@ -59,6 +78,7 @@ import type {
   NotebookResult,
   OutlineChoice,
   PageOffsetInput,
+  PaperEntryInput,
   PasswordChangeInput,
   PreviewStudent,
   ProductiveMarkSheet,
@@ -66,6 +86,10 @@ import type {
   QuizAttempt,
   QuizAttemptInput,
   QuizPaper,
+  ReleaseAnswersInput,
+  ReleaseAnswersResult,
+  ReopenExamInput,
+  ReopenExamResult,
   ReplanInput,
   ReplanResult,
   ReviewInput,
@@ -84,6 +108,8 @@ import type {
   StaffProfile,
   StaffProfileInput,
   StudentDashboard,
+  StudentExam,
+  StudentExamSummary,
   StudentPlacement,
   StudentPlan,
   StudentPlanInput,
@@ -98,6 +124,7 @@ import type {
   TeacherCard,
   TeacherClass,
   TeacherDashboard,
+  TeacherExam,
   TeacherQuizAttempts,
   TeacherQuizPaper,
   TeacherSchedule,
@@ -5030,6 +5057,1536 @@ export const useSetScheduleDay = <TError = ErrorType<ApiError>,
         TContext
       > => {
       return useMutation(getSetScheduleDayMutationOptions(options));
+    }
+
+export const getGetTeacherExamsUrl = (params: GetTeacherExamsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/teacher/exams?${stringifiedParams}` : `/api/teacher/exams`
+}
+
+/**
+ * @summary Exams set for a class
+ */
+export const getTeacherExams = async (params: GetTeacherExamsParams, options?: Parameters<typeof customFetch>[1]): Promise<ExamSummary[]> => {
+
+  return customFetch<ExamSummary[]>(getGetTeacherExamsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTeacherExamsQueryKey = (params?: GetTeacherExamsParams,) => {
+    return [
+    `/api/teacher/exams`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetTeacherExamsQueryOptions = <TData = Awaited<ReturnType<typeof getTeacherExams>>, TError = ErrorType<ApiError>>(params: GetTeacherExamsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTeacherExams>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTeacherExamsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTeacherExams>>> = ({ signal }) => getTeacherExams(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTeacherExams>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTeacherExamsQueryResult = NonNullable<Awaited<ReturnType<typeof getTeacherExams>>>
+export type GetTeacherExamsQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Exams set for a class
+ */
+
+export function useGetTeacherExams<TData = Awaited<ReturnType<typeof getTeacherExams>>, TError = ErrorType<ApiError>>(
+ params: GetTeacherExamsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTeacherExams>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTeacherExamsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateExamUrl = () => {
+
+
+
+
+  return `/api/teacher/exams`
+}
+
+/**
+ * A paper is a set of questions; a sitting is a class, a window and an audience. They are made together here because a paper nobody sits is not a thing a teacher wants to have made.
+ * Questions may be named, drawn at random, or both. Drawing is not a shortcut: it is what stops a paper set once being the same paper next year. Naming is how a teacher insists on the question they meant to ask. What is named is asked, and the draw fills the rest.
+ * An empty studentIds is the whole register, which is the ordinary case.
+ * @summary Set an exam for a class, a group, or named children
+ */
+export const createExam = async (examInput: ExamInput, options?: Parameters<typeof customFetch>[1]): Promise<ExamCreated> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<ExamCreated>(getCreateExamUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(examInput)
+  }
+);}
+
+
+
+
+
+export const getCreateExamMutationKey = () => ['createExam'] as const;
+
+export const getCreateExamMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createExam>>, TError,CreateExamMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createExam>>, TError,CreateExamMutationVariables, TContext> => {
+
+const mutationKey = getCreateExamMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createExam>>, CreateExamMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createExam(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateExamMutationResult = NonNullable<Awaited<ReturnType<typeof createExam>>>
+    export type CreateExamMutationBody = BodyType<ExamInput>
+    export type CreateExamMutationError = ErrorType<ApiError>
+    export type CreateExamMutationVariables = {data: BodyType<ExamInput>}
+
+    /**
+ * @summary Set an exam for a class, a group, or named children
+ */
+export const useCreateExam = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createExam>>, TError,CreateExamMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createExam>>,
+        TError,
+        CreateExamMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateExamMutationOptions(options));
+    }
+
+export const getGetTeacherExamUrl = (sittingId: number,) => {
+
+
+
+
+  return `/api/teacher/exams/${sittingId}`
+}
+
+/**
+ * @summary One exam, with the key and who has sat it
+ */
+export const getTeacherExam = async (sittingId: number, options?: Parameters<typeof customFetch>[1]): Promise<TeacherExam> => {
+
+  return customFetch<TeacherExam>(getGetTeacherExamUrl(sittingId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetTeacherExamQueryKey = (sittingId: number,) => {
+    return [
+    `/api/teacher/exams/${sittingId}`
+    ] as const;
+    }
+
+
+export const getGetTeacherExamQueryOptions = <TData = Awaited<ReturnType<typeof getTeacherExam>>, TError = ErrorType<ApiError>>(sittingId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTeacherExam>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetTeacherExamQueryKey(sittingId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getTeacherExam>>> = ({ signal }) => getTeacherExam(sittingId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: sittingId !== null && sittingId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getTeacherExam>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetTeacherExamQueryResult = NonNullable<Awaited<ReturnType<typeof getTeacherExam>>>
+export type GetTeacherExamQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary One exam, with the key and who has sat it
+ */
+
+export function useGetTeacherExam<TData = Awaited<ReturnType<typeof getTeacherExam>>, TError = ErrorType<ApiError>>(
+ sittingId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getTeacherExam>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetTeacherExamQueryOptions(sittingId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getReopenExamUrl = (sittingId: number,) => {
+
+
+
+
+  return `/api/teacher/exams/${sittingId}/reopen`
+}
+
+/**
+ * A child cannot sit a paper twice on their own - that is what makes it a paper rather than practice - so the only way to another go is a teacher deciding there should be one. The attempt already made is kept.
+ * @summary Let named children sit again
+ */
+export const reopenExam = async (sittingId: number,
+    reopenExamInput: ReopenExamInput, options?: Parameters<typeof customFetch>[1]): Promise<ReopenExamResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<ReopenExamResult>(getReopenExamUrl(sittingId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(reopenExamInput)
+  }
+);}
+
+
+
+
+
+export const getReopenExamMutationKey = () => ['reopenExam'] as const;
+
+export const getReopenExamMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reopenExam>>, TError,ReopenExamMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reopenExam>>, TError,ReopenExamMutationVariables, TContext> => {
+
+const mutationKey = getReopenExamMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reopenExam>>, ReopenExamMutationVariables> = (props) => {
+          const {sittingId,data} = props ?? {};
+
+          return  reopenExam(sittingId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReopenExamMutationResult = NonNullable<Awaited<ReturnType<typeof reopenExam>>>
+    export type ReopenExamMutationBody = BodyType<ReopenExamInput>
+    export type ReopenExamMutationError = ErrorType<ApiError>
+    export type ReopenExamMutationVariables = {sittingId: number;data: BodyType<ReopenExamInput>}
+
+    /**
+ * @summary Let named children sit again
+ */
+export const useReopenExam = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reopenExam>>, TError,ReopenExamMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reopenExam>>,
+        TError,
+        ReopenExamMutationVariables,
+        TContext
+      > => {
+      return useMutation(getReopenExamMutationOptions(options));
+    }
+
+export const getReleaseExamAnswersUrl = (sittingId: number,) => {
+
+
+
+
+  return `/api/teacher/exams/${sittingId}/answers`
+}
+
+/**
+ * The same rule the daily check follows, and it bites harder here: a paper is sat once, and a child who sees the answers while a classmate is still writing has been handed the marks.
+ * @summary Release the key to the children, or take it back
+ */
+export const releaseExamAnswers = async (sittingId: number,
+    releaseAnswersInput: ReleaseAnswersInput, options?: Parameters<typeof customFetch>[1]): Promise<ReleaseAnswersResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<ReleaseAnswersResult>(getReleaseExamAnswersUrl(sittingId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(releaseAnswersInput)
+  }
+);}
+
+
+
+
+
+export const getReleaseExamAnswersMutationKey = () => ['releaseExamAnswers'] as const;
+
+export const getReleaseExamAnswersMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof releaseExamAnswers>>, TError,ReleaseExamAnswersMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof releaseExamAnswers>>, TError,ReleaseExamAnswersMutationVariables, TContext> => {
+
+const mutationKey = getReleaseExamAnswersMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof releaseExamAnswers>>, ReleaseExamAnswersMutationVariables> = (props) => {
+          const {sittingId,data} = props ?? {};
+
+          return  releaseExamAnswers(sittingId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReleaseExamAnswersMutationResult = NonNullable<Awaited<ReturnType<typeof releaseExamAnswers>>>
+    export type ReleaseExamAnswersMutationBody = BodyType<ReleaseAnswersInput>
+    export type ReleaseExamAnswersMutationError = ErrorType<ApiError>
+    export type ReleaseExamAnswersMutationVariables = {sittingId: number;data: BodyType<ReleaseAnswersInput>}
+
+    /**
+ * @summary Release the key to the children, or take it back
+ */
+export const useReleaseExamAnswers = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof releaseExamAnswers>>, TError,ReleaseExamAnswersMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof releaseExamAnswers>>,
+        TError,
+        ReleaseExamAnswersMutationVariables,
+        TContext
+      > => {
+      return useMutation(getReleaseExamAnswersMutationOptions(options));
+    }
+
+export const getEnterPaperAnswersUrl = (sittingId: number,) => {
+
+
+
+
+  return `/api/teacher/exams/${sittingId}/entry`
+}
+
+/**
+ * The written half of UC10. A paper sitting has already happened by the time anybody types it in, so there is no window here - a teacher writing it up on Sunday evening is not sitting it late.
+ * Marked by the same rule as an online sitting, because a school that cannot compare a paper exam with an online one has two systems rather than one. Re-entering is a second attempt, which is what a teacher gets after reopening the sitting for that child.
+ * @summary Enter what one child wrote on a paper exam
+ */
+export const enterPaperAnswers = async (sittingId: number,
+    paperEntryInput: PaperEntryInput, options?: Parameters<typeof customFetch>[1]): Promise<ExamResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<ExamResult>(getEnterPaperAnswersUrl(sittingId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(paperEntryInput)
+  }
+);}
+
+
+
+
+
+export const getEnterPaperAnswersMutationKey = () => ['enterPaperAnswers'] as const;
+
+export const getEnterPaperAnswersMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof enterPaperAnswers>>, TError,EnterPaperAnswersMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof enterPaperAnswers>>, TError,EnterPaperAnswersMutationVariables, TContext> => {
+
+const mutationKey = getEnterPaperAnswersMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof enterPaperAnswers>>, EnterPaperAnswersMutationVariables> = (props) => {
+          const {sittingId,data} = props ?? {};
+
+          return  enterPaperAnswers(sittingId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type EnterPaperAnswersMutationResult = NonNullable<Awaited<ReturnType<typeof enterPaperAnswers>>>
+    export type EnterPaperAnswersMutationBody = BodyType<PaperEntryInput>
+    export type EnterPaperAnswersMutationError = ErrorType<ApiError>
+    export type EnterPaperAnswersMutationVariables = {sittingId: number;data: BodyType<PaperEntryInput>}
+
+    /**
+ * @summary Enter what one child wrote on a paper exam
+ */
+export const useEnterPaperAnswers = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof enterPaperAnswers>>, TError,EnterPaperAnswersMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof enterPaperAnswers>>,
+        TError,
+        EnterPaperAnswersMutationVariables,
+        TContext
+      > => {
+      return useMutation(getEnterPaperAnswersMutationOptions(options));
+    }
+
+export const getGetStudentExamsUrl = () => {
+
+
+
+
+  return `/api/student/exams`
+}
+
+/**
+ * @summary The exams set for me
+ */
+export const getStudentExams = async ( options?: Parameters<typeof customFetch>[1]): Promise<StudentExamSummary[]> => {
+
+  return customFetch<StudentExamSummary[]>(getGetStudentExamsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStudentExamsQueryKey = () => {
+    return [
+    `/api/student/exams`
+    ] as const;
+    }
+
+
+export const getGetStudentExamsQueryOptions = <TData = Awaited<ReturnType<typeof getStudentExams>>, TError = ErrorType<ApiError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStudentExams>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStudentExamsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStudentExams>>> = ({ signal }) => getStudentExams({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStudentExams>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetStudentExamsQueryResult = NonNullable<Awaited<ReturnType<typeof getStudentExams>>>
+export type GetStudentExamsQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary The exams set for me
+ */
+
+export function useGetStudentExams<TData = Awaited<ReturnType<typeof getStudentExams>>, TError = ErrorType<ApiError>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStudentExams>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetStudentExamsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetStudentExamUrl = (sittingId: number,) => {
+
+
+
+
+  return `/api/student/exams/${sittingId}`
+}
+
+/**
+ * The questions come back only while the window is open and a go is left. Before it opens there is nothing to read, and afterwards a paper left on screen is a paper that leaves the room.
+ * @summary One exam to sit
+ */
+export const getStudentExam = async (sittingId: number, options?: Parameters<typeof customFetch>[1]): Promise<StudentExam> => {
+
+  return customFetch<StudentExam>(getGetStudentExamUrl(sittingId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStudentExamQueryKey = (sittingId: number,) => {
+    return [
+    `/api/student/exams/${sittingId}`
+    ] as const;
+    }
+
+
+export const getGetStudentExamQueryOptions = <TData = Awaited<ReturnType<typeof getStudentExam>>, TError = ErrorType<ApiError>>(sittingId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStudentExam>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStudentExamQueryKey(sittingId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStudentExam>>> = ({ signal }) => getStudentExam(sittingId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: sittingId !== null && sittingId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStudentExam>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetStudentExamQueryResult = NonNullable<Awaited<ReturnType<typeof getStudentExam>>>
+export type GetStudentExamQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary One exam to sit
+ */
+
+export function useGetStudentExam<TData = Awaited<ReturnType<typeof getStudentExam>>, TError = ErrorType<ApiError>>(
+ sittingId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStudentExam>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetStudentExamQueryOptions(sittingId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSubmitExamUrl = (sittingId: number,) => {
+
+
+
+
+  return `/api/student/exams/${sittingId}/attempt`
+}
+
+/**
+ * @summary Sit the exam
+ */
+export const submitExam = async (sittingId: number,
+    examAttemptInput: ExamAttemptInput, options?: Parameters<typeof customFetch>[1]): Promise<ExamResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<ExamResult>(getSubmitExamUrl(sittingId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(examAttemptInput)
+  }
+);}
+
+
+
+
+
+export const getSubmitExamMutationKey = () => ['submitExam'] as const;
+
+export const getSubmitExamMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitExam>>, TError,SubmitExamMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof submitExam>>, TError,SubmitExamMutationVariables, TContext> => {
+
+const mutationKey = getSubmitExamMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof submitExam>>, SubmitExamMutationVariables> = (props) => {
+          const {sittingId,data} = props ?? {};
+
+          return  submitExam(sittingId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SubmitExamMutationResult = NonNullable<Awaited<ReturnType<typeof submitExam>>>
+    export type SubmitExamMutationBody = BodyType<ExamAttemptInput>
+    export type SubmitExamMutationError = ErrorType<ApiError>
+    export type SubmitExamMutationVariables = {sittingId: number;data: BodyType<ExamAttemptInput>}
+
+    /**
+ * @summary Sit the exam
+ */
+export const useSubmitExam = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitExam>>, TError,SubmitExamMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof submitExam>>,
+        TError,
+        SubmitExamMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSubmitExamMutationOptions(options));
+    }
+
+export const getGetMyChildrenUrl = () => {
+
+
+
+
+  return `/api/guardian/children`
+}
+
+/**
+ * One child is the ordinary case and the screen goes straight to them; several means a switcher. Active links only - a second parent is added by retiring the first, and a retired link is history rather than access.
+ * @summary The children this account reads
+ */
+export const getMyChildren = async ( options?: Parameters<typeof customFetch>[1]): Promise<GuardianChild[]> => {
+
+  return customFetch<GuardianChild[]>(getGetMyChildrenUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMyChildrenQueryKey = () => {
+    return [
+    `/api/guardian/children`
+    ] as const;
+    }
+
+
+export const getGetMyChildrenQueryOptions = <TData = Awaited<ReturnType<typeof getMyChildren>>, TError = ErrorType<ApiError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMyChildren>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetMyChildrenQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMyChildren>>> = ({ signal }) => getMyChildren({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMyChildren>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetMyChildrenQueryResult = NonNullable<Awaited<ReturnType<typeof getMyChildren>>>
+export type GetMyChildrenQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary The children this account reads
+ */
+
+export function useGetMyChildren<TData = Awaited<ReturnType<typeof getMyChildren>>, TError = ErrorType<ApiError>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMyChildren>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMyChildrenQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetChildDayUrl = (params: GetChildDayParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/guardian/day?${stringifiedParams}` : `/api/guardian/day`
+}
+
+/**
+ * The same assembly the child's own screen uses, not a parallel one. The day a parent is shown something their child is not is the day the screen stops being worth trusting.
+ * @summary One child's day, exactly as the child sees it
+ */
+export const getChildDay = async (params: GetChildDayParams, options?: Parameters<typeof customFetch>[1]): Promise<StudentToday> => {
+
+  return customFetch<StudentToday>(getGetChildDayUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetChildDayQueryKey = (params?: GetChildDayParams,) => {
+    return [
+    `/api/guardian/day`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetChildDayQueryOptions = <TData = Awaited<ReturnType<typeof getChildDay>>, TError = ErrorType<ApiError>>(params: GetChildDayParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getChildDay>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetChildDayQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getChildDay>>> = ({ signal }) => getChildDay(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getChildDay>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetChildDayQueryResult = NonNullable<Awaited<ReturnType<typeof getChildDay>>>
+export type GetChildDayQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary One child's day, exactly as the child sees it
+ */
+
+export function useGetChildDay<TData = Awaited<ReturnType<typeof getChildDay>>, TError = ErrorType<ApiError>>(
+ params: GetChildDayParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getChildDay>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetChildDayQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetChildRecordUrl = (params: GetChildRecordParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/guardian/record?${stringifiedParams}` : `/api/guardian/record`
+}
+
+/**
+ * A fortnight by default, because the question a parent actually has is about this week and last. Attendance rows come in whichever shape the year keeps: one a day up to year 5, one a period from year 6.
+ * @summary The fortnight behind - register, exercise books, exam scores, teachers
+ */
+export const getChildRecord = async (params: GetChildRecordParams, options?: Parameters<typeof customFetch>[1]): Promise<ChildRecord> => {
+
+  return customFetch<ChildRecord>(getGetChildRecordUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetChildRecordQueryKey = (params?: GetChildRecordParams,) => {
+    return [
+    `/api/guardian/record`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetChildRecordQueryOptions = <TData = Awaited<ReturnType<typeof getChildRecord>>, TError = ErrorType<ApiError>>(params: GetChildRecordParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getChildRecord>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetChildRecordQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getChildRecord>>> = ({ signal }) => getChildRecord(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getChildRecord>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetChildRecordQueryResult = NonNullable<Awaited<ReturnType<typeof getChildRecord>>>
+export type GetChildRecordQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary The fortnight behind - register, exercise books, exam scores, teachers
+ */
+
+export function useGetChildRecord<TData = Awaited<ReturnType<typeof getChildRecord>>, TError = ErrorType<ApiError>>(
+ params: GetChildRecordParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getChildRecord>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetChildRecordQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetGuardianAccountsUrl = () => {
+
+
+
+
+  return `/api/admin/guardians`
+}
+
+/**
+ * @summary Parent accounts and the children they read
+ */
+export const getGuardianAccounts = async ( options?: Parameters<typeof customFetch>[1]): Promise<GuardianAccount[]> => {
+
+  return customFetch<GuardianAccount[]>(getGetGuardianAccountsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetGuardianAccountsQueryKey = () => {
+    return [
+    `/api/admin/guardians`
+    ] as const;
+    }
+
+
+export const getGetGuardianAccountsQueryOptions = <TData = Awaited<ReturnType<typeof getGuardianAccounts>>, TError = ErrorType<ApiError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGuardianAccounts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetGuardianAccountsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getGuardianAccounts>>> = ({ signal }) => getGuardianAccounts({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getGuardianAccounts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetGuardianAccountsQueryResult = NonNullable<Awaited<ReturnType<typeof getGuardianAccounts>>>
+export type GetGuardianAccountsQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Parent accounts and the children they read
+ */
+
+export function useGetGuardianAccounts<TData = Awaited<ReturnType<typeof getGuardianAccounts>>, TError = ErrorType<ApiError>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGuardianAccounts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetGuardianAccountsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateGuardianUrl = () => {
+
+
+
+
+  return `/api/admin/guardians/accounts`
+}
+
+/**
+ * @summary Make a parent an account, and link it to a child
+ */
+export const createGuardian = async (guardianAccountInput: GuardianAccountInput, options?: Parameters<typeof customFetch>[1]): Promise<GuardianAccountCreated> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<GuardianAccountCreated>(getCreateGuardianUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(guardianAccountInput)
+  }
+);}
+
+
+
+
+
+export const getCreateGuardianMutationKey = () => ['createGuardian'] as const;
+
+export const getCreateGuardianMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createGuardian>>, TError,CreateGuardianMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createGuardian>>, TError,CreateGuardianMutationVariables, TContext> => {
+
+const mutationKey = getCreateGuardianMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createGuardian>>, CreateGuardianMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createGuardian(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateGuardianMutationResult = NonNullable<Awaited<ReturnType<typeof createGuardian>>>
+    export type CreateGuardianMutationBody = BodyType<GuardianAccountInput>
+    export type CreateGuardianMutationError = ErrorType<ApiError>
+    export type CreateGuardianMutationVariables = {data: BodyType<GuardianAccountInput>}
+
+    /**
+ * @summary Make a parent an account, and link it to a child
+ */
+export const useCreateGuardian = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createGuardian>>, TError,CreateGuardianMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createGuardian>>,
+        TError,
+        CreateGuardianMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateGuardianMutationOptions(options));
+    }
+
+export const getGetClassChildrenUrl = (params: GetClassChildrenParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/guardians/class-children?${stringifiedParams}` : `/api/admin/guardians/class-children`
+}
+
+/**
+ * @summary A class's children, saying which already have a parent account
+ */
+export const getClassChildren = async (params: GetClassChildrenParams, options?: Parameters<typeof customFetch>[1]): Promise<ClassChild[]> => {
+
+  return customFetch<ClassChild[]>(getGetClassChildrenUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetClassChildrenQueryKey = (params?: GetClassChildrenParams,) => {
+    return [
+    `/api/admin/guardians/class-children`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetClassChildrenQueryOptions = <TData = Awaited<ReturnType<typeof getClassChildren>>, TError = ErrorType<ApiError>>(params: GetClassChildrenParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClassChildren>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetClassChildrenQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClassChildren>>> = ({ signal }) => getClassChildren(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClassChildren>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetClassChildrenQueryResult = NonNullable<Awaited<ReturnType<typeof getClassChildren>>>
+export type GetClassChildrenQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary A class's children, saying which already have a parent account
+ */
+
+export function useGetClassChildren<TData = Awaited<ReturnType<typeof getClassChildren>>, TError = ErrorType<ApiError>>(
+ params: GetClassChildrenParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClassChildren>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetClassChildrenQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getLinkChildUrl = () => {
+
+
+
+
+  return `/api/admin/guardians/link`
+}
+
+/**
+ * Whatever link the child had is retired in the same breath: one live account per child is the school's rule, held by the database rather than by whoever remembers to check it. The retired link stays, so a question in June about who could see what in March has an answer.
+ * @summary Point a parent's account at a child
+ */
+export const linkChild = async (guardianLinkInput: GuardianLinkInput, options?: Parameters<typeof customFetch>[1]): Promise<GuardianLinkResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<GuardianLinkResult>(getLinkChildUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(guardianLinkInput)
+  }
+);}
+
+
+
+
+
+export const getLinkChildMutationKey = () => ['linkChild'] as const;
+
+export const getLinkChildMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof linkChild>>, TError,LinkChildMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof linkChild>>, TError,LinkChildMutationVariables, TContext> => {
+
+const mutationKey = getLinkChildMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof linkChild>>, LinkChildMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  linkChild(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type LinkChildMutationResult = NonNullable<Awaited<ReturnType<typeof linkChild>>>
+    export type LinkChildMutationBody = BodyType<GuardianLinkInput>
+    export type LinkChildMutationError = ErrorType<ApiError>
+    export type LinkChildMutationVariables = {data: BodyType<GuardianLinkInput>}
+
+    /**
+ * @summary Point a parent's account at a child
+ */
+export const useLinkChild = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof linkChild>>, TError,LinkChildMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof linkChild>>,
+        TError,
+        LinkChildMutationVariables,
+        TContext
+      > => {
+      return useMutation(getLinkChildMutationOptions(options));
+    }
+
+export const getUnlinkChildUrl = () => {
+
+
+
+
+  return `/api/admin/guardians/unlink`
+}
+
+/**
+ * @summary Retire a parent's link to a child
+ */
+export const unlinkChild = async (guardianLinkInput: GuardianLinkInput, options?: Parameters<typeof customFetch>[1]): Promise<GuardianLinkResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<GuardianLinkResult>(getUnlinkChildUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(guardianLinkInput)
+  }
+);}
+
+
+
+
+
+export const getUnlinkChildMutationKey = () => ['unlinkChild'] as const;
+
+export const getUnlinkChildMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unlinkChild>>, TError,UnlinkChildMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof unlinkChild>>, TError,UnlinkChildMutationVariables, TContext> => {
+
+const mutationKey = getUnlinkChildMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof unlinkChild>>, UnlinkChildMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  unlinkChild(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UnlinkChildMutationResult = NonNullable<Awaited<ReturnType<typeof unlinkChild>>>
+    export type UnlinkChildMutationBody = BodyType<GuardianLinkInput>
+    export type UnlinkChildMutationError = ErrorType<ApiError>
+    export type UnlinkChildMutationVariables = {data: BodyType<GuardianLinkInput>}
+
+    /**
+ * @summary Retire a parent's link to a child
+ */
+export const useUnlinkChild = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof unlinkChild>>, TError,UnlinkChildMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof unlinkChild>>,
+        TError,
+        UnlinkChildMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUnlinkChildMutationOptions(options));
+    }
+
+export const getMarkAttendanceUrl = () => {
+
+
+
+
+  return `/api/teacher/attendance`
+}
+
+/**
+ * Up to year 5 the class is with one teacher all day and the register is taken once, so timetableSlotId is left out. From year 6 the children move between teachers and it is taken per lesson, so it is required. The system holds the rule rather than trusting the screen to.
+ * @summary Take the register
+ */
+export const markAttendance = async (attendanceInput: AttendanceInput, options?: Parameters<typeof customFetch>[1]): Promise<AttendanceResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<AttendanceResult>(getMarkAttendanceUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(attendanceInput)
+  }
+);}
+
+
+
+
+
+export const getMarkAttendanceMutationKey = () => ['markAttendance'] as const;
+
+export const getMarkAttendanceMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markAttendance>>, TError,MarkAttendanceMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof markAttendance>>, TError,MarkAttendanceMutationVariables, TContext> => {
+
+const mutationKey = getMarkAttendanceMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof markAttendance>>, MarkAttendanceMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  markAttendance(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MarkAttendanceMutationResult = NonNullable<Awaited<ReturnType<typeof markAttendance>>>
+    export type MarkAttendanceMutationBody = BodyType<AttendanceInput>
+    export type MarkAttendanceMutationError = ErrorType<ApiError>
+    export type MarkAttendanceMutationVariables = {data: BodyType<AttendanceInput>}
+
+    /**
+ * @summary Take the register
+ */
+export const useMarkAttendance = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof markAttendance>>, TError,MarkAttendanceMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof markAttendance>>,
+        TError,
+        MarkAttendanceMutationVariables,
+        TContext
+      > => {
+      return useMutation(getMarkAttendanceMutationOptions(options));
     }
 
 export const getMarkNotebooksUrl = () => {

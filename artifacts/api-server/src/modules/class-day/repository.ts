@@ -320,3 +320,112 @@ export async function setNotebookMarks(
     client.release();
   }
 }
+
+
+/** The register as it stands for one class on one day. */
+export const attendanceForClassDay = (classId: number, onDate: string) =>
+  readRows<{
+    studentId: number;
+    timetableSlotId: number | null;
+    state: string;
+    participation: string | null;
+    note: string | null;
+  }>(
+    `SELECT student_id::int AS "studentId", timetable_slot_id::int AS "timetableSlotId",
+       state, participation, note
+     FROM learning.attendance_marks
+     WHERE class_id = $1::bigint AND on_date = $2::date`,
+    [classId, onDate],
+  );
+
+/**
+ * Take the register for one period, or for the whole day.
+ *
+ * Replace rather than add, and only for the children named: a teacher who
+ * marked five and pressed save has said nothing about the other twenty-five,
+ * and the ones they left alone stay unregistered. One transaction, so a
+ * half-taken register never reaches the screen.
+ *
+ * An UNREGISTERED state removes the row rather than storing a fifth value.
+ * Storing it would mean a teacher undoing a slip leaves behind a record
+ * saying somebody took the register.
+ */
+export async function setAttendance(
+  classId: number,
+  onDate: string,
+  slotId: number | null,
+  subjectId: number | null,
+  markedBy: number,
+  marks: Array<{
+    studentId: number;
+    state: string;
+    participation: string | null;
+    note: string | null;
+  }>,
+) {
+  const clearing = marks.filter((mark) => mark.state === "UNREGISTERED");
+  const writing = marks.filter((mark) => mark.state !== "UNREGISTERED");
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    if (clearing.length > 0) {
+      await client.query(
+        `DELETE FROM learning.attendance_marks
+          WHERE class_id = $1::bigint AND on_date = $2::date
+            AND timetable_slot_id IS NOT DISTINCT FROM $3::bigint
+            AND student_id = ANY($4::bigint[])`,
+        [classId, onDate, slotId, clearing.map((mark) => mark.studentId)],
+      );
+    }
+    if (writing.length > 0) {
+      await client.query(
+        `INSERT INTO learning.attendance_marks
+           (class_id, student_id, on_date, timetable_slot_id, subject_id, state,
+            participation, note, marked_by, marked_at)
+         SELECT $1::bigint, x.student_id, $2::date, $3::bigint, $4::bigint, x.state,
+                x.participation, x.note, $8::bigint, now()
+           FROM unnest($5::bigint[], $6::text[], $7::text[], $9::text[])
+                  AS x(student_id, state, participation, note)
+         ON CONFLICT ON CONSTRAINT attendance_marks_key DO UPDATE SET
+           state = EXCLUDED.state,
+           participation = EXCLUDED.participation,
+           note = EXCLUDED.note,
+           subject_id = EXCLUDED.subject_id,
+           marked_by = EXCLUDED.marked_by,
+           marked_at = EXCLUDED.marked_at`,
+        [
+          classId, onDate, slotId, subjectId,
+          writing.map((mark) => mark.studentId),
+          writing.map((mark) => mark.state),
+          writing.map((mark) => mark.participation),
+          markedBy,
+          writing.map((mark) => mark.note),
+        ],
+      );
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/** The year the class is in, which decides how its register is taken. */
+export const classGradeLevel = (classId: number) =>
+  readRows<{ gradeLevel: number }>(
+    `SELECT g.grade_number::int AS "gradeLevel"
+       FROM core.classes c JOIN core.grade_levels g ON g.id = c.grade_level_id
+      WHERE c.id = $1::bigint`,
+    [classId],
+  );
+
+/** A timetable slot, confirmed to belong to this class. */
+export const slotForClass = (slotId: number, classId: number) =>
+  readRows<{ subjectId: number; periodNo: number | null }>(
+    `SELECT subject_id::int AS "subjectId", period_no::int AS "periodNo"
+       FROM learning.timetable_slots
+      WHERE id = $1::bigint AND class_id = $2::bigint`,
+    [slotId, classId],
+  );

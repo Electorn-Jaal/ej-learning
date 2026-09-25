@@ -5,6 +5,7 @@
  * EJ Learning adaptive learning API
  * OpenAPI spec version: 0.1.0
  */
+import type { AttendanceMark } from './attendanceMark';
 import type { ClassDayAttempt } from './classDayAttempt';
 import type { NotebookMark } from './notebookMark';
 
@@ -15,4 +16,6 @@ export interface ClassDayStudent {
   attempts: ClassDayAttempt[];
   /** The marks written for this child today, one per period. Empty where nobody looked - which is not the same as nothing done, and is the reason this is a list rather than a field with a default. */
   notebook: NotebookMark[];
+  /** The register entries for this child today - one for the day up to year 5, one per period from year 6. Empty where nobody took it. */
+  attendance: AttendanceMark[];
 }

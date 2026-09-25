@@ -129,7 +129,7 @@ export const HealthCheckResponse = zod.object({
 export const GetCurrentUserResponse = zod.object({
   "id": zod.string(),
   "displayName": zod.string(),
-  "role": zod.enum(['student', 'teacher', 'admin']),
+  "role": zod.enum(['student', 'teacher', 'admin', 'guardian']),
   "gradeLevel": zod.number().int(),
   "className": zod.string(),
   "isDemo": zod.boolean(),
@@ -815,7 +815,7 @@ export const LoginResponse = zod.object({
   "teacherId": zod.number().int().nullable(),
   "photoUrl": zod.string().nullable().describe('Where to fetch this person\'s own photograph, or null when they have none. Carried on the session because the shell draws the avatar on every screen and would otherwise ask separately each time.\n'),
   "takesLessons": zod.boolean().describe('Whether this account actually takes any lesson anywhere. A class teacher who takes none of their class\'s subjects still sees the class, but the screens for entering things - the register, the review queue - have nothing in them for such an account, so the navigation leaves them out rather than offering a page that refuses.\n'),
-  "roles": zod.array(zod.enum(['STUDENT', 'TEACHER', 'ADMIN']))
+  "roles": zod.array(zod.enum(['STUDENT', 'TEACHER', 'ADMIN', 'GUARDIAN']))
 }).describe('Roles are a list: one account can hold TEACHER and ADMIN at once. studentId and teacherId are the linked core.students / core.teachers rows, null when the account has none.\n')
 })
 
@@ -838,7 +838,7 @@ export const GetSessionResponse = zod.object({
   "teacherId": zod.number().int().nullable(),
   "photoUrl": zod.string().nullable().describe('Where to fetch this person\'s own photograph, or null when they have none. Carried on the session because the shell draws the avatar on every screen and would otherwise ask separately each time.\n'),
   "takesLessons": zod.boolean().describe('Whether this account actually takes any lesson anywhere. A class teacher who takes none of their class\'s subjects still sees the class, but the screens for entering things - the register, the review queue - have nothing in them for such an account, so the navigation leaves them out rather than offering a page that refuses.\n'),
-  "roles": zod.array(zod.enum(['STUDENT', 'TEACHER', 'ADMIN']))
+  "roles": zod.array(zod.enum(['STUDENT', 'TEACHER', 'ADMIN', 'GUARDIAN']))
 }).describe('Roles are a list: one account can hold TEACHER and ADMIN at once. studentId and teacherId are the linked core.students / core.teachers rows, null when the account has none.\n')
 })
 
@@ -1499,8 +1499,15 @@ export const GetClassDayResponse = zod.object({
   "timetableSlotId": zod.number().int().nullable(),
   "state": zod.enum(['DONE', 'PARTIAL', 'NOT_DONE', 'UNCHECKED']).describe('What the teacher found in the book. UNCHECKED is never stored - it is the absence of a mark - but it may be sent, to undo one.\n'),
   "comment": zod.string().nullable().describe('The teacher\'s own sentence about this book - the one thing that says why.')
-}).describe('One period\'s verdict on one child\'s exercise book. Keyed by the period, because a child can have done the maths and not the physics.\n')).describe('The marks written for this child today, one per period. Empty where nobody looked - which is not the same as nothing done, and is the reason this is a list rather than a field with a default.\n')
-}))
+}).describe('One period\'s verdict on one child\'s exercise book. Keyed by the period, because a child can have done the maths and not the physics.\n')).describe('The marks written for this child today, one per period. Empty where nobody looked - which is not the same as nothing done, and is the reason this is a list rather than a field with a default.\n'),
+  "attendance": zod.array(zod.object({
+  "timetableSlotId": zod.number().int().nullable(),
+  "state": zod.enum(['PRESENT', 'LATE', 'ABSENT', 'EXCUSED', 'UNREGISTERED']).describe('UNREGISTERED is never stored - it is the absence of a mark - but it may be sent, to take one off. "Not registered" and "did not come" are different facts about a child, and a school that collapses them tells a parent their child truanted when the truth is that nobody took the register.\n'),
+  "participation": zod.union([zod.enum(['HIGH', 'GOOD', 'WATCH']).describe('A separate axis and deliberately toothless: three words a teacher may leave unsaid, worth no marks, and not a second attendance state. A child who was present and quiet is present.\n'),zod.null()]),
+  "note": zod.string().nullable()
+}).describe('One verdict on one child. timetableSlotId is null on a whole-day register, which is what years 1 to 5 keep.\n')).describe('The register entries for this child today - one for the day up to year 5, one per period from year 6. Empty where nobody took it.\n')
+})),
+  "attendancePerLesson": zod.boolean().describe('Whether this class\'s register is taken per lesson or once a day. The school\'s own rule, carried here so the screen does not have to guess it from the year.\n')
 })
 
 
@@ -1747,6 +1754,542 @@ export const SetScheduleDayResponse = zod.object({
   "currentSkillName": zod.string().nullish()
 }).describe('One day the re-division would change, and what it holds now.'))
 }).describe('What the rest of the term would become. Nothing has been written: these are the days that would move if the teacher approves, and only the ones that would actually change.\n'),zod.null()]).describe('Null when nothing later would change.')
+})
+
+
+/**
+ * @summary Exams set for a class
+ */
+export const GetTeacherExamsQueryParams = zod.object({
+  "classId": zod.coerce.number().int(),
+  "subjectId": zod.coerce.number().int().optional()
+})
+
+export const GetTeacherExamsResponseItem = zod.object({
+  "sittingId": zod.number().int(),
+  "paperId": zod.number().int(),
+  "title": zod.string(),
+  "examKind": zod.string(),
+  "subjectId": zod.number().int(),
+  "subjectName": zod.string(),
+  "opensAt": zod.string(),
+  "closesAt": zod.string(),
+  "answersOpen": zod.boolean(),
+  "wholeClass": zod.boolean(),
+  "onPaper": zod.boolean().describe('Sat in the room; the teacher enters the answers.'),
+  "questionCount": zod.number().int(),
+  "invited": zod.number().int().describe('How many children it is set for.'),
+  "sat": zod.number().int().describe('How many have sat it.')
+})
+export const GetTeacherExamsResponse = zod.array(GetTeacherExamsResponseItem)
+
+
+/**
+ * A paper is a set of questions; a sitting is a class, a window and an audience. They are made together here because a paper nobody sits is not a thing a teacher wants to have made.
+ * Questions may be named, drawn at random, or both. Drawing is not a shortcut: it is what stops a paper set once being the same paper next year. Naming is how a teacher insists on the question they meant to ask. What is named is asked, and the draw fills the rest.
+ * An empty studentIds is the whole register, which is the ordinary case.
+ * @summary Set an exam for a class, a group, or named children
+ */
+export const createExamBodyTitleMax = 300;
+
+export const createExamBodyDrawCountMin = 0;
+export const createExamBodyDrawCountMax = 100;
+
+
+
+export const CreateExamBody = zod.object({
+  "classId": zod.number().int(),
+  "subjectId": zod.number().int(),
+  "examKind": zod.enum(['UNIT', 'TERM', 'YEAR', 'DIAGNOSTIC']),
+  "title": zod.string().max(createExamBodyTitleMax),
+  "instructions": zod.string().nullish(),
+  "opensAt": zod.string().describe('ISO 8601 instant. Both ends are required - an exam that never closes is homework.'),
+  "closesAt": zod.string(),
+  "itemIds": zod.array(zod.number().int()).nullish().describe('Questions the teacher insists on. Asked first; the draw fills the rest.'),
+  "drawCount": zod.number().int().min(createExamBodyDrawCountMin).max(createExamBodyDrawCountMax).nullish().describe('How many further questions to draw at random from the year\'s bank.'),
+  "studentIds": zod.array(zod.number().int()).nullish().describe('Named children. Empty or absent means the whole register, which is the ordinary case.\n'),
+  "onPaper": zod.boolean().nullish().describe('Sat on paper, in the room, with the teacher entering afterwards what each child wrote. The questions come from the same bank and carry the same numbers, which is the point: a paper sitting the system cannot line up question for question produces marks nobody can trace. Such a sitting is never offered to a child online.\n')
+})
+
+export const CreateExamResponse = zod.object({
+  "sittingId": zod.number().int(),
+  "questionCount": zod.number().int()
+})
+
+
+/**
+ * @summary One exam, with the key and who has sat it
+ */
+export const GetTeacherExamParams = zod.object({
+  "sittingId": zod.coerce.number().int()
+})
+
+export const GetTeacherExamResponse = zod.object({
+  "sittingId": zod.number().int(),
+  "paperId": zod.number().int(),
+  "classId": zod.number().int(),
+  "subjectId": zod.number().int(),
+  "title": zod.string(),
+  "examKind": zod.string(),
+  "instructions": zod.string().nullable(),
+  "gradeLevelId": zod.number().int().nullable(),
+  "opensAt": zod.string(),
+  "closesAt": zod.string(),
+  "answersOpen": zod.boolean(),
+  "wholeClass": zod.boolean(),
+  "onPaper": zod.boolean(),
+  "questions": zod.array(zod.object({
+  "itemId": zod.number().int(),
+  "itemOrder": zod.number().int(),
+  "title": zod.string(),
+  "stimulus": zod.string().nullable().describe('What the child is given before the question - a passage, a line read aloud.'),
+  "maxScore": zod.number(),
+  "options": zod.array(zod.object({
+  "optionId": zod.number().int(),
+  "text": zod.string(),
+  "isCorrect": zod.boolean().optional().describe('Present only on the teacher\'s copy.')
+}))
+})),
+  "results": zod.array(zod.object({
+  "studentId": zod.number().int(),
+  "studentName": zod.string(),
+  "studentCode": zod.string(),
+  "attemptId": zod.number().int().nullable(),
+  "score": zod.number().nullable(),
+  "maxScore": zod.number().nullable(),
+  "attemptedAt": zod.string().nullable(),
+  "extraAttempts": zod.number().int().describe('How many further goes the teacher has granted.')
+}))
+})
+
+
+/**
+ * A child cannot sit a paper twice on their own - that is what makes it a paper rather than practice - so the only way to another go is a teacher deciding there should be one. The attempt already made is kept.
+ * @summary Let named children sit again
+ */
+export const ReopenExamParams = zod.object({
+  "sittingId": zod.coerce.number().int()
+})
+
+export const ReopenExamBody = zod.object({
+  "studentIds": zod.array(zod.number().int())
+})
+
+export const ReopenExamResponse = zod.object({
+  "reopened": zod.number().int()
+})
+
+
+/**
+ * The same rule the daily check follows, and it bites harder here: a paper is sat once, and a child who sees the answers while a classmate is still writing has been handed the marks.
+ * @summary Release the key to the children, or take it back
+ */
+export const ReleaseExamAnswersParams = zod.object({
+  "sittingId": zod.coerce.number().int()
+})
+
+export const ReleaseExamAnswersBody = zod.object({
+  "open": zod.boolean()
+})
+
+export const ReleaseExamAnswersResponse = zod.object({
+  "answersOpen": zod.boolean()
+})
+
+
+/**
+ * The written half of UC10. A paper sitting has already happened by the time anybody types it in, so there is no window here - a teacher writing it up on Sunday evening is not sitting it late.
+ * Marked by the same rule as an online sitting, because a school that cannot compare a paper exam with an online one has two systems rather than one. Re-entering is a second attempt, which is what a teacher gets after reopening the sitting for that child.
+ * @summary Enter what one child wrote on a paper exam
+ */
+export const EnterPaperAnswersParams = zod.object({
+  "sittingId": zod.coerce.number().int()
+})
+
+export const EnterPaperAnswersBody = zod.object({
+  "studentId": zod.number().int(),
+  "answers": zod.array(zod.object({
+  "itemId": zod.number().int(),
+  "optionId": zod.number().int().nullish().describe('The option the child picked, for a question with a key.'),
+  "awarded": zod.number().nullish().describe('A score the teacher awarded, for a question a key cannot settle - the ones with a rubric rather than four boxes. Where both arrive this wins: a person looked at the page.\n')
+}))
+}).describe('What one child wrote on paper, question by question, in the order the paper was printed in. Entering a total instead would be quicker and would throw away the only thing that makes an exam useful afterwards: which questions the class got wrong.\n')
+
+export const EnterPaperAnswersResponse = zod.object({
+  "attemptId": zod.number().int(),
+  "score": zod.number(),
+  "maxScore": zod.number(),
+  "answersOpen": zod.boolean(),
+  "results": zod.array(zod.object({
+  "itemId": zod.number().int(),
+  "correct": zod.boolean(),
+  "correctOptionIds": zod.array(zod.number().int()).describe('Empty until the teacher releases the key.')
+}))
+})
+
+
+/**
+ * @summary The exams set for me
+ */
+export const GetStudentExamsResponseItem = zod.object({
+  "sittingId": zod.number().int(),
+  "title": zod.string(),
+  "examKind": zod.string(),
+  "subjectName": zod.string(),
+  "opensAt": zod.string(),
+  "closesAt": zod.string(),
+  "questionCount": zod.number().int(),
+  "attemptsUsed": zod.number().int(),
+  "attemptsAllowed": zod.number().int(),
+  "score": zod.number().nullable(),
+  "maxScore": zod.number().nullable(),
+  "answersOpen": zod.boolean(),
+  "isOpen": zod.boolean().describe('The window is open and a go is left.')
+})
+export const GetStudentExamsResponse = zod.array(GetStudentExamsResponseItem)
+
+
+/**
+ * The questions come back only while the window is open and a go is left. Before it opens there is nothing to read, and afterwards a paper left on screen is a paper that leaves the room.
+ * @summary One exam to sit
+ */
+export const GetStudentExamParams = zod.object({
+  "sittingId": zod.coerce.number().int()
+})
+
+export const GetStudentExamResponse = zod.object({
+  "sittingId": zod.number().int(),
+  "title": zod.string(),
+  "examKind": zod.string(),
+  "instructions": zod.string().nullable(),
+  "opensAt": zod.string(),
+  "closesAt": zod.string(),
+  "isOpen": zod.boolean(),
+  "attemptsUsed": zod.number().int(),
+  "attemptsAllowed": zod.number().int(),
+  "answersOpen": zod.boolean(),
+  "questions": zod.array(zod.object({
+  "itemId": zod.number().int(),
+  "itemOrder": zod.number().int(),
+  "title": zod.string(),
+  "stimulus": zod.string().nullable().describe('What the child is given before the question - a passage, a line read aloud.'),
+  "maxScore": zod.number(),
+  "options": zod.array(zod.object({
+  "optionId": zod.number().int(),
+  "text": zod.string(),
+  "isCorrect": zod.boolean().optional().describe('Present only on the teacher\'s copy.')
+}))
+})).describe('Empty before the window opens and after the go is spent.')
+})
+
+
+/**
+ * @summary Sit the exam
+ */
+export const SubmitExamParams = zod.object({
+  "sittingId": zod.coerce.number().int()
+})
+
+export const SubmitExamBody = zod.object({
+  "answers": zod.array(zod.object({
+  "itemId": zod.number().int(),
+  "optionId": zod.number().int().nullish()
+}))
+})
+
+export const SubmitExamResponse = zod.object({
+  "attemptId": zod.number().int(),
+  "score": zod.number(),
+  "maxScore": zod.number(),
+  "answersOpen": zod.boolean(),
+  "results": zod.array(zod.object({
+  "itemId": zod.number().int(),
+  "correct": zod.boolean(),
+  "correctOptionIds": zod.array(zod.number().int()).describe('Empty until the teacher releases the key.')
+}))
+})
+
+
+/**
+ * One child is the ordinary case and the screen goes straight to them; several means a switcher. Active links only - a second parent is added by retiring the first, and a retired link is history rather than access.
+ * @summary The children this account reads
+ */
+export const GetMyChildrenResponseItem = zod.object({
+  "studentId": zod.number().int(),
+  "displayName": zod.string(),
+  "studentCode": zod.string(),
+  "className": zod.string().nullable(),
+  "gradeLevel": zod.number().int().nullable(),
+  "relation": zod.string().nullable().describe('What this account is to the child, where the school wrote it down.')
+})
+export const GetMyChildrenResponse = zod.array(GetMyChildrenResponseItem)
+
+
+/**
+ * The same assembly the child's own screen uses, not a parallel one. The day a parent is shown something their child is not is the day the screen stops being worth trusting.
+ * @summary One child's day, exactly as the child sees it
+ */
+export const getChildDayQueryOnRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const GetChildDayQueryParams = zod.object({
+  "studentId": zod.coerce.number().int(),
+  "on": zod.coerce.string().regex(getChildDayQueryOnRegExp).optional()
+})
+
+export const getChildDayResponseDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const GetChildDayResponse = zod.object({
+  "date": zod.string().regex(getChildDayResponseDateRegExp).describe('Calendar date, YYYY-MM-DD. Not an instant, so not format:date.'),
+  "dateLabel": zod.string(),
+  "className": zod.string(),
+  "slots": zod.array(zod.object({
+  "timetableSlotId": zod.number().int().nullish(),
+  "selectionPending": zod.boolean().optional().describe('Group membership has not yet been assigned by staff.'),
+  "subjectCode": zod.string(),
+  "subjectName": zod.string(),
+  "startsAt": zod.string().nullable().describe('Bell time, HH:MM. Null where the school has no period list.'),
+  "endsAt": zod.string().nullable(),
+  "teacherName": zod.string().nullable().describe('Who takes this period, from the school\'s own timetable.'),
+  "groupLabel": zod.string().nullable().describe('Which half of a split class this slot is for, in the school\'s own words ("6а-1"). Null for a lesson the whole class attends.\n'),
+  "notebook": zod.union([zod.object({
+  "state": zod.enum(['DONE', 'PARTIAL', 'NOT_DONE', 'UNCHECKED']).describe('What the teacher found in the book. UNCHECKED is never stored - it is the absence of a mark - but it may be sent, to undo one.\n'),
+  "comment": zod.string().nullable()
+}),zod.null()]).optional().describe('What the teacher found in this child\'s exercise book for this period, or null where nobody has looked. Null is not "nothing done": most periods are never marked, and a child should not read silence as a verdict.\n'),
+  "held": zod.boolean().optional().describe('False where the teacher struck this period off. The lesson then comes back null whatever was planned for it, and notHeldReason says why - there is nothing to study, and nothing to be checked on, in an hour that did not take place.\n'),
+  "notHeldReason": zod.string().nullish(),
+  "isContinuation": zod.boolean().optional().describe('This period carried the previous one on. The child is being told to pick the book up, not to open it.\n'),
+  "lesson": zod.union([zod.object({
+  "id": zod.number().int(),
+  "lessonCode": zod.string(),
+  "lessonType": zod.enum(['CORE', 'RECOVERY', 'REINFORCE']),
+  "skillName": zod.string(),
+  "learningGoal": zod.string().nullable(),
+  "remember": zod.string().nullable(),
+  "workedExample": zod.string().nullable(),
+  "guidedPractice": zod.string().nullable(),
+  "independentPractice": zod.string().nullable(),
+  "studentMessage": zod.string().nullable(),
+  "teacherNote": zod.string().nullable().describe('The note the teacher left on this day of the timetable, if any. It belongs to the class\'s day rather than to the lesson, so the same lesson taught to another class on another day carries a different one - and a lesson reached outside the timetable carries none.\n'),
+  "estimatedMinutes": zod.number().int().nullable(),
+  "book": zod.union([zod.object({
+  "materialId": zod.number().int(),
+  "title": zod.string().nullable(),
+  "chapterTitle": zod.string().nullable(),
+  "pageFrom": zod.number().int().nullable(),
+  "pageTo": zod.number().int().nullable(),
+  "filePage": zod.number().int().nullable().describe('Which page of the file to open at. Not the same as pageFrom: a scanned book carries covers and front matter the printed numbering does not count, so printed page 3 can be file page 9. The student is shown the printed numbers and the viewer opens the file page.\n'),
+  "fileUrl": zod.string().nullable()
+}).describe('Where in the book this lesson sits.'),zod.null()])
+}),zod.null()]).describe('What the class is scheduled to study in this subject today, or null where nobody has written the lesson yet - which is most periods. A timetable slot is owed to a child whether or not its content exists. Null too where the period was struck off.\n'),
+  "extra": zod.union([zod.object({
+  "lesson": zod.object({
+  "id": zod.number().int(),
+  "lessonCode": zod.string(),
+  "lessonType": zod.enum(['CORE', 'RECOVERY', 'REINFORCE']),
+  "skillName": zod.string(),
+  "learningGoal": zod.string().nullable(),
+  "remember": zod.string().nullable(),
+  "workedExample": zod.string().nullable(),
+  "guidedPractice": zod.string().nullable(),
+  "independentPractice": zod.string().nullable(),
+  "studentMessage": zod.string().nullable(),
+  "teacherNote": zod.string().nullable().describe('The note the teacher left on this day of the timetable, if any. It belongs to the class\'s day rather than to the lesson, so the same lesson taught to another class on another day carries a different one - and a lesson reached outside the timetable carries none.\n'),
+  "estimatedMinutes": zod.number().int().nullable(),
+  "book": zod.union([zod.object({
+  "materialId": zod.number().int(),
+  "title": zod.string().nullable(),
+  "chapterTitle": zod.string().nullable(),
+  "pageFrom": zod.number().int().nullable(),
+  "pageTo": zod.number().int().nullable(),
+  "filePage": zod.number().int().nullable().describe('Which page of the file to open at. Not the same as pageFrom: a scanned book carries covers and front matter the printed numbering does not count, so printed page 3 can be file page 9. The student is shown the printed numbers and the viewer opens the file page.\n'),
+  "fileUrl": zod.string().nullable()
+}).describe('Where in the book this lesson sits.'),zod.null()])
+}),
+  "source": zod.enum(['AUTO', 'TEACHER']),
+  "reason": zod.string().nullable()
+}),zod.null()]).describe('Work assigned to this student personally in this subject. Where the class works through one book it is remediation on top; where the subject places students by level it is the whole of the day\'s work.\n'),
+  "periodNo": zod.number().int().nullable().describe('Which slot in the day the class lesson sits in, matching a row of /school/periods. Null where the school has supplied no timetable, or where the day\'s only work is the personal kind, which answers to no bell.\n')
+})).describe('One entry per period on the class\'s timetable, in bell order. Not one per subject: Mongolian in the first period and again in the second is two lessons, and a day with the same subject twice used to come back as one. A split class puts two entries on one period, which is what a split is.\n'),
+  "notice": zod.string()
+})
+
+
+/**
+ * A fortnight by default, because the question a parent actually has is about this week and last. Attendance rows come in whichever shape the year keeps: one a day up to year 5, one a period from year 6.
+ * @summary The fortnight behind - register, exercise books, exam scores, teachers
+ */
+export const getChildRecordQueryFromRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const getChildRecordQueryToRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const GetChildRecordQueryParams = zod.object({
+  "studentId": zod.coerce.number().int(),
+  "from": zod.coerce.string().regex(getChildRecordQueryFromRegExp).optional(),
+  "to": zod.coerce.string().regex(getChildRecordQueryToRegExp).optional()
+})
+
+export const getChildRecordResponseFromRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const getChildRecordResponseToRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const getChildRecordResponseAttendanceItemOnDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const getChildRecordResponseNotebookItemOnDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const GetChildRecordResponse = zod.object({
+  "studentId": zod.number().int(),
+  "from": zod.string().regex(getChildRecordResponseFromRegExp),
+  "to": zod.string().regex(getChildRecordResponseToRegExp),
+  "attendance": zod.array(zod.object({
+  "onDate": zod.string().regex(getChildRecordResponseAttendanceItemOnDateRegExp),
+  "timetableSlotId": zod.number().int().nullable().describe('Null on a whole-day register, which is what years 1 to 5 keep.'),
+  "periodNo": zod.number().int().nullable(),
+  "subjectName": zod.string().nullable(),
+  "state": zod.enum(['PRESENT', 'LATE', 'ABSENT', 'EXCUSED', 'UNREGISTERED']).describe('UNREGISTERED is never stored - it is the absence of a mark - but it may be sent, to take one off. "Not registered" and "did not come" are different facts about a child, and a school that collapses them tells a parent their child truanted when the truth is that nobody took the register.\n'),
+  "participation": zod.union([zod.enum(['HIGH', 'GOOD', 'WATCH']).describe('A separate axis and deliberately toothless: three words a teacher may leave unsaid, worth no marks, and not a second attendance state. A child who was present and quiet is present.\n'),zod.null()]),
+  "note": zod.string().nullable()
+})),
+  "notebook": zod.array(zod.object({
+  "onDate": zod.string().regex(getChildRecordResponseNotebookItemOnDateRegExp),
+  "subjectName": zod.string().nullable(),
+  "state": zod.enum(['DONE', 'PARTIAL', 'NOT_DONE', 'UNCHECKED']).describe('What the teacher found in the book. UNCHECKED is never stored - it is the absence of a mark - but it may be sent, to undo one.\n'),
+  "comment": zod.string().nullable()
+})),
+  "exams": zod.array(zod.object({
+  "sittingId": zod.number().int(),
+  "title": zod.string(),
+  "examKind": zod.string(),
+  "subjectName": zod.string(),
+  "satAt": zod.string().nullable(),
+  "score": zod.number().nullable(),
+  "maxScore": zod.number().nullable()
+}).describe('Scores and dates. The questions and the key are never here: a parent reading the answers over a child\'s shoulder is exactly the route by which a paper the rest of the class is still sitting leaks.\n')),
+  "teachers": zod.array(zod.object({
+  "subjectName": zod.string().nullable(),
+  "teacherName": zod.string(),
+  "isClassTeacher": zod.boolean()
+}))
+})
+
+
+/**
+ * @summary Parent accounts and the children they read
+ */
+export const GetGuardianAccountsResponseItem = zod.object({
+  "userId": zod.number().int(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "isActive": zod.boolean(),
+  "children": zod.array(zod.object({
+  "studentId": zod.number().int(),
+  "studentName": zod.string(),
+  "relation": zod.string().nullable()
+}))
+})
+export const GetGuardianAccountsResponse = zod.array(GetGuardianAccountsResponseItem)
+
+
+/**
+ * @summary Make a parent an account, and link it to a child
+ */
+export const createGuardianBodyUsernameMin = 3;
+export const createGuardianBodyUsernameMax = 50;
+
+export const createGuardianBodyDisplayNameMax = 300;
+
+export const createGuardianBodyPasswordMin = 8;
+
+
+
+export const CreateGuardianBody = zod.object({
+  "username": zod.string().min(createGuardianBodyUsernameMin).max(createGuardianBodyUsernameMax),
+  "displayName": zod.string().max(createGuardianBodyDisplayNameMax),
+  "password": zod.string().min(createGuardianBodyPasswordMin),
+  "studentId": zod.number().int().nullish().describe('Link to this child at the same time, which is the ordinary case.')
+}).describe('The password is chosen by the administrator sitting with the parent, because this school hands out credentials in person. It is never stored in the clear and never returned again: a screen that can re-display a password is a screen somebody will leave open.\n')
+
+export const CreateGuardianResponse = zod.object({
+  "userId": zod.number().int(),
+  "username": zod.string()
+})
+
+
+/**
+ * @summary A class's children, saying which already have a parent account
+ */
+export const GetClassChildrenQueryParams = zod.object({
+  "classId": zod.coerce.number().int()
+})
+
+export const GetClassChildrenResponseItem = zod.object({
+  "studentId": zod.number().int(),
+  "displayName": zod.string(),
+  "studentCode": zod.string(),
+  "linked": zod.boolean().describe('Whether a live guardian account already reads this child.')
+})
+export const GetClassChildrenResponse = zod.array(GetClassChildrenResponseItem)
+
+
+/**
+ * Whatever link the child had is retired in the same breath: one live account per child is the school's rule, held by the database rather than by whoever remembers to check it. The retired link stays, so a question in June about who could see what in March has an answer.
+ * @summary Point a parent's account at a child
+ */
+export const linkChildBodyRelationMax = 40;
+
+
+
+export const LinkChildBody = zod.object({
+  "userId": zod.number().int(),
+  "studentId": zod.number().int(),
+  "relation": zod.string().max(linkChildBodyRelationMax).nullish()
+})
+
+export const LinkChildResponse = zod.object({
+  "linked": zod.boolean()
+})
+
+
+/**
+ * @summary Retire a parent's link to a child
+ */
+export const unlinkChildBodyRelationMax = 40;
+
+
+
+export const UnlinkChildBody = zod.object({
+  "userId": zod.number().int(),
+  "studentId": zod.number().int(),
+  "relation": zod.string().max(unlinkChildBodyRelationMax).nullish()
+})
+
+export const UnlinkChildResponse = zod.object({
+  "linked": zod.boolean()
+})
+
+
+/**
+ * Up to year 5 the class is with one teacher all day and the register is taken once, so timetableSlotId is left out. From year 6 the children move between teachers and it is taken per lesson, so it is required. The system holds the rule rather than trusting the screen to.
+ * @summary Take the register
+ */
+export const markAttendanceBodyOnDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+export const markAttendanceBodyMarksItemNoteMax = 500;
+
+
+
+export const MarkAttendanceBody = zod.object({
+  "classId": zod.number().int(),
+  "onDate": zod.string().regex(markAttendanceBodyOnDateRegExp),
+  "timetableSlotId": zod.number().int().nullish().describe('The period. Required from year 6, where the children move between teachers and a register taken in the morning says nothing about who was in physics after lunch. Refused up to year 5, where the class is with one teacher all day and six registers would be five copies of one fact.\n'),
+  "marks": zod.array(zod.object({
+  "studentId": zod.number().int(),
+  "state": zod.enum(['PRESENT', 'LATE', 'ABSENT', 'EXCUSED', 'UNREGISTERED']).describe('UNREGISTERED is never stored - it is the absence of a mark - but it may be sent, to take one off. "Not registered" and "did not come" are different facts about a child, and a school that collapses them tells a parent their child truanted when the truth is that nobody took the register.\n'),
+  "participation": zod.union([zod.enum(['HIGH', 'GOOD', 'WATCH']).describe('A separate axis and deliberately toothless: three words a teacher may leave unsaid, worth no marks, and not a second attendance state. A child who was present and quiet is present.\n'),zod.null()]).optional(),
+  "note": zod.string().max(markAttendanceBodyMarksItemNoteMax).nullish()
+}))
+}).describe('A whole register at once, because that is how it is taken: down the class, then away. Children left out are left alone - unregistered is a fact about the teacher\'s afternoon, not a verdict on a child.\n')
+
+export const MarkAttendanceResponse = zod.object({
+  "marked": zod.number().int()
 })
 
 
