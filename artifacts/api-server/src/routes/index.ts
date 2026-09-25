@@ -21,11 +21,13 @@ import studentContentRouter from "../modules/student-content/routes";
 import studentLearningRouter from "../modules/student-learning/routes";
 import teacherDashboardRouter from "../modules/teacher-dashboard/routes";
 import healthRouter from "./health";
+import diagnosticPlanRouter from "../modules/diagnostic-plan/routes";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(identityRouter);
+router.use(diagnosticPlanRouter);
 router.use(homeworkRouter);
 router.use(guardianRouter);
 router.use(contentRouter);

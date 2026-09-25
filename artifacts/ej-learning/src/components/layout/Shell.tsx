@@ -4,6 +4,7 @@ import {
   LayoutDashboard, BookOpen, TrendingUp, User, Database, LogOut,
   CalendarDays, Sun, KeyRound, ClipboardCheck, Library, PenLine, Network, BarChart3,
   BookMarked, Bell, Users,
+  ListChecks,
 } from "lucide-react"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -29,6 +30,7 @@ const STUDENT_NAV = [
   { href: "/subjects", label: "Миний хичээлүүд", icon: BookOpen },
   { href: "/exams", label: "Шалгалт", icon: ClipboardCheck },
   { href: "/homework", label: "Нэмэлт ажил", icon: PenLine },
+  { href: "/my-plans", label: "Багшийн төлөвлөгөө", icon: ListChecks },
   { href: "/library", label: "Номын сан", icon: Library },
   { href: "/progress", label: "Миний ахиц", icon: TrendingUp },
 ]
@@ -293,7 +295,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   ] : [
     { label: '', items: select('/') },
     { label: 'Миний хичээлүүд', items: select('/subjects', '/schedule') },
-    { label: 'Миний ажлууд', items: select('/homework') },
+    { label: 'Миний ажлууд', items: select('/homework', '/my-plans') },
     { label: 'Шалгалт ба ахиц', items: select('/exams', '/progress') },
     { label: 'Бие даан судлах', items: select('/library') },
   ]

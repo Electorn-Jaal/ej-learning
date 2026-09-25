@@ -23,6 +23,142 @@ tags:
   - name: teacher
     description: Teacher classroom and review workflow
 paths:
+  /teacher/diagnostic-catalog:
+    get:
+      operationId: getDiagnosticCatalog
+      tags: [teacher]
+      parameters:
+        - {name: classId, in: query, required: true, schema: {type: integer, minimum: 1}}
+        - {name: subjectId, in: query, required: true, schema: {type: integer, minimum: 1}}
+      responses:
+        default:
+          description: Validation, access, missing record, or revision conflict
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        "200":
+          description: Explicit topic and skill pairs, questions, and study resources
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DiagnosticCatalog'}
+  /admin/diagnostic-items/{itemId}/targets:
+    put:
+      operationId: setDiagnosticItemTargets
+      tags: [admin]
+      parameters:
+        - {name: itemId, in: path, required: true, schema: {type: integer, minimum: 1}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DiagnosticTargetsInput'}
+      responses:
+        default:
+          description: Validation, access, missing record, or revision conflict
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        "200":
+          description: Mapping saved; existing review snapshots remain unchanged
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DiagnosticSaved'}
+  /admin/diagnostic-resources:
+    post:
+      operationId: createDiagnosticResource
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DiagnosticResourceInput'}
+      responses:
+        default:
+          description: Validation, access, missing record, or revision conflict
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        "201":
+          description: Resource with explicit targets created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DiagnosticSaved'}
+  /teacher/diagnostic-attempts/{attemptId}:
+    get:
+      operationId: getDiagnosticReport
+      tags: [teacher]
+      parameters:
+        - {name: attemptId, in: path, required: true, schema: {type: integer, minimum: 1}}
+      responses:
+        default:
+          description: Validation, access, missing record, or revision conflict
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        "200":
+          description: Question evidence and teacher draft
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DiagnosticReport'}
+    put:
+      operationId: saveDiagnosticReview
+      tags: [teacher]
+      parameters:
+        - {name: attemptId, in: path, required: true, schema: {type: integer, minimum: 1}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DiagnosticReviewInput'}
+      responses:
+        default:
+          description: Validation, access, missing record, or revision conflict
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        "200":
+          description: Teacher draft saved using optimistic concurrency
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DiagnosticReport'}
+  /student/diagnostic-plans:
+    get:
+      operationId: getStudentDiagnosticPlans
+      tags: [student]
+      summary: Personal study plans a teacher made from this child's diagnostic and chose to show
+      responses:
+        default:
+          description: Not a student account
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        "200":
+          description: Published plans only; a teacher's draft stays with the teacher
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/PublishedDiagnosticPlan'}
+  /guardian/diagnostic-plans:
+    get:
+      operationId: getChildDiagnosticPlans
+      tags: [guardian]
+      summary: The same published plans, for a parent's own child (FR20)
+      parameters:
+        - {name: studentId, in: query, required: true, schema: {type: integer, minimum: 1}}
+      responses:
+        default:
+          description: Not this parent's child
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        "200":
+          description: Published plans only
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/PublishedDiagnosticPlan'}
   /content/library:
     get:
       operationId: getLibraryBooks
@@ -2835,6 +2971,129 @@ components:
       schema:
         type: string
   schemas:
+    DiagnosticTargetsInput:
+      type: object
+      required: [mapIds]
+      properties:
+        mapIds: {type: array, maxItems: 100, uniqueItems: true, items: {type: integer, minimum: 1}}
+    DiagnosticSaved:
+      type: object
+      required: [id]
+      properties:
+        id: {type: integer}
+    DiagnosticTarget:
+      type: object
+      required: [mapId, topicId, topicName, skillId, skillName]
+      properties:
+        mapId: {type: integer}
+        topicId: {type: integer}
+        topicName: {type: string}
+        skillId: {type: integer}
+        skillName: {type: string}
+    DiagnosticResourceInput:
+      type: object
+      required: [title, kind, instructions, mapIds]
+      properties:
+        title: {type: string, minLength: 1, maxLength: 500}
+        kind: {type: string, enum: [CORE, SUPPLEMENT, EXERCISE, QUESTION]}
+        instructions: {type: string, minLength: 1, maxLength: 10000}
+        sourceMaterialId: {type: integer, minimum: 1, nullable: true}
+        reference: {type: string, maxLength: 500, nullable: true}
+        mapIds: {type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: {type: integer, minimum: 1}}
+    DiagnosticResource:
+      allOf:
+        - {$ref: '#/components/schemas/DiagnosticResourceInput'}
+        - type: object
+          required: [id, sourceTitle]
+          properties:
+            id: {type: integer}
+            sourceTitle: {type: string, nullable: true}
+    DiagnosticCatalog:
+      type: object
+      required: [targets, items, resources, sources]
+      properties:
+        targets: {type: array, items: {$ref: '#/components/schemas/DiagnosticTarget'}}
+        items:
+          type: array
+          items:
+            type: object
+            required: [id, title, mapIds]
+            properties:
+              id: {type: integer}
+              title: {type: string}
+              mapIds: {type: array, items: {type: integer}}
+        resources: {type: array, items: {$ref: '#/components/schemas/DiagnosticResource'}}
+        sources:
+          type: array
+          items:
+            type: object
+            required: [id, title]
+            properties:
+              id: {type: integer}
+              title: {type: string}
+    DiagnosticEvidence:
+      type: object
+      required: [itemId, title, awarded, maxScore, targets]
+      properties:
+        itemId: {type: integer}
+        title: {type: string}
+        awarded: {type: number}
+        maxScore: {type: number}
+        targets: {type: array, items: {$ref: '#/components/schemas/DiagnosticTarget'}}
+    DiagnosticPlanEntry:
+      type: object
+      required: [mapId, resourceId, title, instructions]
+      properties:
+        mapId: {type: integer, minimum: 1}
+        resourceId: {type: integer, minimum: 1, nullable: true}
+        title: {type: string, minLength: 1, maxLength: 500}
+        instructions: {type: string, minLength: 1, maxLength: 10000}
+    DiagnosticReviewInput:
+      type: object
+      required: [revision, entries, note, published]
+      properties:
+        revision: {type: integer, minimum: 0}
+        entries: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/DiagnosticPlanEntry'}}
+        note: {type: string, maxLength: 10000}
+        published: {type: boolean, description: "Shown to the child and their guardian. False keeps it the teacher's draft."}
+    DiagnosticReport:
+      type: object
+      required: [attemptId, classId, subjectId, studentName, title, evidence, resources, revision, entries, note, updatedAt, publishedAt]
+      properties:
+        attemptId: {type: integer}
+        classId: {type: integer}
+        subjectId: {type: integer}
+        studentName: {type: string}
+        title: {type: string}
+        evidence: {type: array, items: {$ref: '#/components/schemas/DiagnosticEvidence'}}
+        resources: {type: array, items: {$ref: '#/components/schemas/DiagnosticResource'}}
+        revision: {type: integer}
+        entries: {type: array, items: {$ref: '#/components/schemas/DiagnosticPlanEntry'}}
+        note: {type: string}
+        updatedAt: {type: string, nullable: true}
+        publishedAt: {type: string, nullable: true}
+    PublishedDiagnosticPlan:
+      type: object
+      required: [attemptId, title, subjectName, teacherName, publishedAt, note, entries]
+      properties:
+        attemptId: {type: integer}
+        title: {type: string, description: The diagnostic paper the plan answers}
+        subjectName: {type: string}
+        teacherName: {type: string, nullable: true}
+        publishedAt: {type: string}
+        note: {type: string}
+        entries:
+          type: array
+          items:
+            type: object
+            required: [title, instructions, topicName, skillName, resourceTitle, sourceMaterialId]
+            properties:
+              title: {type: string}
+              instructions: {type: string}
+              topicName: {type: string, nullable: true}
+              skillName: {type: string, nullable: true}
+              resourceTitle: {type: string, nullable: true}
+              sourceMaterialId: {type: integer, nullable: true}
     LibraryBook:
       type: object
       required: [id, title, subjectName, grades, hasFile, hasCover, filePages]

@@ -59,6 +59,7 @@ const StudentSubjectView = page(() => import('@/pages/student/SubjectView'));
 const StudentPlan = page(() => import('@/pages/student/Plan'));
 const StudentExams = page(() => import('@/pages/student/Exams'));
 const StudentHomework = page(() => import('@/pages/student/Homework'));
+const StudentDiagnosticPlans = page(() => import('@/pages/student/DiagnosticPlans'));
 const Library = page(() => import('@/pages/Library'));
 const TeacherHomework = page(() => import('@/pages/teacher/Homework'));
 const TeacherDashboard = page(() => import('@/pages/teacher/Dashboard'));
@@ -98,6 +99,7 @@ function StudentRoutes() {
       <Route path="/subjects" component={StudentSubjects} />
       <Route path="/exams" component={StudentExams} />
       <Route path="/homework" component={StudentHomework} />
+      <Route path="/my-plans" component={StudentDiagnosticPlans} />
       <Route path="/library" component={Library} />
       <Route path="/progress" component={StudentProgress} />
       <Route path="/profile" component={StudentProfile} />

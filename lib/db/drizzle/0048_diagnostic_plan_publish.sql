@@ -1,0 +1,3 @@
+ALTER TABLE "assessment"."diagnostic_plan_reviews" ADD COLUMN "published_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "assessment"."diagnostic_plan_reviews" ADD COLUMN "published_by" bigint;--> statement-breakpoint
+ALTER TABLE "assessment"."diagnostic_plan_reviews" ADD CONSTRAINT "diagnostic_plan_reviews_published_by_users_id_fk" FOREIGN KEY ("published_by") REFERENCES "core"."users"("id") ON DELETE no action ON UPDATE no action;

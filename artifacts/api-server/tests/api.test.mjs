@@ -3968,6 +3968,130 @@ ${run.output}`);
     });
   });
 
+  describe("diagnostic evidence and teacher plans", () => {
+    it("matches exact targets, scopes access, and preserves a teacher snapshot", async () => {
+      const admin=createClient(harness.baseUrl), teacher=createClient(harness.baseUrl);
+      const other=createClient(harness.baseUrl), child=createClient(harness.baseUrl);
+      await admin.signIn(accountsByRole.ADMIN);
+      await teacher.signIn(byName['demo-teacher']);
+      await other.signIn(byName['demo-teacher-b']);
+      await child.signIn(accountsByRole.STUDENT);
+      const [{id:classId}]=await harness.sql("SELECT id::int FROM core.classes WHERE class_code='MOCK-LOCAL-9A'");
+      const [{id:subjectId}]=await harness.sql("SELECT id::int FROM core.subjects WHERE code='MATH'");
+      const [{id:gradeId}]=await harness.sql("SELECT id::int FROM core.grade_levels WHERE grade_number=9");
+      const [{id:studentId}]=await harness.sql("SELECT student_id::int AS id FROM core.users WHERE username='demo-student'");
+      const [{id:topicId}]=await harness.sql(`INSERT INTO content.content_nodes
+        (subject_id,content_code,level_type,name_mn,sequence_no,status)
+        VALUES($1,'TEST-DIAG-T','TOPIC','Diagnostic topic',1,'APPROVED') RETURNING id::int`,[subjectId]);
+      const maps=[];
+      for (const suffix of ['A','B']) {
+        const [{id:skillId}]=await harness.sql(`INSERT INTO content.skills(skill_code,subject_id,grade_level_id,name_mn,status)
+          VALUES($1,$2,$3,$1,'APPROVED') RETURNING id::int`,[`TEST-DIAG-${suffix}`,subjectId,gradeId]);
+        const [{id}]=await harness.sql(`INSERT INTO content.content_skill_maps(map_code,content_node_id,skill_id,status)
+          VALUES($1,$2,$3,'APPROVED') RETURNING id::int`,[`TEST-DIAG-${suffix}`,topicId,skillId]);
+        maps.push(id);
+      }
+      const [{id:itemId}]=await harness.sql(`INSERT INTO assessment.diagnostic_items
+        (item_code,subject_id,grade_level_id,item_order,title_mn,max_score,status)
+        VALUES('TEST-DIAG-Q',$1,$2,1,'Diagnostic question',2,'APPROVED') RETURNING id::int`,[subjectId,gradeId]);
+      await harness.sql(`INSERT INTO assessment.diagnostic_item_options
+        (diagnostic_item_id,sequence_no,option_text,is_correct) VALUES($1,1,'yes',true),($1,2,'no',false)`,[itemId]);
+      const targetPath=`/admin/diagnostic-items/${itemId}/targets`;
+      assert.equal((await teacher.request(targetPath,{method:'PUT',body:{mapIds:[maps[0]]}})).status,403);
+      assert.equal((await admin.request(targetPath,{method:'PUT',body:{mapIds:[maps[0]]}})).status,200);
+      const resourceIds=[];
+      for(let i=0;i<2;i++) {
+        const made=await admin.request('/admin/diagnostic-resources',{method:'POST',body:{
+          title:`Diagnostic material ${i}`,kind:i===0?'CORE':'EXERCISE',instructions:'Study this exact skill',mapIds:[maps[i]],
+        }});
+        assert.equal(made.status,201,JSON.stringify(made.payload)); resourceIds.push(made.payload.id);
+      }
+      const catalog=await teacher.request(`/teacher/diagnostic-catalog?classId=${classId}&subjectId=${subjectId}`);
+      assert.equal(catalog.status,200,JSON.stringify(catalog.payload));
+      assert.deepEqual(catalog.payload.resources.find(r=>r.id===resourceIds[0]).mapIds,[maps[0]]);
+      assert.equal((await other.request(`/teacher/diagnostic-catalog?classId=${classId}&subjectId=${subjectId}`)).status,403);
+      const made=await teacher.request('/teacher/exams',{method:'POST',body:{classId,subjectId,examKind:'DIAGNOSTIC',
+        title:'TEST-DIAG exam',opensAt:new Date(Date.now()-10000).toISOString(),closesAt:new Date(Date.now()+3600000).toISOString(),
+        itemIds:[itemId],onPaper:true}});
+      assert.equal(made.status,201,JSON.stringify(made.payload));
+      const scored=await teacher.request(`/teacher/exams/${made.payload.sittingId}/entry`,{method:'POST',body:{studentId,answers:[{itemId,awarded:0}]}});
+      assert.equal(scored.status,201,JSON.stringify(scored.payload));
+      const path=`/teacher/diagnostic-attempts/${scored.payload.attemptId}`;
+      assert.equal((await other.request(path)).status,403);
+      assert.equal((await child.request(path)).status,403);
+      const first=await teacher.request(path);
+      assert.equal(first.status,200,JSON.stringify(first.payload));
+      assert.equal(first.payload.revision,0);
+      assert.equal(first.payload.evidence[0].awarded,0);
+      assert.deepEqual(first.payload.evidence[0].targets.map(t=>t.mapId),[maps[0]],'same topic must not imply skill B');
+      const entry={mapId:maps[0],resourceId:resourceIds[1],title:'Wrong skill',instructions:'Wrong'};
+      assert.equal((await teacher.request(path,{method:'PUT',body:{revision:0,entries:[entry],note:'',published:false}})).status,400);
+      entry.resourceId=resourceIds[0];entry.title='Teacher edited title';
+      const saved=await teacher.request(path,{method:'PUT',body:{revision:0,entries:[entry],note:'Teacher judgement',published:false}});
+      assert.equal(saved.status,200,JSON.stringify(saved.payload));
+      assert.equal(saved.payload.revision,1);
+      assert.equal((await teacher.request(path,{method:'PUT',body:{revision:0,entries:[],note:'stale',published:false}})).status,409);
+      assert.equal((await other.request(path,{method:'PUT',body:{revision:1,entries:[],note:'forged',published:false}})).status,403);
+      // Editing a bank mapping must not reattribute an existing teacher review.
+      await admin.request(targetPath,{method:'PUT',body:{mapIds:[maps[0],maps[1]]}});
+      const again=await teacher.request(path);
+      assert.deepEqual(again.payload.evidence,first.payload.evidence);
+      assert.equal(again.payload.entries[0].title,'Teacher edited title');
+      assert.equal(again.payload.note,'Teacher judgement');
+      const changed=await teacher.request(path,{method:'PUT',body:{revision:1,entries:[{...entry,resourceId:null,instructions:'Teacher custom exercise'}],note:'Revised',published:false}});
+      assert.equal(changed.status,200,JSON.stringify(changed.payload));
+      assert.equal(changed.payload.revision,2);
+      assert.equal(changed.payload.publishedAt,null);
+
+      // A draft stays with the teacher.
+      const attemptId=scored.payload.attemptId;
+      const mine=async()=>{const r=await child.request('/student/diagnostic-plans');assert.equal(r.status,200,JSON.stringify(r.payload));return r.payload.find(p=>p.attemptId===attemptId);};
+      assert.equal(await mine(),undefined,'an unpublished plan must not reach the child');
+      assert.equal((await teacher.request(path,{method:'PUT',body:{revision:2,entries:[],note:'',published:true}})).status,400,'an empty plan is not shown');
+
+      const shown=await teacher.request(path,{method:'PUT',body:{revision:2,entries:changed.payload.entries,note:'Revised',published:true}});
+      assert.equal(shown.status,200,JSON.stringify(shown.payload));
+      assert.ok(shown.payload.publishedAt);
+      const plan=await mine();
+      assert.ok(plan,'a published plan reaches the child');
+      assert.equal(plan.note,'Revised');
+      assert.equal(plan.entries[0].title,'Teacher edited title');
+      assert.equal(plan.entries[0].instructions,'Teacher custom exercise');
+      assert.equal(plan.entries[0].skillName,'TEST-DIAG-A');
+      assert.ok(plan.teacherName);
+      assert.equal((await teacher.request('/student/diagnostic-plans')).status,403,'a teacher has no child plans of their own');
+
+      // FR20: the child's guardian reads the same plan; another parent does not.
+      const [{id:parentId}]=await harness.sql(`INSERT INTO core.users (username,display_name,password_hash,is_active)
+        SELECT 'test-diag-parent','Diag parent',password_hash,true FROM core.users WHERE username='demo-student'
+        ON CONFLICT (username) DO UPDATE SET is_active=true RETURNING id::int`);
+      await harness.sql(`INSERT INTO core.user_roles (user_id,role) VALUES ($1,'GUARDIAN') ON CONFLICT DO NOTHING`,[parentId]);
+      try {
+        const parent=createClient(harness.baseUrl);
+        await parent.signIn({username:'test-diag-parent',password:accountsByRole.STUDENT.password});
+        const planPath=`/guardian/diagnostic-plans?studentId=${studentId}`;
+        assert.equal((await parent.request(planPath)).status,403,'not linked yet');
+        const linked=await admin.request('/admin/guardians/link',{method:'POST',body:{userId:parentId,studentId,relation:'Аав'}});
+        assert.equal(linked.status,200,JSON.stringify(linked.payload));
+        const relinked=createClient(harness.baseUrl);
+        await relinked.signIn({username:'test-diag-parent',password:accountsByRole.STUDENT.password});
+        const theirs=await relinked.request(planPath);
+        assert.equal(theirs.status,200,JSON.stringify(theirs.payload));
+        assert.ok(theirs.payload.some(p=>p.attemptId===attemptId));
+      } finally {
+        await harness.sql('DELETE FROM core.guardian_students WHERE user_id=$1',[parentId]);
+        await harness.sql('DELETE FROM core.user_roles WHERE user_id=$1',[parentId]);
+        await harness.sql('DELETE FROM core.sessions WHERE user_id=$1',[parentId]);
+        await harness.sql('DELETE FROM core.users WHERE id=$1',[parentId]);
+      }
+
+      // Withdrawing takes it back.
+      const withdrawn=await teacher.request(path,{method:'PUT',body:{revision:3,entries:shown.payload.entries,note:'Revised',published:false}});
+      assert.equal(withdrawn.status,200,JSON.stringify(withdrawn.payload));
+      assert.equal(await mine(),undefined,'a withdrawn plan leaves the child');
+    });
+  });
+
   // Last on purpose: it wipes this student's quiz history to measure a clean
   // sitting, which would pull the ground out from under any test that counted
   // attempts.

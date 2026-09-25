@@ -5,6 +5,154 @@
  * EJ Learning adaptive learning API
  * OpenAPI spec version: 0.1.0
  */
+export interface DiagnosticTargetsInput {
+  /**
+     * @maxItems 100
+     * @items.minimum 1
+     */
+  mapIds: number[];
+}
+
+export interface DiagnosticSaved {
+  id: number;
+}
+
+export interface DiagnosticTarget {
+  mapId: number;
+  topicId: number;
+  topicName: string;
+  skillId: number;
+  skillName: string;
+}
+
+export type DiagnosticResourceInputKind = typeof DiagnosticResourceInputKind[keyof typeof DiagnosticResourceInputKind];
+
+
+export const DiagnosticResourceInputKind = {
+  CORE: 'CORE',
+  SUPPLEMENT: 'SUPPLEMENT',
+  EXERCISE: 'EXERCISE',
+  QUESTION: 'QUESTION',
+} as const;
+
+export interface DiagnosticResourceInput {
+  /**
+     * @minLength 1
+     * @maxLength 500
+     */
+  title: string;
+  kind: DiagnosticResourceInputKind;
+  /**
+     * @minLength 1
+     * @maxLength 10000
+     */
+  instructions: string;
+  /** @minimum 1 */
+  sourceMaterialId?: number | null;
+  /** @maxLength 500 */
+  reference?: string | null;
+  /**
+     * @minItems 1
+     * @maxItems 100
+     * @items.minimum 1
+     */
+  mapIds: number[];
+}
+
+export type DiagnosticResource = DiagnosticResourceInput & ({
+  id: number;
+  sourceTitle: string | null;
+});
+
+export type DiagnosticCatalogItemsItem = {
+  id: number;
+  title: string;
+  mapIds: number[];
+};
+
+export type DiagnosticCatalogSourcesItem = {
+  id: number;
+  title: string;
+};
+
+export interface DiagnosticCatalog {
+  targets: DiagnosticTarget[];
+  items: DiagnosticCatalogItemsItem[];
+  resources: DiagnosticResource[];
+  sources: DiagnosticCatalogSourcesItem[];
+}
+
+export interface DiagnosticEvidence {
+  itemId: number;
+  title: string;
+  awarded: number;
+  maxScore: number;
+  targets: DiagnosticTarget[];
+}
+
+export interface DiagnosticPlanEntry {
+  /** @minimum 1 */
+  mapId: number;
+  /** @minimum 1 */
+  resourceId: number | null;
+  /**
+     * @minLength 1
+     * @maxLength 500
+     */
+  title: string;
+  /**
+     * @minLength 1
+     * @maxLength 10000
+     */
+  instructions: string;
+}
+
+export interface DiagnosticReviewInput {
+  /** @minimum 0 */
+  revision: number;
+  /** @maxItems 100 */
+  entries: DiagnosticPlanEntry[];
+  /** @maxLength 10000 */
+  note: string;
+  /** Shown to the child and their guardian. False keeps it the teacher's draft. */
+  published: boolean;
+}
+
+export interface DiagnosticReport {
+  attemptId: number;
+  classId: number;
+  subjectId: number;
+  studentName: string;
+  title: string;
+  evidence: DiagnosticEvidence[];
+  resources: DiagnosticResource[];
+  revision: number;
+  entries: DiagnosticPlanEntry[];
+  note: string;
+  updatedAt: string | null;
+  publishedAt: string | null;
+}
+
+export type PublishedDiagnosticPlanEntriesItem = {
+  title: string;
+  instructions: string;
+  topicName: string | null;
+  skillName: string | null;
+  resourceTitle: string | null;
+  sourceMaterialId: number | null;
+};
+
+export interface PublishedDiagnosticPlan {
+  attemptId: number;
+  /** The diagnostic paper the plan answers */
+  title: string;
+  subjectName: string;
+  teacherName: string | null;
+  publishedAt: string;
+  note: string;
+  entries: PublishedDiagnosticPlanEntriesItem[];
+}
+
 export interface LibraryBook {
   id: number;
   title: string;
@@ -2957,6 +3105,24 @@ export interface CatalogItem {
   /** @nullable */
   sourceTitle: string | null;
 }
+
+export type GetDiagnosticCatalogParams = {
+/**
+ * @minimum 1
+ */
+classId: number;
+/**
+ * @minimum 1
+ */
+subjectId: number;
+};
+
+export type GetChildDiagnosticPlansParams = {
+/**
+ * @minimum 1
+ */
+studentId: number;
+};
 
 export type GetStudentScheduleParams = {
 /**

@@ -4,7 +4,14 @@ import type { AuthenticatedUser } from "../identity/service";
 import { hashPassword } from "../identity/service";
 import { MIN_PASSWORD_LENGTH } from "../../shared/password";
 import { dayForStudent } from "../student-learning/service";
+import { childPlans } from "../diagnostic-plan/service";
 import * as repository from "./repository";
+
+/** The personal plans a teacher published for this child (FR20). Drafts stay with the teacher. */
+export async function childDiagnosticPlans(user: AuthenticatedUser, studentId: number) {
+  requireChild(user, studentId);
+  return childPlans(studentId);
+}
 
 /**
  * What a parent may read, and the one gate everything goes through.

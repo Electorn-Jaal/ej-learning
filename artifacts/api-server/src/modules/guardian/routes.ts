@@ -11,11 +11,13 @@ import {
   CreateGuardianBody,
   CreateGuardianResponse,
   GetClassChildrenResponse,
+  GetChildDiagnosticPlansResponse,
 } from "@workspace/api-zod";
 import { requireRole } from "../../middlewares/auth";
 import { badRequest } from "../../shared/http-error";
 import {
   childDay,
+  childDiagnosticPlans,
   classChildren,
   createGuardian,
   childRecord,
@@ -50,6 +52,15 @@ router.get("/guardian/day", asGuardian, async (req, res, next) => {
   try {
     const id = positiveId(req.query.studentId, "Сурагчийн дугаар буруу байна.", "INVALID_STUDENT_ID");
     res.json(GetChildDayResponse.parse(await childDay(req.user!, id, req.query.on)));
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/guardian/diagnostic-plans", asGuardian, async (req, res, next) => {
+  try {
+    const id = positiveId(req.query.studentId, "Сурагчийн дугаар буруу байна.", "INVALID_STUDENT_ID");
+    res.json(GetChildDiagnosticPlansResponse.parse(await childDiagnosticPlans(req.user!, id)));
   } catch (error) {
     next(error);
   }

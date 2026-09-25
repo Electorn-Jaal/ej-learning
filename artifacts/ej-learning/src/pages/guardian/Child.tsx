@@ -3,8 +3,10 @@ import {
   useGetMyChildren,
   useGetChildDay,
   useGetChildRecord,
+  useGetChildDiagnosticPlans,
   type GuardianChild,
 } from '@workspace/api-client-react'
+import { DiagnosticPlanList } from '@/components/DiagnosticPlanList'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { NATIVE_SELECT } from '@/components/ui/native-select'
@@ -228,10 +230,21 @@ function Record({ studentId }: { studentId: number }) {
  * three who has to remember which tab they are on will eventually tell the
  * wrong child off.
  */
+/** FR20: the personal plans the child's teachers published, as the child sees them. */
+function Plans({ studentId }: { studentId: number }) {
+  const { data, isLoading, error, refetch } = useGetChildDiagnosticPlans({ studentId })
+  if (isLoading) return <Skeleton className="h-48 w-full" />
+  if (!data || error) return <div role="alert" className="space-y-2">
+    <p>Төлөвлөгөөг уншиж чадсангүй.</p>
+    <button className="underline" onClick={() => void refetch()}>Дахин оролдох</button>
+  </div>
+  return <DiagnosticPlanList plans={data} linkBooks={false} />
+}
+
 export default function GuardianChild() {
   const { data: children, isLoading, error, refetch } = useGetMyChildren()
   const [chosen, setChosen] = useState<number | null>(null)
-  const [view, setView] = useState<'day' | 'record'>('day')
+  const [view, setView] = useState<'day' | 'record' | 'plans'>('day')
 
   if (isLoading) return <Skeleton className="h-64 w-full" />
   // A failed request is not "no child linked": that message sends a parent to
@@ -288,12 +301,20 @@ export default function GuardianChild() {
           >
             Сүүлийн 2 долоо хоног
           </Button>
+          <Button
+            type="button" size="sm" variant={view === 'plans' ? 'default' : 'outline'}
+            aria-pressed={view === 'plans'} onClick={() => setView('plans')}
+          >
+            Багшийн төлөвлөгөө
+          </Button>
         </div>
       </div>
 
       {view === 'day'
         ? <Today key={child.studentId} studentId={child.studentId} />
-        : <Record key={child.studentId} studentId={child.studentId} />}
+        : view === 'record'
+          ? <Record key={child.studentId} studentId={child.studentId} />
+          : <Plans key={child.studentId} studentId={child.studentId} />}
     </div>
   )
 }
