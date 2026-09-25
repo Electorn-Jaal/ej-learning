@@ -24,7 +24,7 @@ import {
   studentsInCore,
   subjectsInCore,
 } from "./database";
-import { usersInCore } from "./identity";
+import { teachersInCore, usersInCore } from "./identity";
 
 /**
  * The four terms of a school year.
@@ -826,6 +826,150 @@ export const studyPlanDaysInLearning = learning.table(
  * teacherId is nullable so a slot can be recorded before it is known who will
  * take it - a timetable published with a vacancy is still a timetable.
  */
+/**
+ * A club: something the school runs that is not a class.
+ *
+ * Speaking club, БС, ДС-1. On the school's own timetable these are written in
+ * the box where a class name goes, which is the only place there was to put
+ * them - and it makes them unreadable, because the box means "who is in the
+ * room" and a club's answer is "whoever signed up, from anywhere".
+ *
+ * So a club has no class. It has a teacher, an hour, and a list of children
+ * drawn from across the school, and the list is the club. That is the
+ * difference from a split class, where the group exists whether or not anybody
+ * has said who is in it: an unassigned half of 6а is still half of 6а, but a
+ * club with nobody in it is a club nobody joined.
+ *
+ * The consequence is deliberate and worth stating: a club with no members
+ * appears on nobody's timetable. A group slot with no members appears on
+ * everybody's, marked as unassigned, because the children are known to be
+ * somewhere and the school has simply not said which half. A club is opt-in,
+ * so silence means empty rather than unknown.
+ */
+export const clubsInLearning = learning.table(
+  "clubs",
+  {
+    id: bigint({ mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity({
+        name: "learning.clubs_id_seq",
+        startWith: 1,
+        increment: 1,
+        minValue: 1,
+        cache: 1,
+      }),
+    nameMn: varchar("name_mn", { length: 200 }).notNull(),
+    // Nullable: a club need not be a school subject. Speaking club is English
+    // and ДС-1 is Japanese, but a chess club is a chess club, and forcing one
+    // would mean inventing subjects nobody teaches.
+    subjectId: bigint("subject_id", { mode: "number" }),
+    teacherId: bigint("teacher_id", { mode: "number" }),
+    schoolYear: varchar("school_year", { length: 20 }).notNull(),
+    note: text(),
+    isActive: boolean("is_active").default(true).notNull(),
+    createdBy: bigint("created_by", { mode: "number" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("clubs_name_year_key").on(table.nameMn, table.schoolYear),
+    foreignKey({
+      columns: [table.subjectId],
+      foreignColumns: [subjectsInCore.id],
+      name: "clubs_subject_id_fkey",
+    }),
+    foreignKey({
+      columns: [table.teacherId],
+      foreignColumns: [teachersInCore.id],
+      name: "clubs_teacher_id_fkey",
+    }),
+    foreignKey({
+      columns: [table.createdBy],
+      foreignColumns: [usersInCore.id],
+      name: "clubs_created_by_fkey",
+    }),
+  ],
+);
+
+/**
+ * When a club meets.
+ *
+ * The same weekday-and-period the timetable uses, so a club sits in a child's
+ * day beside their lessons rather than in a list of its own. A club that met
+ * at "Tuesday after school" would be unplaceable next to a seventh period.
+ *
+ * Several rows per club: Speaking club runs two hours on Tuesday and two on
+ * Thursday, which is four rows, and the school's spreadsheet merges them into
+ * two boxes - which is how a double session came to look like a single one.
+ */
+export const clubSessionsInLearning = learning.table(
+  "club_sessions",
+  {
+    id: bigint({ mode: "number" })
+      .primaryKey()
+      .generatedAlwaysAsIdentity({
+        name: "learning.club_sessions_id_seq",
+        startWith: 1,
+        increment: 1,
+        minValue: 1,
+        cache: 1,
+      }),
+    clubId: bigint("club_id", { mode: "number" }).notNull(),
+    weekdayNo: smallint("weekday_no").notNull(),
+    periodNo: smallint("period_no").notNull(),
+    validFrom: date("valid_from").notNull(),
+    validTo: date("valid_to"),
+  },
+  (table) => [
+    unique("club_sessions_key").on(table.clubId, table.weekdayNo, table.periodNo),
+    check("club_sessions_weekday_check", sql`weekday_no BETWEEN 1 AND 7`),
+    check("club_sessions_period_check", sql`period_no BETWEEN 1 AND 12`),
+    foreignKey({
+      columns: [table.clubId],
+      foreignColumns: [clubsInLearning.id],
+      name: "club_sessions_club_id_fkey",
+    }).onDelete("cascade"),
+  ],
+);
+
+/**
+ * Who is in the club.
+ *
+ * From anywhere. The point of the table is that membership crosses classes -
+ * a Speaking club of four children from 9а and two from 12а is the ordinary
+ * case, and there is no class row that could hold it.
+ *
+ * Leaving is recorded rather than deleted: a child who stopped coming in
+ * November was in the club in October, and their attendance that month should
+ * still make sense.
+ */
+export const clubMembersInLearning = learning.table(
+  "club_members",
+  {
+    clubId: bigint("club_id", { mode: "number" }).notNull(),
+    studentId: bigint("student_id", { mode: "number" }).notNull(),
+    isActive: boolean("is_active").default(true).notNull(),
+    joinedAt: timestamp("joined_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.clubId, table.studentId], name: "club_members_pkey" }),
+    index("idx_club_members_student").using("btree", table.studentId.asc().nullsLast()),
+    foreignKey({
+      columns: [table.clubId],
+      foreignColumns: [clubsInLearning.id],
+      name: "club_members_club_id_fkey",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.studentId],
+      foreignColumns: [studentsInCore.id],
+      name: "club_members_student_id_fkey",
+    }).onDelete("cascade"),
+  ],
+);
+
 export const timetableSlotsInLearning = learning.table(
   "timetable_slots",
   {

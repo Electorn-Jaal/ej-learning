@@ -62,6 +62,7 @@ const TeacherDashboard = page(() => import('@/pages/teacher/Dashboard'));
 const TeacherSchedule = page(() => import('@/pages/teacher/Schedule'));
 const TeacherQuizResults = page(() => import('@/pages/teacher/QuizResults'));
 const TeacherExams = page(() => import('@/pages/teacher/Exams'));
+const TeacherClubs = page(() => import('@/pages/teacher/Clubs'));
 const TeacherAnalytics = page(() => import('@/pages/teacher/Analytics'));
 const TeacherAssessment = page(() => import('@/pages/teacher/Assessment'));
 const AdminBooks = page(() => import('@/pages/admin/Books'));
@@ -120,6 +121,7 @@ function StaffRoutes({ admin, takesLessons }: { admin: boolean; takesLessons: bo
       <Route path="/teacher" component={TeacherDashboard} />
       <Route path="/teacher/schedule" component={TeacherSchedule} />
       <Route path="/teacher/exams" component={TeacherExams} />
+      <Route path="/teacher/clubs" component={TeacherClubs} />
       <Route path="/teacher/results" component={TeacherQuizResults} />
       <Route path="/teacher/analytics" component={TeacherAnalytics} />
       {takesLessons || admin ? (

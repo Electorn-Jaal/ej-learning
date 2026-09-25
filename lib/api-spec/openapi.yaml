@@ -1945,6 +1945,147 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /teacher/clubs:
+    get:
+      operationId: getClubs
+      tags: [teacher]
+      summary: The clubs the school runs this year
+      responses:
+        "200":
+          description: Clubs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Club"
+        "403":
+          description: Staff only
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    post:
+      operationId: createClub
+      tags: [teacher]
+      summary: Register a club and the hours it meets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClubInput"
+      responses:
+        "201":
+          description: Registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClubCreated"
+        "400":
+          description: No name, or no hours
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Staff only
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /teacher/clubs/{clubId}/members:
+    get:
+      operationId: getClubMembers
+      tags: [teacher]
+      summary: Who is in a club, and everyone who could be
+      parameters:
+        - in: path
+          name: clubId
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Members and the school roster
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClubMembers"
+        "403":
+          description: Staff only
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: No such club
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    put:
+      operationId: setClubMembers
+      tags: [teacher]
+      summary: Replace a club's membership
+      parameters:
+        - in: path
+          name: clubId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClubMembersInput"
+      responses:
+        "200":
+          description: Set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClubMembersResult"
+        "400":
+          description: A child who is not in the school
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Staff only
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /teacher/clubs/{clubId}/active:
+    put:
+      operationId: setClubActive
+      tags: [teacher]
+      summary: Stop or restart a club
+      parameters:
+        - in: path
+          name: clubId
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClubActiveInput"
+      responses:
+        "200":
+          description: Set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClubActiveResult"
+        "403":
+          description: Staff only
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /teacher/attendance:
     put:
       operationId: markAttendance
@@ -3892,6 +4033,131 @@ components:
       required: [linked]
       properties:
         linked: { type: boolean }
+    ClubSession:
+      type: object
+      required: [weekdayNo, periodNo]
+      properties:
+        weekdayNo:
+          description: 1 is Monday, the same numbering the timetable uses.
+          type: integer
+          minimum: 1
+          maximum: 7
+        periodNo:
+          type: integer
+          minimum: 1
+          maximum: 12
+    Club:
+      type: object
+      description: >
+        Something the school runs that is not a class. The school's own
+        timetable writes these into the box where a class name goes, which is
+        the only box there was - and it makes them unreadable, because that box
+        means "who is in the room" and a club's answer is "whoever signed up,
+        from anywhere".
+      required: [clubId, nameMn, subjectId, subjectName, teacherId, teacherName, note, isActive, memberCount, sessions]
+      properties:
+        clubId: { type: integer }
+        nameMn: { type: string }
+        subjectId: { type: ["integer", "null"] }
+        subjectName: { type: ["string", "null"] }
+        teacherId: { type: ["integer", "null"] }
+        teacherName: { type: ["string", "null"] }
+        note: { type: ["string", "null"] }
+        isActive: { type: boolean }
+        memberCount:
+          description: >
+            The one number that says whether a club is real. A club with hours
+            and no members is on nobody's timetable, which from the staff room
+            looks exactly like a club that is running fine.
+          type: integer
+        sessions:
+          type: ["array", "null"]
+          items:
+            $ref: "#/components/schemas/ClubSession"
+    ClubInput:
+      type: object
+      required: [nameMn, sessions]
+      properties:
+        nameMn:
+          type: string
+          maxLength: 200
+        subjectId:
+          description: A club need not be a school subject; a chess club is a chess club.
+          type: ["integer", "null"]
+        teacherId: { type: ["integer", "null"] }
+        note:
+          type: ["string", "null"]
+          maxLength: 1000
+        sessions:
+          description: At least one. An hour is what makes a club appear anywhere.
+          type: array
+          items:
+            $ref: "#/components/schemas/ClubSession"
+    ClubCreated:
+      type: object
+      required: [clubId]
+      properties:
+        clubId: { type: integer }
+    ClubMember:
+      type: object
+      required: [studentId, displayName, studentCode, className]
+      properties:
+        studentId: { type: integer }
+        displayName: { type: string }
+        studentCode: { type: string }
+        className: { type: ["string", "null"] }
+    ClubRosterEntry:
+      type: object
+      required: [studentId, displayName, studentCode, className, gradeNumber]
+      properties:
+        studentId: { type: integer }
+        displayName: { type: string }
+        studentCode: { type: string }
+        className: { type: ["string", "null"] }
+        gradeNumber: { type: ["integer", "null"] }
+    ClubMembers:
+      type: object
+      required: [clubId, nameMn, members, roster]
+      properties:
+        clubId: { type: integer }
+        nameMn: { type: string }
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClubMember"
+        roster:
+          description: >
+            Every child in the school. A club crosses classes, so a screen that
+            asked for a class first would be asking the wrong question.
+          type: array
+          items:
+            $ref: "#/components/schemas/ClubRosterEntry"
+    ClubMembersInput:
+      type: object
+      required: [studentIds]
+      properties:
+        studentIds:
+          description: >
+            The whole membership, not an addition. A child left out has left
+            the club; their row is kept but made inactive, because a child who
+            stopped coming in November was in the club in October.
+          type: array
+          items: { type: integer }
+    ClubMembersResult:
+      type: object
+      required: [members]
+      properties:
+        members: { type: integer }
+    ClubActiveInput:
+      type: object
+      required: [isActive]
+      properties:
+        isActive: { type: boolean }
+    ClubActiveResult:
+      type: object
+      required: [isActive]
+      properties:
+        isActive: { type: boolean }
     AttendanceState:
       description: >
         UNREGISTERED is never stored - it is the absence of a mark - but it may
@@ -4417,6 +4683,20 @@ components:
             Which half of a split class this slot is for, in the school's own
             words ("6а-1"). Null for a lesson the whole class attends.
           type: [string, "null"]
+        club:
+          description: >
+            The club that meets in this period, where the child is in one. A
+            club has no class, so it reaches a child's day through their own
+            membership and nobody else's.
+          oneOf:
+            - type: object
+              required: [clubId, nameMn, teacherName, note]
+              properties:
+                clubId: { type: integer }
+                nameMn: { type: string }
+                teacherName: { type: ["string", "null"] }
+                note: { type: ["string", "null"] }
+            - type: "null"
         notebook:
           description: >
             What the teacher found in this child's exercise book for this

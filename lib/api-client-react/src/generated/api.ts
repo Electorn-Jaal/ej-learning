@@ -37,6 +37,14 @@ import type {
   ClassSkills,
   ClassTopic,
   ClassTopicInput,
+  Club,
+  ClubActiveInput,
+  ClubActiveResult,
+  ClubCreated,
+  ClubInput,
+  ClubMembers,
+  ClubMembersInput,
+  ClubMembersResult,
   CurrentUser,
   ExamAttemptInput,
   ExamCreated,
@@ -6498,6 +6506,426 @@ export const useUnlinkChild = <TError = ErrorType<ApiError>,
         TContext
       > => {
       return useMutation(getUnlinkChildMutationOptions(options));
+    }
+
+export const getGetClubsUrl = () => {
+
+
+
+
+  return `/api/teacher/clubs`
+}
+
+/**
+ * @summary The clubs the school runs this year
+ */
+export const getClubs = async ( options?: Parameters<typeof customFetch>[1]): Promise<Club[]> => {
+
+  return customFetch<Club[]>(getGetClubsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetClubsQueryKey = () => {
+    return [
+    `/api/teacher/clubs`
+    ] as const;
+    }
+
+
+export const getGetClubsQueryOptions = <TData = Awaited<ReturnType<typeof getClubs>>, TError = ErrorType<ApiError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClubs>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetClubsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClubs>>> = ({ signal }) => getClubs({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClubs>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetClubsQueryResult = NonNullable<Awaited<ReturnType<typeof getClubs>>>
+export type GetClubsQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary The clubs the school runs this year
+ */
+
+export function useGetClubs<TData = Awaited<ReturnType<typeof getClubs>>, TError = ErrorType<ApiError>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClubs>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetClubsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateClubUrl = () => {
+
+
+
+
+  return `/api/teacher/clubs`
+}
+
+/**
+ * @summary Register a club and the hours it meets
+ */
+export const createClub = async (clubInput: ClubInput, options?: Parameters<typeof customFetch>[1]): Promise<ClubCreated> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<ClubCreated>(getCreateClubUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(clubInput)
+  }
+);}
+
+
+
+
+
+export const getCreateClubMutationKey = () => ['createClub'] as const;
+
+export const getCreateClubMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createClub>>, TError,CreateClubMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createClub>>, TError,CreateClubMutationVariables, TContext> => {
+
+const mutationKey = getCreateClubMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createClub>>, CreateClubMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createClub(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateClubMutationResult = NonNullable<Awaited<ReturnType<typeof createClub>>>
+    export type CreateClubMutationBody = BodyType<ClubInput>
+    export type CreateClubMutationError = ErrorType<ApiError>
+    export type CreateClubMutationVariables = {data: BodyType<ClubInput>}
+
+    /**
+ * @summary Register a club and the hours it meets
+ */
+export const useCreateClub = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createClub>>, TError,CreateClubMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createClub>>,
+        TError,
+        CreateClubMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateClubMutationOptions(options));
+    }
+
+export const getGetClubMembersUrl = (clubId: number,) => {
+
+
+
+
+  return `/api/teacher/clubs/${clubId}/members`
+}
+
+/**
+ * @summary Who is in a club, and everyone who could be
+ */
+export const getClubMembers = async (clubId: number, options?: Parameters<typeof customFetch>[1]): Promise<ClubMembers> => {
+
+  return customFetch<ClubMembers>(getGetClubMembersUrl(clubId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetClubMembersQueryKey = (clubId: number,) => {
+    return [
+    `/api/teacher/clubs/${clubId}/members`
+    ] as const;
+    }
+
+
+export const getGetClubMembersQueryOptions = <TData = Awaited<ReturnType<typeof getClubMembers>>, TError = ErrorType<ApiError>>(clubId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClubMembers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetClubMembersQueryKey(clubId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getClubMembers>>> = ({ signal }) => getClubMembers(clubId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: clubId !== null && clubId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getClubMembers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetClubMembersQueryResult = NonNullable<Awaited<ReturnType<typeof getClubMembers>>>
+export type GetClubMembersQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Who is in a club, and everyone who could be
+ */
+
+export function useGetClubMembers<TData = Awaited<ReturnType<typeof getClubMembers>>, TError = ErrorType<ApiError>>(
+ clubId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getClubMembers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetClubMembersQueryOptions(clubId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSetClubMembersUrl = (clubId: number,) => {
+
+
+
+
+  return `/api/teacher/clubs/${clubId}/members`
+}
+
+/**
+ * @summary Replace a club's membership
+ */
+export const setClubMembers = async (clubId: number,
+    clubMembersInput: ClubMembersInput, options?: Parameters<typeof customFetch>[1]): Promise<ClubMembersResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<ClubMembersResult>(getSetClubMembersUrl(clubId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(clubMembersInput)
+  }
+);}
+
+
+
+
+
+export const getSetClubMembersMutationKey = () => ['setClubMembers'] as const;
+
+export const getSetClubMembersMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setClubMembers>>, TError,SetClubMembersMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setClubMembers>>, TError,SetClubMembersMutationVariables, TContext> => {
+
+const mutationKey = getSetClubMembersMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setClubMembers>>, SetClubMembersMutationVariables> = (props) => {
+          const {clubId,data} = props ?? {};
+
+          return  setClubMembers(clubId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetClubMembersMutationResult = NonNullable<Awaited<ReturnType<typeof setClubMembers>>>
+    export type SetClubMembersMutationBody = BodyType<ClubMembersInput>
+    export type SetClubMembersMutationError = ErrorType<ApiError>
+    export type SetClubMembersMutationVariables = {clubId: number;data: BodyType<ClubMembersInput>}
+
+    /**
+ * @summary Replace a club's membership
+ */
+export const useSetClubMembers = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setClubMembers>>, TError,SetClubMembersMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setClubMembers>>,
+        TError,
+        SetClubMembersMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSetClubMembersMutationOptions(options));
+    }
+
+export const getSetClubActiveUrl = (clubId: number,) => {
+
+
+
+
+  return `/api/teacher/clubs/${clubId}/active`
+}
+
+/**
+ * @summary Stop or restart a club
+ */
+export const setClubActive = async (clubId: number,
+    clubActiveInput: ClubActiveInput, options?: Parameters<typeof customFetch>[1]): Promise<ClubActiveResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<ClubActiveResult>(getSetClubActiveUrl(clubId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(clubActiveInput)
+  }
+);}
+
+
+
+
+
+export const getSetClubActiveMutationKey = () => ['setClubActive'] as const;
+
+export const getSetClubActiveMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setClubActive>>, TError,SetClubActiveMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setClubActive>>, TError,SetClubActiveMutationVariables, TContext> => {
+
+const mutationKey = getSetClubActiveMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setClubActive>>, SetClubActiveMutationVariables> = (props) => {
+          const {clubId,data} = props ?? {};
+
+          return  setClubActive(clubId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetClubActiveMutationResult = NonNullable<Awaited<ReturnType<typeof setClubActive>>>
+    export type SetClubActiveMutationBody = BodyType<ClubActiveInput>
+    export type SetClubActiveMutationError = ErrorType<ApiError>
+    export type SetClubActiveMutationVariables = {clubId: number;data: BodyType<ClubActiveInput>}
+
+    /**
+ * @summary Stop or restart a club
+ */
+export const useSetClubActive = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setClubActive>>, TError,SetClubActiveMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setClubActive>>,
+        TError,
+        SetClubActiveMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSetClubActiveMutationOptions(options));
     }
 
 export const getMarkAttendanceUrl = () => {

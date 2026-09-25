@@ -48,6 +48,7 @@ const TEACHER_NAV = [
   { href: "/teacher/analytics", label: "Дүн шинжилгээ", icon: BarChart3 },
   { href: "/teacher/productive", label: "Бичих, ярих дүгнэлт", icon: PenLine },
   { href: "/teacher/catalog", label: "Хичээлийн агуулга", icon: BookOpen },
+  { href: "/teacher/clubs", label: "Дугуйлан", icon: Users },
 ]
 
 // Screens for entering things. An account that takes no lesson has nothing to

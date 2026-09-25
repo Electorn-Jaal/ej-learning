@@ -125,6 +125,14 @@ function PeriodRow({ period, hasPlan }: { period: Period; hasPlan: (code: string
         ) : null}
         {/* Only when a teacher actually looked. A period nobody marked says
             nothing here, because silence is what it is - not a verdict. */}
+        {/* A club is not a lesson and should not read like one: no topic, no
+            check, just what it is and who runs it. */}
+        {day.club ? (
+          <p className="text-xs text-muted-foreground">
+            Дугуйлан: {day.club.nameMn}
+            {day.club.teacherName ? ' · ' + day.club.teacherName : ''}
+          </p>
+        ) : null}
         {day.notebook ? (
           <p className="text-[11px] text-muted-foreground">
             Дэвтэр: {NOTEBOOK[day.notebook.state] ?? day.notebook.state}

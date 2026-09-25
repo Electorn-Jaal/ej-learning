@@ -1193,6 +1193,109 @@ export interface GuardianLinkResult {
   linked: boolean;
 }
 
+export interface ClubSession {
+  /**
+     * 1 is Monday, the same numbering the timetable uses.
+     * @minimum 1
+     * @maximum 7
+     */
+  weekdayNo: number;
+  /**
+     * @minimum 1
+     * @maximum 12
+     */
+  periodNo: number;
+}
+
+/**
+ * Something the school runs that is not a class. The school's own timetable writes these into the box where a class name goes, which is the only box there was - and it makes them unreadable, because that box means "who is in the room" and a club's answer is "whoever signed up, from anywhere".
+ */
+export interface Club {
+  clubId: number;
+  nameMn: string;
+  /** @nullable */
+  subjectId: number | null;
+  /** @nullable */
+  subjectName: string | null;
+  /** @nullable */
+  teacherId: number | null;
+  /** @nullable */
+  teacherName: string | null;
+  /** @nullable */
+  note: string | null;
+  isActive: boolean;
+  /** The one number that says whether a club is real. A club with hours and no members is on nobody's timetable, which from the staff room looks exactly like a club that is running fine. */
+  memberCount: number;
+  /** @nullable */
+  sessions: ClubSession[] | null;
+}
+
+export interface ClubInput {
+  /** @maxLength 200 */
+  nameMn: string;
+  /**
+     * A club need not be a school subject; a chess club is a chess club.
+     * @nullable
+     */
+  subjectId?: number | null;
+  /** @nullable */
+  teacherId?: number | null;
+  /**
+     * @maxLength 1000
+     * @nullable
+     */
+  note?: string | null;
+  /** At least one. An hour is what makes a club appear anywhere. */
+  sessions: ClubSession[];
+}
+
+export interface ClubCreated {
+  clubId: number;
+}
+
+export interface ClubMember {
+  studentId: number;
+  displayName: string;
+  studentCode: string;
+  /** @nullable */
+  className: string | null;
+}
+
+export interface ClubRosterEntry {
+  studentId: number;
+  displayName: string;
+  studentCode: string;
+  /** @nullable */
+  className: string | null;
+  /** @nullable */
+  gradeNumber: number | null;
+}
+
+export interface ClubMembers {
+  clubId: number;
+  nameMn: string;
+  members: ClubMember[];
+  /** Every child in the school. A club crosses classes, so a screen that asked for a class first would be asking the wrong question. */
+  roster: ClubRosterEntry[];
+}
+
+export interface ClubMembersInput {
+  /** The whole membership, not an addition. A child left out has left the club; their row is kept but made inactive, because a child who stopped coming in November was in the club in October. */
+  studentIds: number[];
+}
+
+export interface ClubMembersResult {
+  members: number;
+}
+
+export interface ClubActiveInput {
+  isActive: boolean;
+}
+
+export interface ClubActiveResult {
+  isActive: boolean;
+}
+
 export type AttendanceInputMarksItem = {
   studentId: number;
   state: AttendanceState;
@@ -1391,6 +1494,18 @@ export interface PasswordChangeInput {
 }
 
 /**
+ * The club that meets in this period, where the child is in one. A club has no class, so it reaches a child's day through their own membership and nobody else's.
+ */
+export type SubjectDayClub = {
+  clubId: number;
+  nameMn: string;
+  /** @nullable */
+  teacherName: string | null;
+  /** @nullable */
+  note: string | null;
+} | null;
+
+/**
  * What the teacher found in this child's exercise book for this period, or null where nobody has looked. Null is not "nothing done": most periods are never marked, and a child should not read silence as a verdict.
  */
 export type SubjectDayNotebook = {
@@ -1423,6 +1538,8 @@ export interface SubjectDay {
      * @nullable
      */
   groupLabel: string | null;
+  /** The club that meets in this period, where the child is in one. A club has no class, so it reaches a child's day through their own membership and nobody else's. */
+  club?: SubjectDayClub;
   /** What the teacher found in this child's exercise book for this period, or null where nobody has looked. Null is not "nothing done": most periods are never marked, and a child should not read silence as a verdict. */
   notebook?: SubjectDayNotebook;
   /** False where the teacher struck this period off. The lesson then comes back null whatever was planned for it, and notHeldReason says why - there is nothing to study, and nothing to be checked on, in an hour that did not take place. */

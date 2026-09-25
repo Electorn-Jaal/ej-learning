@@ -1057,6 +1057,133 @@ describe("EJ Learning API", { concurrency: false }, () => {
     });
   });
 
+  describe("a club is not a class, and nobody is in one until somebody says so", () => {
+    let admin, teacher, child, studentId, clubId, weekday;
+    before(async () => {
+      admin = createClient(harness.baseUrl);
+      teacher = createClient(harness.baseUrl);
+      child = createClient(harness.baseUrl);
+      await admin.signIn(accountsByRole.ADMIN);
+      await teacher.signIn(byName["demo-teacher"]);
+      await child.signIn(accountsByRole.STUDENT);
+      [{ id: studentId }] = await harness.sql(
+        "SELECT student_id::int AS id FROM core.users WHERE username = 'demo-student'");
+      // Today's weekday: /student/today answers for today and takes no date,
+      // so a club on any other day would be untestable through it.
+      [{ weekday }] = await harness.sql(
+        "SELECT EXTRACT(ISODOW FROM CURRENT_DATE)::int AS weekday");
+    });
+    after(async () => {
+      await harness.sql("DELETE FROM learning.clubs WHERE name_mn LIKE 'TEST-CLUB%'");
+    });
+
+    it("is registered with its hours, and refuses one with none", async () => {
+      // An hour is what makes a club appear anywhere. Without one it is a row
+      // on a list that meets never, and the list would say it is running.
+      const empty = await teacher.request("/teacher/clubs", { method: "POST", body: {
+        nameMn: "TEST-CLUB-EMPTY", sessions: [],
+      } });
+      assert.equal(empty.status, 400, JSON.stringify(empty.payload));
+      assert.equal(empty.payload.code, "NO_SESSIONS");
+
+      const made = await teacher.request("/teacher/clubs", { method: "POST", body: {
+        nameMn: "TEST-CLUB", note: "Туршилт",
+        // A double session on a day the child's class has no ninth period:
+        // the club still has to reach them.
+        sessions: [{ weekdayNo: weekday, periodNo: 9 }, { weekdayNo: weekday, periodNo: 10 }],
+      } });
+      assert.equal(made.status, 201, JSON.stringify(made.payload));
+      clubId = made.payload.clubId;
+
+      const list = await teacher.request("/teacher/clubs");
+      const found = list.payload.find((row) => row.clubId === clubId);
+      assert.ok(found, "the club is missing from the list");
+      assert.equal(found.memberCount, 0, "a new club has nobody in it");
+      assert.equal(found.sessions.length, 2);
+    });
+
+    it("reaches nobody while it has no members", async () => {
+      // The difference from a split class, and the reason clubs needed their
+      // own shape: an unassigned half of 6а is still half of 6а, but a club
+      // nobody joined is empty. Silence means empty, not unknown.
+      const day = await child.request("/student/today");
+      assert.equal(day.status, 200);
+      assert.ok(
+        !day.payload.slots.some((slot) => slot.club?.clubId === clubId),
+        "a club with no members appeared on a child's day",
+      );
+    });
+
+    it("offers the whole school when picking members, not one class", async () => {
+      const res = await teacher.request(`/teacher/clubs/${clubId}/members`);
+      assert.equal(res.status, 200, JSON.stringify(res.payload));
+      assert.deepEqual(res.payload.members, []);
+      // A club of four children from 9а and two from 12а is the ordinary case,
+      // so the roster is the school.
+      const classes = new Set(res.payload.roster.map((row) => row.className));
+      assert.ok(classes.size > 1, "the roster should cross classes");
+      assert.ok(res.payload.roster.some((row) => row.studentId === studentId));
+    });
+
+    it("puts the club on the day of a child who joins, and takes it off again", async () => {
+      const joined = await teacher.request(`/teacher/clubs/${clubId}/members`, {
+        method: "PUT", body: { studentIds: [studentId] },
+      });
+      assert.equal(joined.status, 200, JSON.stringify(joined.payload));
+      assert.equal(joined.payload.members, 1);
+
+      const day = await child.request("/student/today");
+      const rows = day.payload.slots.filter((slot) => slot.club?.clubId === clubId);
+      assert.equal(rows.length, 2, "both hours of the club should be on the day");
+      assert.equal(rows[0].club.nameMn, "TEST-CLUB");
+      // It is not a lesson: no topic, no check.
+      assert.equal(rows[0].lesson, null);
+
+      // Unticked is left. The row is kept rather than deleted, because a child
+      // who stopped coming in November was in the club in October.
+      const left = await teacher.request(`/teacher/clubs/${clubId}/members`, {
+        method: "PUT", body: { studentIds: [] },
+      });
+      assert.equal(left.status, 200);
+      const [{ n }] = await harness.sql(
+        "SELECT count(*)::int AS n FROM learning.club_members WHERE club_id = $1", [clubId]);
+      assert.equal(n, 1, "the membership row should be kept");
+      const [{ live }] = await harness.sql(
+        "SELECT count(*)::int AS live FROM learning.club_members WHERE club_id = $1 AND is_active",
+        [clubId]);
+      assert.equal(live, 0);
+
+      const after = await child.request("/student/today");
+      assert.ok(!after.payload.slots.some((slot) => slot.club?.clubId === clubId));
+    });
+
+    it("refuses a child who is not in the school, and keeps children out of the screen", async () => {
+      const stranger = await teacher.request(`/teacher/clubs/${clubId}/members`, {
+        method: "PUT", body: { studentIds: [99999999] },
+      });
+      assert.equal(stranger.status, 400, JSON.stringify(stranger.payload));
+      assert.equal(stranger.payload.code, "STUDENT_NOT_FOUND");
+
+      assert.equal((await child.request("/teacher/clubs")).status, 403);
+      assert.equal((await child.request("/teacher/clubs", {
+        method: "POST", body: { nameMn: "TEST-CLUB-X", sessions: [{ weekdayNo: 1, periodNo: 1 }] },
+      })).status, 403);
+    });
+
+    it("stops a club without losing it", async () => {
+      const stopped = await admin.request(`/teacher/clubs/${clubId}/active`, {
+        method: "PUT", body: { isActive: false },
+      });
+      assert.equal(stopped.status, 200, JSON.stringify(stopped.payload));
+      assert.equal(stopped.payload.isActive, false);
+
+      const list = await teacher.request("/teacher/clubs");
+      const found = list.payload.find((row) => row.clubId === clubId);
+      assert.ok(found, "a stopped club should still be listed");
+      assert.equal(found.isActive, false);
+    });
+  });
+
   describe("the register is taken the way the school takes it", () => {
     let admin, teacher, klass, primary, subject, studentId, primaryStudent, slot, day;
     before(async () => {
