@@ -17,10 +17,10 @@ export const listMaterials = () => repository.adminMaterials();
 
 export async function libraryBooks() {
   const books = await repository.libraryBooks();
-  return Promise.all(books.map(async (book) => {
-    const file = await materialFile(book.id);
-    const cover = file ? await stat(file.filePath + '.cover.jpg').catch(() => null) : null;
-    return { ...book, hasFile: file !== null, hasCover: !!cover?.isFile() && cover.size > 0 };
+  return Promise.all(books.map(async ({ storageKey, ...book }) => {
+    const filePath = await storedFile(storageKey);
+    const cover = filePath ? await stat(filePath + '.cover.jpg').catch(() => null) : null;
+    return { ...book, hasFile: filePath !== null, hasCover: !!cover?.isFile() && cover.size > 0 };
   }));
 }
 
@@ -361,20 +361,19 @@ export async function updatePageOffset(
  * a later upload path could put "../" in it, and serving arbitrary files off
  * the host is not a failure worth risking on trust alone.
  */
+async function storedFile(storageKey: string | null) {
+  if (!storageKey) return null;
+  const root = storageRoot();
+  const resolved = path.resolve(root, storageKey);
+  if (resolved !== root && !resolved.startsWith(root + path.sep)) return null;
+  const info = await stat(resolved).catch(() => null);
+  return info?.isFile() ? resolved : null;
+}
+
 export async function materialFile(materialId: number) {
   const [version] = await repository.approvedVersion(materialId);
-  if (!version?.storageKey) return null;
-
-  const root = storageRoot();
-  const resolved = path.resolve(root, version.storageKey);
-  if (resolved !== root && !resolved.startsWith(root + path.sep)) return null;
-
-  try {
-    const info = await stat(resolved);
-    if (!info.isFile()) return null;
-  } catch {
-    return null;
-  }
+  const resolved = await storedFile(version?.storageKey ?? null);
+  if (!version || !resolved) return null;
 
   return {
     filePath: resolved,

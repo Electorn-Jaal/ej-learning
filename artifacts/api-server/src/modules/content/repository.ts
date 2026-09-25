@@ -36,15 +36,24 @@ export const adminMaterials = () =>
   );
 
 /** Only approved textbooks; library reading never creates assignments. */
+// storageKey is the same version approvedVersion picks, joined here so the
+// shelf is one query rather than one more per book.
 export const libraryBooks = () => readRows<{
   id: number; title: string; subjectName: string; grades: number[]; filePages: number | null;
+  storageKey: string | null;
 }>(`SELECT sm.id::int AS id, COALESCE(sm.title, sm.source_code) AS title,
     sub.name_mn AS "subjectName", sm.total_pages::int AS "filePages",
     ARRAY(SELECT gl.grade_number::int FROM content.source_material_grades mg
       JOIN core.grade_levels gl ON gl.id = mg.grade_level_id
-      WHERE mg.source_material_id = sm.id ORDER BY gl.grade_number) AS grades
+      WHERE mg.source_material_id = sm.id ORDER BY gl.grade_number) AS grades,
+    v.storage_key AS "storageKey"
   FROM content.source_materials sm
   JOIN core.subjects sub ON sub.id = sm.subject_id
+  LEFT JOIN LATERAL (
+    SELECT sv.storage_key FROM content.source_versions sv
+    WHERE sv.source_material_id = sm.id AND sv.status = 'APPROVED'
+    ORDER BY sv.version_no DESC LIMIT 1
+  ) v ON true
   WHERE sm.status = 'APPROVED' AND sm.material_type = 'TEXTBOOK'
   ORDER BY sub.name_mn, sm.title, sm.id`);
 
