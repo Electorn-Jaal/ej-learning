@@ -1,6 +1,6 @@
 import { pool, readRows } from '@workspace/db';
 import type { DiagnosticEvidence, DiagnosticPlanEntry, DiagnosticResource, DiagnosticResourceInput,
-  DiagnosticTarget } from '@workspace/api-zod';
+  DiagnosticTarget, PublishedDiagnosticPlan } from '@workspace/api-zod';
 type Row<T> = { [K in keyof T]: T[K] };
 
 const targetFields = `m.id::int AS "mapId", n.id::int AS "topicId", n.name_mn AS "topicName",
@@ -97,21 +97,55 @@ export const evidence = (attemptId: number) => readRows<Row<DiagnosticEvidence>>
     WHERE r.attempt_id=$1 ORDER BY i.item_order,i.id`,[attemptId]);
 
 export type Review = { revision: number; evidence: DiagnosticEvidence[];
-  entries: DiagnosticPlanEntry[]; note: string; updatedAt: string };
+  entries: DiagnosticPlanEntry[]; note: string; updatedAt: string; publishedAt: string | null };
 export const review = (attemptId: number) => readRows<Review>(
-  `SELECT revision,evidence,entries,note,to_json(updated_at)#>>'{}' AS "updatedAt"
+  `SELECT revision,evidence,entries,note,to_json(updated_at)#>>'{}' AS "updatedAt",
+     to_json(published_at)#>>'{}' AS "publishedAt"
    FROM assessment.diagnostic_plan_reviews WHERE attempt_id=$1`,[attemptId]);
 
 export const saveReview = async (attemptId: number, revision: number,
-  snapshot: DiagnosticEvidence[], entries: DiagnosticPlanEntry[], note: string, userId: number) => {
+  snapshot: DiagnosticEvidence[], entries: DiagnosticPlanEntry[], note: string, userId: number,
+  published: boolean) => {
   // The insert is permitted only with revision=0. A stale tab cannot create a
-  // new copy or overwrite a more recent teacher's work.
+  // new copy or overwrite a more recent teacher's work. Publishing keeps the
+  // first date the plan went out; withdrawing it clears that.
   const result = revision === 0
     ? await pool.query(`INSERT INTO assessment.diagnostic_plan_reviews
-       (attempt_id,evidence,entries,note,updated_by) VALUES($1,$2::jsonb,$3::jsonb,$4,$5)
-       ON CONFLICT (attempt_id) DO NOTHING`,[attemptId,JSON.stringify(snapshot),JSON.stringify(entries),note,userId])
+       (attempt_id,evidence,entries,note,updated_by,published_at,published_by)
+       VALUES($1,$2::jsonb,$3::jsonb,$4,$5,
+         CASE WHEN $6::boolean THEN now() END,CASE WHEN $6::boolean THEN $5::bigint END)
+       ON CONFLICT (attempt_id) DO NOTHING`,
+       [attemptId,JSON.stringify(snapshot),JSON.stringify(entries),note,userId,published])
     : await pool.query(`UPDATE assessment.diagnostic_plan_reviews
-       SET entries=$3::jsonb,note=$4,updated_by=$5,updated_at=now(),revision=revision+1
-       WHERE attempt_id=$1 AND revision=$2`,[attemptId,revision,JSON.stringify(entries),note,userId]);
+       SET entries=$3::jsonb,note=$4,updated_by=$5,updated_at=now(),revision=revision+1,
+         published_at=CASE WHEN $6::boolean THEN COALESCE(published_at,now()) END,
+         published_by=CASE WHEN $6::boolean THEN COALESCE(published_by,$5::bigint) END
+       WHERE attempt_id=$1 AND revision=$2`,
+       [attemptId,revision,JSON.stringify(entries),note,userId,published]);
   return result.rowCount === 1;
 };
+
+/**
+ * The plans a teacher has chosen to show this child, newest first. A draft
+ * (published_at NULL) never leaves the teacher. Topic, skill and material are
+ * looked up from the saved entry's own ids.
+ */
+export const publishedPlans = (studentId: number) => readRows<Row<PublishedDiagnosticPlan>>(
+  `SELECT a.id::int AS "attemptId", p.title_mn AS title, sub.name_mn AS "subjectName",
+     u.display_name AS "teacherName", to_json(r.published_at)#>>'{}' AS "publishedAt", r.note,
+     COALESCE((SELECT jsonb_agg(jsonb_build_object(
+         'title', x.e->>'title', 'instructions', x.e->>'instructions',
+         'topicName', n.name_mn, 'skillName', sk.name_mn,
+         'resourceTitle', res.title, 'sourceMaterialId', res.source_material_id::int) ORDER BY x.ord)
+       FROM jsonb_array_elements(r.entries) WITH ORDINALITY AS x(e, ord)
+       LEFT JOIN content.content_skill_maps m ON m.id = (x.e->>'mapId')::bigint
+       LEFT JOIN content.content_nodes n ON n.id = m.content_node_id
+       LEFT JOIN content.skills sk ON sk.id = m.skill_id
+       LEFT JOIN content.diagnostic_resources res ON res.id = (x.e->>'resourceId')::bigint), '[]') AS entries
+   FROM assessment.diagnostic_plan_reviews r
+   JOIN assessment.diagnostic_attempts a ON a.id = r.attempt_id
+   JOIN assessment.exam_papers p ON p.id = a.exam_paper_id
+   JOIN core.subjects sub ON sub.id = a.subject_id
+   LEFT JOIN core.users u ON u.id = r.published_by
+   WHERE a.student_id = $1 AND r.published_at IS NOT NULL
+   ORDER BY r.published_at DESC, a.id DESC`, [studentId]);

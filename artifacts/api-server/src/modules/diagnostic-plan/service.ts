@@ -1,7 +1,7 @@
 import type { DiagnosticResourceInput, DiagnosticReviewInput } from '@workspace/api-zod';
 import type { AuthenticatedUser } from '../identity/service';
 import { authorisedClass, editableSubjects } from '../class-access/service';
-import { badRequest, conflict, notFound } from '../../shared/http-error';
+import { badRequest, conflict, forbidden, notFound } from '../../shared/http-error';
 import * as repository from './repository';
 
 export async function catalog(user: AuthenticatedUser, classId: number, subjectId: number) {
@@ -48,7 +48,8 @@ export async function report(user: AuthenticatedUser,attemptId: number) {
   const [saved] = await repository.review(attemptId);
   const evidence = saved?.evidence ?? await repository.evidence(attemptId);
   return {...attempt,evidence,resources:await repository.resources(attempt.subjectId),
-    revision:saved?.revision ?? 0,entries:saved?.entries ?? [],note:saved?.note ?? '',updatedAt:saved?.updatedAt ?? null};
+    revision:saved?.revision ?? 0,entries:saved?.entries ?? [],note:saved?.note ?? '',updatedAt:saved?.updatedAt ?? null,
+    publishedAt:saved?.publishedAt ?? null};
 }
 
 export async function save(user: AuthenticatedUser,attemptId: number,input: DiagnosticReviewInput) {
@@ -62,8 +63,22 @@ export async function save(user: AuthenticatedUser,attemptId: number,input: Diag
       throw badRequest('Материал энэ сэдэв–чадвартай холбогдоогүй байна.','RESOURCE_TARGET_MISMATCH');
     }
   }
-  if (!await repository.saveReview(attemptId,input.revision,current.evidence,input.entries,input.note,user.id)) {
+  if (input.published && !input.entries.length) {
+    throw badRequest('Хоосон төлөвлөгөөг сурагчид харуулахгүй. Ажил нэмнэ үү.','EMPTY_PLAN');
+  }
+  if (!await repository.saveReview(attemptId,input.revision,current.evidence,input.entries,input.note,user.id,input.published)) {
     throw conflict('Өөр багш эсвэл цонх энэ төлөвлөгөөг шинэчилсэн байна. Дахин нээж шалгана уу.','STALE_REVIEW');
   }
   return report(user,attemptId);
 }
+
+/** The child's own published plans; the id comes from the session, never the request. */
+export async function studentPlans(user: AuthenticatedUser) {
+  if (user.studentId === null || user.studentId === undefined) {
+    throw forbidden('Энэ бүртгэл сурагчийн бүртгэлтэй холбогдоогүй байна.','NO_STUDENT_LINK');
+  }
+  return repository.publishedPlans(user.studentId);
+}
+
+/** The same plans for a guardian. The caller has already checked the child is theirs. */
+export const childPlans = (studentId: number) => repository.publishedPlans(studentId);

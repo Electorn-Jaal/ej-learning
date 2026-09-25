@@ -36,4 +36,8 @@ export const diagnosticPlanReviews = assessment.table('diagnostic_plan_reviews',
   note: text().default('').notNull(),
   updatedBy: bigint('updated_by', { mode: 'number' }).notNull().references(() => usersInCore.id),
   updatedAt: timestamp('updated_at', { withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+  // A plan is the teacher's draft until they choose to show it; the child and
+  // their guardian see it only while published_at is set.
+  publishedAt: timestamp('published_at', { withTimezone: true, mode: 'string' }),
+  publishedBy: bigint('published_by', { mode: 'number' }).references(() => usersInCore.id),
 });

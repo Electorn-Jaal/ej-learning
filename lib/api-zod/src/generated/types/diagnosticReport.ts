@@ -21,4 +21,5 @@ export interface DiagnosticReport {
   entries: DiagnosticPlanEntry[];
   note: string;
   updatedAt: string | null;
+  publishedAt: string | null;
 }

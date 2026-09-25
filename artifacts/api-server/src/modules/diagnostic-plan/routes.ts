@@ -1,7 +1,7 @@
 import { Router, type IRouter } from 'express';
 import { GetDiagnosticCatalogQueryParams,GetDiagnosticCatalogResponse,
   SetDiagnosticItemTargetsBody,CreateDiagnosticResourceBody,GetDiagnosticReportResponse,
-  SaveDiagnosticReviewBody } from '@workspace/api-zod';
+  SaveDiagnosticReviewBody,GetStudentDiagnosticPlansResponse } from '@workspace/api-zod';
 import { requireRole } from '../../middlewares/auth';
 import { badRequest } from '../../shared/http-error';
 import * as service from './service';
@@ -45,5 +45,9 @@ router.put('/teacher/diagnostic-attempts/:attemptId',staff,async(req,res,next)=>
     if(!input.success) throw badRequest('Төлөвлөгөөний мэдээлэл буруу байна.','INVALID_INPUT');
     res.json(GetDiagnosticReportResponse.parse(await service.save(req.user!,id(req.params.attemptId),input.data)));
   } catch(error){next(error);}
+});
+router.get('/student/diagnostic-plans',requireRole('STUDENT'),async(req,res,next)=>{
+  try {res.json(GetStudentDiagnosticPlansResponse.parse(await service.studentPlans(req.user!)));}
+  catch(error){next(error);}
 });
 export default router;

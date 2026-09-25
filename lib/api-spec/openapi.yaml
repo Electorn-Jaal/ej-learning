@@ -121,6 +121,44 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/DiagnosticReport'}
+  /student/diagnostic-plans:
+    get:
+      operationId: getStudentDiagnosticPlans
+      tags: [student]
+      summary: Personal study plans a teacher made from this child's diagnostic and chose to show
+      responses:
+        default:
+          description: Not a student account
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        "200":
+          description: Published plans only; a teacher's draft stays with the teacher
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/PublishedDiagnosticPlan'}
+  /guardian/diagnostic-plans:
+    get:
+      operationId: getChildDiagnosticPlans
+      tags: [guardian]
+      summary: The same published plans, for a parent's own child (FR20)
+      parameters:
+        - {name: studentId, in: query, required: true, schema: {type: integer, minimum: 1}}
+      responses:
+        default:
+          description: Not this parent's child
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        "200":
+          description: Published plans only
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/PublishedDiagnosticPlan'}
   /content/library:
     get:
       operationId: getLibraryBooks
@@ -3012,14 +3050,15 @@ components:
         instructions: {type: string, minLength: 1, maxLength: 10000}
     DiagnosticReviewInput:
       type: object
-      required: [revision, entries, note]
+      required: [revision, entries, note, published]
       properties:
         revision: {type: integer, minimum: 0}
         entries: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/DiagnosticPlanEntry'}}
         note: {type: string, maxLength: 10000}
+        published: {type: boolean, description: "Shown to the child and their guardian. False keeps it the teacher's draft."}
     DiagnosticReport:
       type: object
-      required: [attemptId, classId, subjectId, studentName, title, evidence, resources, revision, entries, note, updatedAt]
+      required: [attemptId, classId, subjectId, studentName, title, evidence, resources, revision, entries, note, updatedAt, publishedAt]
       properties:
         attemptId: {type: integer}
         classId: {type: integer}
@@ -3032,6 +3071,29 @@ components:
         entries: {type: array, items: {$ref: '#/components/schemas/DiagnosticPlanEntry'}}
         note: {type: string}
         updatedAt: {type: string, nullable: true}
+        publishedAt: {type: string, nullable: true}
+    PublishedDiagnosticPlan:
+      type: object
+      required: [attemptId, title, subjectName, teacherName, publishedAt, note, entries]
+      properties:
+        attemptId: {type: integer}
+        title: {type: string, description: The diagnostic paper the plan answers}
+        subjectName: {type: string}
+        teacherName: {type: string, nullable: true}
+        publishedAt: {type: string}
+        note: {type: string}
+        entries:
+          type: array
+          items:
+            type: object
+            required: [title, instructions, topicName, skillName, resourceTitle, sourceMaterialId]
+            properties:
+              title: {type: string}
+              instructions: {type: string}
+              topicName: {type: string, nullable: true}
+              skillName: {type: string, nullable: true}
+              resourceTitle: {type: string, nullable: true}
+              sourceMaterialId: {type: integer, nullable: true}
     LibraryBook:
       type: object
       required: [id, title, subjectName, grades, hasFile, hasCover, filePages]

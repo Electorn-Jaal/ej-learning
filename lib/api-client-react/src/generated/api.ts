@@ -63,6 +63,7 @@ import type {
   GenerateScheduleResult,
   GetAssessmentSheetParams,
   GetChildDayParams,
+  GetChildDiagnosticPlansParams,
   GetChildRecordParams,
   GetClassChildrenParams,
   GetClassDayParams,
@@ -108,6 +109,7 @@ import type {
   PreviewStudent,
   ProductiveMarkSheet,
   ProductiveRatingInput,
+  PublishedDiagnosticPlan,
   QuizAttempt,
   QuizAttemptInput,
   QuizPaper,
@@ -588,6 +590,167 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
       > => {
       return useMutation(getSaveDiagnosticReviewMutationOptions(options));
     }
+
+export const getGetStudentDiagnosticPlansUrl = () => {
+
+
+
+
+  return `/api/student/diagnostic-plans`
+}
+
+/**
+ * @summary Personal study plans a teacher made from this child's diagnostic and chose to show
+ */
+export const getStudentDiagnosticPlans = async ( options?: Parameters<typeof customFetch>[1]): Promise<PublishedDiagnosticPlan[]> => {
+
+  return customFetch<PublishedDiagnosticPlan[]>(getGetStudentDiagnosticPlansUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStudentDiagnosticPlansQueryKey = () => {
+    return [
+    `/api/student/diagnostic-plans`
+    ] as const;
+    }
+
+
+export const getGetStudentDiagnosticPlansQueryOptions = <TData = Awaited<ReturnType<typeof getStudentDiagnosticPlans>>, TError = ErrorType<ApiError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStudentDiagnosticPlans>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStudentDiagnosticPlansQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStudentDiagnosticPlans>>> = ({ signal }) => getStudentDiagnosticPlans({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStudentDiagnosticPlans>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetStudentDiagnosticPlansQueryResult = NonNullable<Awaited<ReturnType<typeof getStudentDiagnosticPlans>>>
+export type GetStudentDiagnosticPlansQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Personal study plans a teacher made from this child's diagnostic and chose to show
+ */
+
+export function useGetStudentDiagnosticPlans<TData = Awaited<ReturnType<typeof getStudentDiagnosticPlans>>, TError = ErrorType<ApiError>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getStudentDiagnosticPlans>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetStudentDiagnosticPlansQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetChildDiagnosticPlansUrl = (params: GetChildDiagnosticPlansParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/guardian/diagnostic-plans?${stringifiedParams}` : `/api/guardian/diagnostic-plans`
+}
+
+/**
+ * @summary The same published plans, for a parent's own child (FR20)
+ */
+export const getChildDiagnosticPlans = async (params: GetChildDiagnosticPlansParams, options?: Parameters<typeof customFetch>[1]): Promise<PublishedDiagnosticPlan[]> => {
+
+  return customFetch<PublishedDiagnosticPlan[]>(getGetChildDiagnosticPlansUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetChildDiagnosticPlansQueryKey = (params?: GetChildDiagnosticPlansParams,) => {
+    return [
+    `/api/guardian/diagnostic-plans`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetChildDiagnosticPlansQueryOptions = <TData = Awaited<ReturnType<typeof getChildDiagnosticPlans>>, TError = ErrorType<ApiError>>(params: GetChildDiagnosticPlansParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getChildDiagnosticPlans>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetChildDiagnosticPlansQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getChildDiagnosticPlans>>> = ({ signal }) => getChildDiagnosticPlans(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getChildDiagnosticPlans>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetChildDiagnosticPlansQueryResult = NonNullable<Awaited<ReturnType<typeof getChildDiagnosticPlans>>>
+export type GetChildDiagnosticPlansQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary The same published plans, for a parent's own child (FR20)
+ */
+
+export function useGetChildDiagnosticPlans<TData = Awaited<ReturnType<typeof getChildDiagnosticPlans>>, TError = ErrorType<ApiError>>(
+ params: GetChildDiagnosticPlansParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getChildDiagnosticPlans>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetChildDiagnosticPlansQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getGetLibraryBooksUrl = () => {
 

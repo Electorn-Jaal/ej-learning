@@ -114,6 +114,8 @@ export interface DiagnosticReviewInput {
   entries: DiagnosticPlanEntry[];
   /** @maxLength 10000 */
   note: string;
+  /** Shown to the child and their guardian. False keeps it the teacher's draft. */
+  published: boolean;
 }
 
 export interface DiagnosticReport {
@@ -128,6 +130,27 @@ export interface DiagnosticReport {
   entries: DiagnosticPlanEntry[];
   note: string;
   updatedAt: string | null;
+  publishedAt: string | null;
+}
+
+export type PublishedDiagnosticPlanEntriesItem = {
+  title: string;
+  instructions: string;
+  topicName: string | null;
+  skillName: string | null;
+  resourceTitle: string | null;
+  sourceMaterialId: number | null;
+};
+
+export interface PublishedDiagnosticPlan {
+  attemptId: number;
+  /** The diagnostic paper the plan answers */
+  title: string;
+  subjectName: string;
+  teacherName: string | null;
+  publishedAt: string;
+  note: string;
+  entries: PublishedDiagnosticPlanEntriesItem[];
 }
 
 export interface LibraryBook {
@@ -3092,6 +3115,13 @@ classId: number;
  * @minimum 1
  */
 subjectId: number;
+};
+
+export type GetChildDiagnosticPlansParams = {
+/**
+ * @minimum 1
+ */
+studentId: number;
 };
 
 export type GetStudentScheduleParams = {

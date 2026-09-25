@@ -170,7 +170,8 @@ export const GetDiagnosticReportResponse = zod.object({
   "instructions": zod.string().min(1).max(getDiagnosticReportResponseEntriesItemInstructionsMax)
 })),
   "note": zod.string(),
-  "updatedAt": zod.string().nullable()
+  "updatedAt": zod.string().nullable(),
+  "publishedAt": zod.string().nullable()
 })
 
 
@@ -203,7 +204,8 @@ export const SaveDiagnosticReviewBody = zod.object({
   "title": zod.string().min(1).max(saveDiagnosticReviewBodyEntriesItemTitleMax),
   "instructions": zod.string().min(1).max(saveDiagnosticReviewBodyEntriesItemInstructionsMax)
 })).max(saveDiagnosticReviewBodyEntriesMax),
-  "note": zod.string().max(saveDiagnosticReviewBodyNoteMax)
+  "note": zod.string().max(saveDiagnosticReviewBodyNoteMax),
+  "published": zod.boolean().describe('Shown to the child and their guardian. False keeps it the teacher\'s draft.')
 })
 
 export const saveDiagnosticReviewResponseResourcesItemOneTitleMax = 500;
@@ -262,8 +264,60 @@ export const SaveDiagnosticReviewResponse = zod.object({
   "instructions": zod.string().min(1).max(saveDiagnosticReviewResponseEntriesItemInstructionsMax)
 })),
   "note": zod.string(),
-  "updatedAt": zod.string().nullable()
+  "updatedAt": zod.string().nullable(),
+  "publishedAt": zod.string().nullable()
 })
+
+
+/**
+ * @summary Personal study plans a teacher made from this child's diagnostic and chose to show
+ */
+export const GetStudentDiagnosticPlansResponseItem = zod.object({
+  "attemptId": zod.number().int(),
+  "title": zod.string().describe('The diagnostic paper the plan answers'),
+  "subjectName": zod.string(),
+  "teacherName": zod.string().nullable(),
+  "publishedAt": zod.string(),
+  "note": zod.string(),
+  "entries": zod.array(zod.object({
+  "title": zod.string(),
+  "instructions": zod.string(),
+  "topicName": zod.string().nullable(),
+  "skillName": zod.string().nullable(),
+  "resourceTitle": zod.string().nullable(),
+  "sourceMaterialId": zod.number().int().nullable()
+}))
+})
+export const GetStudentDiagnosticPlansResponse = zod.array(GetStudentDiagnosticPlansResponseItem)
+
+
+/**
+ * @summary The same published plans, for a parent's own child (FR20)
+ */
+
+
+
+export const GetChildDiagnosticPlansQueryParams = zod.object({
+  "studentId": zod.coerce.number().int().min(1)
+})
+
+export const GetChildDiagnosticPlansResponseItem = zod.object({
+  "attemptId": zod.number().int(),
+  "title": zod.string().describe('The diagnostic paper the plan answers'),
+  "subjectName": zod.string(),
+  "teacherName": zod.string().nullable(),
+  "publishedAt": zod.string(),
+  "note": zod.string(),
+  "entries": zod.array(zod.object({
+  "title": zod.string(),
+  "instructions": zod.string(),
+  "topicName": zod.string().nullable(),
+  "skillName": zod.string().nullable(),
+  "resourceTitle": zod.string().nullable(),
+  "sourceMaterialId": zod.number().int().nullable()
+}))
+})
+export const GetChildDiagnosticPlansResponse = zod.array(GetChildDiagnosticPlansResponseItem)
 
 
 /**

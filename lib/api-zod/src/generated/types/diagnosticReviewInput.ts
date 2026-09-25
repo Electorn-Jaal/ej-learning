@@ -14,4 +14,6 @@ export interface DiagnosticReviewInput {
   entries: DiagnosticPlanEntry[];
   /** @maxLength 10000 */
   note: string;
+  /** Shown to the child and their guardian. False keeps it the teacher's draft. */
+  published: boolean;
 }

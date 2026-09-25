@@ -13,13 +13,14 @@ export default function DiagnosticReport({attemptId,onBack}:{attemptId:number;on
 function Editor({report,onBack,onSaved}:{report:Report;onBack:()=>void;onSaved:()=>void}) {
   const [entries,setEntries]=useState<DiagnosticPlanEntry[]>(report.entries)
   const [note,setNote]=useState(report.note)
+  const [published,setPublished]=useState(report.publishedAt!==null)
   const [dirty,setDirty]=useState(false)
   const save=useSaveDiagnosticReview()
   const targets=[...new Map(report.evidence.flatMap(e=>e.targets).map(t=>[t.mapId,t])).values()]
   const update=(index:number,patch:Partial<DiagnosticPlanEntry>)=>{setDirty(true);setEntries(rows=>rows.map((r,i)=>i===index?{...r,...patch}:r))}
   return <div className="space-y-5">
     <Button variant="outline" disabled={dirty||save.isPending} onClick={onBack}>Шалгалт руу буцах</Button>
-    {dirty && <p className="text-sm">Хадгалаагүй өөрчлөлт байна. <button className="underline" onClick={()=>{setEntries(report.entries);setNote(report.note);setDirty(false)}}>Өөрчлөлтийг болих</button></p>}
+    {dirty && <p className="text-sm">Хадгалаагүй өөрчлөлт байна. <button className="underline" onClick={()=>{setEntries(report.entries);setNote(report.note);setPublished(report.publishedAt!==null);setDirty(false)}}>Өөрчлөлтийг болих</button></p>}
     <h2 className="text-lg font-semibold">{report.studentName} — {report.title}</h2>
     <p className="text-sm text-muted-foreground">Асуулт бүрийн нотолгоог хянаж, шаардлагатай чадварт сурах ажил сонгоно. Олон чадвартай асуултын оноо аль чадварт алдсаныг дангаар тогтоохгүй.</p>
     <section className="space-y-3"><h3 className="font-semibold">Асуулт бүрийн үр дүн</h3>
@@ -53,7 +54,14 @@ function Editor({report,onBack,onSaved}:{report:Report;onBack:()=>void;onSaved:(
         <Button size="sm" variant="outline" onClick={()=>{setDirty(true);setEntries(entries.filter((_,i)=>i!==index))}}>Жагсаалтаас хасах</Button>
       </article>)}
       <textarea className="min-h-24 w-full rounded border bg-background p-2" aria-label="Багшийн дүгнэлт" placeholder="Багшийн дүгнэлт, сонголтын тайлбар" maxLength={10000} value={note} onChange={e=>{setDirty(true);setNote(e.target.value)}}/>
-      <Button disabled={save.isPending||entries.some(e=>!e.title.trim()||!e.instructions.trim())} onClick={()=>save.mutate({attemptId:report.attemptId,data:{revision:report.revision,entries,note}},{onSuccess:()=>{setDirty(false);onSaved()}})}>{save.isPending?'Хадгалж байна…':'Багшийн ноорог хадгалах'}</Button>
+      {/* A draft until the teacher chooses otherwise: the recommendation and
+          the work given to a child are different things (requirements §11). */}
+      <label className="flex items-start gap-2 text-sm">
+        <input type="checkbox" className="mt-1" checked={published} disabled={!entries.length} onChange={e=>{setDirty(true);setPublished(e.target.checked)}}/>
+        <span>Сурагч болон эцэг эхэд харуулах<span className="block text-xs text-muted-foreground">Сонгоогүй бол зөвхөн таны ноорог хэвээр үлдэнэ.</span></span>
+      </label>
+      <Button disabled={save.isPending||entries.some(e=>!e.title.trim()||!e.instructions.trim())||(published&&!entries.length)} onClick={()=>save.mutate({attemptId:report.attemptId,data:{revision:report.revision,entries,note,published:published&&entries.length>0}},{onSuccess:()=>{setDirty(false);onSaved()}})}>{save.isPending?'Хадгалж байна…':published?'Хадгалж сурагчид харуулах':'Ноорог хадгалах'}</Button>
+      <p className="text-xs text-muted-foreground">{report.publishedAt?`Сурагчид харагдаж байна: ${new Date(report.publishedAt).toLocaleString('mn-MN',{timeZone:'Asia/Ulaanbaatar'})}`:'Сурагчид хараахан харагдахгүй (ноорог).'}</p>
       {report.updatedAt && <p className="text-xs text-muted-foreground">Хадгалсан: {new Date(report.updatedAt).toLocaleString('mn-MN',{timeZone:'Asia/Ulaanbaatar'})}</p>}
       {save.error && <p role="alert" className="text-destructive">{save.error.data?.error??'Хадгалж чадсангүй.'}</p>}
     </section>
