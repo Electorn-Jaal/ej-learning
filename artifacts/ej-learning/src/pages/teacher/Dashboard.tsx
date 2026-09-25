@@ -80,7 +80,7 @@ function ClassRow({ klass }: { klass: TeacherClassToday }) {
 
       <span className={ROW_ACTION_GROUP}>
         <Link href={where("lesson")} className={open}>Хичээл</Link>
-        <Link href={where("students")} className={open}>Сурагчид</Link>
+        <Link href={where("students")} className={open}>Ирц ба дэвтэр</Link>
       </span>
     </li>
   )

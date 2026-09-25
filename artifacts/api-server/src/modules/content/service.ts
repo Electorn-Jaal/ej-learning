@@ -15,6 +15,23 @@ const storageRoot = () =>
 
 export const listMaterials = () => repository.adminMaterials();
 
+export async function libraryBooks() {
+  const books = await repository.libraryBooks();
+  return Promise.all(books.map(async (book) => {
+    const file = await materialFile(book.id);
+    const cover = file ? await stat(file.filePath + '.cover.jpg').catch(() => null) : null;
+    return { ...book, hasFile: file !== null, hasCover: !!cover?.isFile() && cover.size > 0 };
+  }));
+}
+
+export async function materialCover(materialId: number) {
+  const file = await materialFile(materialId);
+  if (!file) return null;
+  const coverPath = file.filePath + '.cover.jpg';
+  const cover = await stat(coverPath).catch(() => null);
+  return cover?.isFile() && cover.size > 0 ? coverPath : null;
+}
+
 /**
  * The topic-to-skill mapping, assembled for a screen that only reads it.
  *

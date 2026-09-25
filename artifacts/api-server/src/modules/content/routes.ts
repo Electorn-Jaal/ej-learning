@@ -1,6 +1,7 @@
 import express, { Router, type IRouter } from "express";
 import {
   GetAdminMaterialsResponse,
+  GetLibraryBooksResponse,
   GetMaterialOutlineResponse,
   GetSkillChainResponse,
   GetSkillMapResponse,
@@ -12,9 +13,11 @@ import {
   UploadMaterialFileResponse,
 } from "@workspace/api-zod";
 import { requireRole } from "../../middlewares/auth";
-import { badRequest, unauthorized } from "../../shared/http-error";
+import { badRequest } from "../../shared/http-error";
 import {
   listMaterials,
+  libraryBooks,
+  materialCover,
   materialFile,
   materialOutline,
   saveOutline,
@@ -27,6 +30,21 @@ import {
 
 const router: IRouter = Router();
 const asAdmin = requireRole("ADMIN");
+
+router.get("/content/library", requireRole("STUDENT", "TEACHER", "ADMIN"), async (_req, res, next) => {
+  try {
+    res.json(GetLibraryBooksResponse.parse(await libraryBooks()));
+  } catch (error) { next(error); }
+});
+
+router.get('/content/materials/:materialId/cover', requireRole('STUDENT', 'TEACHER', 'ADMIN'), async (req, res, next) => {
+  try {
+    const cover = await materialCover(materialId(req.params.materialId));
+    if (!cover) { res.status(404).json({ error: 'Номын хавтас бэлэн биш байна.', code: 'COVER_NOT_FOUND' }); return; }
+    res.type('image/jpeg').setHeader('Cache-Control', 'private, max-age=3600');
+    res.sendFile(cover, (error) => { if (error) next(error); });
+  } catch (error) { next(error); }
+});
 
 const materialId = (raw: unknown) => {
   const value = Number(raw);
@@ -134,12 +152,13 @@ router.put("/admin/materials/:materialId/page-offset", asAdmin, async (req, res,
   }
 });
 
-// Any signed-in account may read an approved book. Which lesson points at it
-// is what differs per student, not the book itself.
-router.get("/content/materials/:materialId/file", async (req, res, next) => {
+// Students and staff may read any approved book. Which lesson points at it
+// is what differs per student, not the book itself. Guardians may not (FR21):
+// no guardian screen opens a book, and the ids are sequential, so an open
+// route let a parent account page through the whole library the Library
+// screen already refuses them.
+router.get("/content/materials/:materialId/file", requireRole("STUDENT", "TEACHER", "ADMIN"), async (req, res, next) => {
   try {
-    if (!req.user) throw unauthorized("Нэвтэрнэ үү.", "NOT_AUTHENTICATED");
-
     const materialId = Number(req.params.materialId);
     if (!Number.isInteger(materialId) || materialId <= 0) {
       throw badRequest("Материалын дугаар буруу байна.", "INVALID_MATERIAL_ID");

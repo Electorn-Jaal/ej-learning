@@ -35,6 +35,19 @@ export const adminMaterials = () =>
      ORDER BY (v.storage_key IS NULL), sm.source_code`,
   );
 
+/** Only approved textbooks; library reading never creates assignments. */
+export const libraryBooks = () => readRows<{
+  id: number; title: string; subjectName: string; grades: number[]; filePages: number | null;
+}>(`SELECT sm.id::int AS id, COALESCE(sm.title, sm.source_code) AS title,
+    sub.name_mn AS "subjectName", sm.total_pages::int AS "filePages",
+    ARRAY(SELECT gl.grade_number::int FROM content.source_material_grades mg
+      JOIN core.grade_levels gl ON gl.id = mg.grade_level_id
+      WHERE mg.source_material_id = sm.id ORDER BY gl.grade_number) AS grades
+  FROM content.source_materials sm
+  JOIN core.subjects sub ON sub.id = sm.subject_id
+  WHERE sm.status = 'APPROVED' AND sm.material_type = 'TEXTBOOK'
+  ORDER BY sub.name_mn, sm.title, sm.id`);
+
 export const materialHeader = (materialId: number) =>
   readRows<{ title: string | null; pageOffset: number; filePages: number | null; planningPeriodCount: number | null }>(
     `SELECT sm.title, COALESCE(v.page_offset, 0)::int AS "pageOffset",

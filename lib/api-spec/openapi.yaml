@@ -23,6 +23,23 @@ tags:
   - name: teacher
     description: Teacher classroom and review workflow
 paths:
+  /content/library:
+    get:
+      operationId: getLibraryBooks
+      tags: [content]
+      summary: Approved textbooks for independent reading across all grades
+      responses:
+        "200":
+          description: Books available to students and staff; reading assigns no work
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: "#/components/schemas/LibraryBook"}
+        "401":
+          description: Not signed in
+        "403":
+          description: Requires a student or staff role
   /teacher/timetable/{slotId}/students:
     parameters:
       - in: path
@@ -2818,6 +2835,19 @@ components:
       schema:
         type: string
   schemas:
+    LibraryBook:
+      type: object
+      required: [id, title, subjectName, grades, hasFile, hasCover, filePages]
+      properties:
+        id: {type: integer}
+        title: {type: string}
+        subjectName: {type: string}
+        grades:
+          type: array
+          items: {type: integer}
+        hasFile: {type: boolean}
+        hasCover: {type: boolean}
+        filePages: {type: [integer, "null"]}
     TimetableStudentsInput:
       type: object
       properties:

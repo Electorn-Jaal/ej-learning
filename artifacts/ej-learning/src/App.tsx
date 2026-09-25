@@ -58,6 +58,9 @@ const StudentAssignment = page(() => import('@/pages/student/Assignment'));
 const StudentSubjectView = page(() => import('@/pages/student/SubjectView'));
 const StudentPlan = page(() => import('@/pages/student/Plan'));
 const StudentExams = page(() => import('@/pages/student/Exams'));
+const StudentHomework = page(() => import('@/pages/student/Homework'));
+const Library = page(() => import('@/pages/Library'));
+const TeacherHomework = page(() => import('@/pages/teacher/Homework'));
 const TeacherDashboard = page(() => import('@/pages/teacher/Dashboard'));
 const TeacherSchedule = page(() => import('@/pages/teacher/Schedule'));
 const TeacherQuizResults = page(() => import('@/pages/teacher/QuizResults'));
@@ -94,6 +97,8 @@ function StudentRoutes() {
       <Route path="/schedule" component={StudentSchedule} />
       <Route path="/subjects" component={StudentSubjects} />
       <Route path="/exams" component={StudentExams} />
+      <Route path="/homework" component={StudentHomework} />
+      <Route path="/library" component={Library} />
       <Route path="/progress" component={StudentProgress} />
       <Route path="/profile" component={StudentProfile} />
       <Route path="/password" component={Password} />
@@ -121,6 +126,8 @@ function StaffRoutes({ admin, takesLessons }: { admin: boolean; takesLessons: bo
       <Route path="/teacher" component={TeacherDashboard} />
       <Route path="/teacher/schedule" component={TeacherSchedule} />
       <Route path="/teacher/exams" component={TeacherExams} />
+      <Route path="/teacher/homework" component={TeacherHomework} />
+      <Route path="/teacher/library" component={Library} />
       <Route path="/teacher/clubs" component={TeacherClubs} />
       <Route path="/teacher/results" component={TeacherQuizResults} />
       <Route path="/teacher/analytics" component={TeacherAnalytics} />

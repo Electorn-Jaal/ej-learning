@@ -123,6 +123,7 @@ export * from './homeworkSubmitted';
 export * from './homeworkSummary';
 export * from './itemAnalysis';
 export * from './itemAnalysisRow';
+export * from './libraryBook';
 export * from './loginInput';
 export * from './markableClass';
 export * from './masteryStatus';

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useRoute, useSearch } from 'wouter'
+import { Link, useRoute, useSearch, useLocation } from 'wouter'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   getGetTeacherLessonsQueryKey,
@@ -23,7 +23,7 @@ import { ReplanPrompt } from '@/components/schedule/ReplanPrompt'
 import { Skeleton } from '@/components/ui/skeleton'
 import { subjectParam } from '@/lib/teacher-class'
 import { hasRole, useSession } from '@/lib/session'
-import { schoolToday } from '@/lib/schedule-window'
+import { calendarDate, schoolToday } from '@/lib/schedule-window'
 import { cn } from '@/lib/utils'
 
 const TIME = new Intl.DateTimeFormat('mn-MN', {
@@ -897,12 +897,16 @@ export default function TeacherClassDay() {
   const [, params] = useRoute('/teacher/class/:classId')
   const search = new URLSearchParams(useSearch())
   const classId = Number(params?.classId ?? 0)
-  const on = search.get('on')
+  const on = calendarDate(search.get('on'))
   const rawSubject = search.get('subject')
   const subjectId = rawSubject === null || rawSubject === '' ? null : Number(rawSubject)
-  const [view, setView] = useState<'lesson' | 'students'>(
-    search.get('view') === 'students' ? 'students' : 'lesson',
-  )
+  const [, navigate] = useLocation()
+  const view = search.get('view') === 'students' ? 'students' : 'lesson'
+  const setView = (view: string) => {
+    const next = new URLSearchParams(search)
+    next.set('view', view)
+    navigate('/teacher/class/' + classId + '?' + next.toString(), { replace: true })
+  }
 
   const queryClient = useQueryClient()
   const query = { classId, ...subjectParam(subjectId), ...(on ? { on } : {}) }
@@ -918,9 +922,9 @@ export default function TeacherClassDay() {
   })
 
   const back = (
-    <Link href="/teacher" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
+    <Link href={`/teacher/schedule?classId=${classId}&subjectId=${subjectId ?? 'all'}&on=${on ?? schoolToday()}`} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
       <ArrowLeft className="h-4 w-4" />
-      Хяналтын самбар
+      Журнал · Хичээл ба төлөвлөгөө
     </Link>
   )
 
@@ -936,7 +940,6 @@ export default function TeacherClassDay() {
     )
   }
 
-  const answered = data.students.filter((student) => student.attempts.length > 0).length
 
   return (
     <div className="space-y-3">
@@ -945,7 +948,7 @@ export default function TeacherClassDay() {
       {/* One row: what is being looked at on the left, the switch on the
           right. The week does it this way and every screen that offers a
           choice of view now does the same. */}
-      <header className="flex items-center gap-2">
+      <header className="flex flex-wrap items-center gap-2">
         <span className="flex min-w-0 items-baseline gap-x-3">
           <h1 className="truncate text-lg font-bold">{data.className}</h1>
           <span className="shrink-0 text-xs text-muted-foreground">{data.date}</span>
@@ -965,7 +968,7 @@ export default function TeacherClassDay() {
             className="border-l border-border"
           >
             <Users className="h-3.5 w-3.5" />
-            Сурагчид · {answered}/{data.students.length}
+            Ирц ба дэвтэр · {data.students.length}
           </Button>
         </span>
       </header>

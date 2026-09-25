@@ -1,0 +1,110 @@
+{
+  "fileKey": "HoHValffFG57oK5rjDCaPi",
+  "phase": "phase2",
+  "completedSteps": [
+    "phase0",
+    "P1.a",
+    "P1.b",
+    "P1.c",
+    "P1.d",
+    "P2.a",
+    "P2.b",
+    "P2.c-draft"
+  ],
+  "notes": [
+    "Figma plan allows one mode per collection: light values in 'Color', dark values in 'Color Dark (reference)' with hidden scopes.",
+    "Starter plan: max 3 pages -> 01 Design System / 02 Screens / 99 Archive, split further with Sections.",
+    "Starter plan: MCP tool-call limit reached on 2026-09-25 during P2.c fix."
+  ],
+  "collections": {
+    "Color": "VariableCollectionId:11:3",
+    "ColorDark": "VariableCollectionId:11:4",
+    "Radius": "VariableCollectionId:11:67",
+    "Spacing": "VariableCollectionId:11:74"
+  },
+  "variables": {
+    "color/background": "VariableID:11:5",
+    "color/foreground": "VariableID:11:7",
+    "color/border": "VariableID:11:9",
+    "color/input": "VariableID:11:11",
+    "color/ring": "VariableID:11:13",
+    "color/primary": "VariableID:11:15",
+    "color/primary-foreground": "VariableID:11:17",
+    "color/secondary": "VariableID:11:19",
+    "color/secondary-foreground": "VariableID:11:21",
+    "color/muted": "VariableID:11:23",
+    "color/muted-foreground": "VariableID:11:25",
+    "color/accent": "VariableID:11:27",
+    "color/accent-foreground": "VariableID:11:29",
+    "color/success": "VariableID:11:31",
+    "color/success-foreground": "VariableID:11:33",
+    "color/pending": "VariableID:11:35",
+    "color/pending-foreground": "VariableID:11:37",
+    "color/destructive": "VariableID:11:39",
+    "color/destructive-foreground": "VariableID:11:41",
+    "color/sidebar": "VariableID:11:43",
+    "color/sidebar-header": "VariableID:11:45",
+    "color/sidebar-active": "VariableID:11:47",
+    "color/sidebar-line": "VariableID:11:49",
+    "color/brand-wash": "VariableID:11:51",
+    "color/brand-wash-border": "VariableID:11:53",
+    "color/card": "VariableID:11:55",
+    "color/card-foreground": "VariableID:11:57",
+    "color/card-border": "VariableID:11:59",
+    "color/popover": "VariableID:11:61",
+    "color/popover-foreground": "VariableID:11:63",
+    "color/popover-border": "VariableID:11:65",
+    "radius/control": "VariableID:11:68",
+    "radius/sm": "VariableID:11:69",
+    "radius/md": "VariableID:11:70",
+    "radius/lg": "VariableID:11:71",
+    "radius/xl": "VariableID:11:72",
+    "radius/full": "VariableID:11:73",
+    "spacing/0_5": "VariableID:11:75",
+    "spacing/1": "VariableID:11:76",
+    "spacing/1_5": "VariableID:11:77",
+    "spacing/2": "VariableID:11:78",
+    "spacing/2_5": "VariableID:11:79",
+    "spacing/3": "VariableID:11:80",
+    "spacing/3_5": "VariableID:11:81",
+    "spacing/4": "VariableID:11:82",
+    "spacing/5": "VariableID:11:83",
+    "spacing/6": "VariableID:11:84",
+    "spacing/8": "VariableID:11:85",
+    "spacing/10": "VariableID:11:86",
+    "spacing/12": "VariableID:11:87",
+    "spacing/16": "VariableID:11:88"
+  },
+  "styles": {
+    "text": {
+      "Caption/11": "S:59cea3edb5e327141a2587ef8d10c720e891ce66,",
+      "Caption/11 Medium": "S:9c70b73ce201c9df2dec45b5e578cab327297cf4,",
+      "Body/xs": "S:dd01719d00317d7e018e81208456876df0d9782d,",
+      "Label/xs Medium": "S:01221418b1d6f29f54a207bbe806d1c62696f84f,",
+      "Label/xs SemiBold": "S:a2c47fb8f70b451052e20937ad94f934cb3ca6f0,",
+      "Body/sm": "S:9d82d93c193040b6bf776eeb632095e39945a12d,",
+      "Body/sm SemiBold": "S:7a6248eaa06d6063b66362ad646e4a7f27941651,",
+      "Body/base": "S:66448f67b88f216c85badaea5afbf9c7f354bcb5,",
+      "Heading/lg": "S:e64e6b8f6be390430534f5b9aded7422b507f869,",
+      "Heading/xl": "S:eeb003948dad84eb2e44f65bc2746c8259302aee,",
+      "Heading/2xl": "S:7f5e945dc03e6731ab6237fdd53f33ac271c2d0b,",
+      "Heading/3xl": "S:cd235e0220cb2a54ddde44daea00cd97b94cb471,",
+      "Reading/base": "S:7ae93f9a18debd4aca4dea1764d593a244b1a030,"
+    },
+    "effect": {
+      "Shadow/sm": "S:a0ec350434fe42137da570bb7370c92495d05cd5,"
+    }
+  },
+  "pages": {
+    "01 Design System": "0:1",
+    "02 Screens": "2:2",
+    "99 Archive": "2:110"
+  },
+  "nodes": {
+    "old foundations drawing (in 99 Archive)": "2:5",
+    "old controls drawing (in 99 Archive)": "2:758",
+    "Foundations section": "11:103",
+    "Foundations frame": "11:104"
+  },
+  "components": {}
+}

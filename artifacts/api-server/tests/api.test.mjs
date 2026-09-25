@@ -905,6 +905,17 @@ describe("EJ Learning API", { concurrency: false }, () => {
       assert.equal(guessed.payload.code, "NOT_YOUR_CHILD");
     });
 
+    it("cannot open the library or a book file by its id (FR21)", async () => {
+      const [book] = await harness.sql(
+        "SELECT id::int FROM content.source_materials WHERE status = 'APPROVED' ORDER BY id LIMIT 1");
+      assert.ok(book, "expected a seeded approved material");
+      assert.equal((await parent.request("/content/library")).status, 403);
+      assert.equal((await parent.request(`/content/materials/${book.id}/cover`, { raw: true })).status, 403);
+      assert.equal((await parent.request(`/content/materials/${book.id}/file`, { raw: true })).status, 403);
+      // The child still can.
+      assert.equal((await child.request(`/content/materials/${book.id}/file`, { raw: true })).status, 200);
+    });
+
     it("reads the child once linked, and the same day the child reads", async () => {
       const linked = await admin.request("/admin/guardians/link", { method: "POST", body: {
         userId, studentId, relation: "Ээж",
@@ -1394,6 +1405,13 @@ describe("EJ Learning API", { concurrency: false }, () => {
       if (slot) {
         await harness.sql("DELETE FROM learning.timetable_slots WHERE id = $1", [slot.id]);
       }
+    });
+
+    it("refuses a date that does not exist rather than failing in the database", async () => {
+      // The journal keeps its date in the address bar, where anyone can type.
+      const res = await teacher.request(`/teacher/class-day?classId=${klass}&subjectId=${subject}&on=2026-13-45`);
+      assert.equal(res.status, 400, JSON.stringify(res.payload));
+      assert.equal(res.payload.code, "INVALID_DATE");
     });
 
     it("says on the day which kind of register this class keeps", async () => {
@@ -2637,6 +2655,40 @@ describe("EJ Learning API", { concurrency: false }, () => {
       const file = await client.request(`/content/materials/${list[0].id}/file`, { raw: true });
       assert.equal(file.status, 200);
       assert.equal(file.buffer.subarray(0, 4).toString(), "%PDF");
+    });
+
+    it("lets students browse books across grades without exposing drafts or assigning work", async () => {
+      const student = createClient(harness.baseUrl);
+      await student.signIn(accountsByRole.STUDENT);
+      const guest = createClient(harness.baseUrl);
+      assert.equal((await guest.request('/content/library')).status, 401);
+      const [before] = await harness.sql('SELECT count(*)::int AS n FROM learning.student_assignments');
+      const [subject] = await harness.sql("SELECT id FROM core.subjects WHERE code='MATH'");
+      const created = await harness.sql(`INSERT INTO content.source_materials
+        (source_code,subject_id,title,material_type,status) VALUES
+        ('TEST-LIB-APPROVED',$1,'Library grade twelve','TEXTBOOK','APPROVED'),
+        ('TEST-LIB-DRAFT',$1,'Hidden draft','TEXTBOOK','DRAFT') RETURNING id,source_code`, [subject.id]);
+      const id = Number(created.find((r) => r.source_code === 'TEST-LIB-APPROVED').id);
+      try {
+        await harness.sql(`INSERT INTO content.source_material_grades (source_material_id,grade_level_id)
+          SELECT $1,id FROM core.grade_levels WHERE grade_number=12`, [id]);
+        const res = await student.request('/content/library');
+        assert.equal(res.status, 200);
+        const book = res.payload.find((b) => b.id === id);
+        assert.deepEqual(book.grades, [12]);
+        assert.equal(book.hasFile, false, 'no file must not appear readable');
+        assert.ok(!res.payload.some((b) => b.title === 'Hidden draft'));
+        assert.ok(!JSON.stringify(res.payload).includes('storageKey'));
+        const readable = res.payload.find((b) => b.hasFile);
+        assert.ok(readable, 'seeded PDF should be available');
+        const pdf = await student.request(`/content/materials/${readable.id}/file`, { raw: true });
+        assert.equal(pdf.status, 200);
+        assert.equal(pdf.buffer.subarray(0, 4).toString(), '%PDF');
+        assert.deepEqual((await harness.sql('SELECT count(*)::int AS n FROM learning.student_assignments'))[0], before);
+      } finally {
+        await harness.sql('DELETE FROM content.source_material_grades WHERE source_material_id=$1', [id]);
+        await harness.sql("DELETE FROM content.source_materials WHERE source_code LIKE 'TEST-LIB-%'");
+      }
     });
   });
 
