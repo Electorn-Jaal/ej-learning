@@ -13,7 +13,7 @@ import {
   UploadMaterialFileResponse,
 } from "@workspace/api-zod";
 import { requireRole } from "../../middlewares/auth";
-import { badRequest, unauthorized } from "../../shared/http-error";
+import { badRequest } from "../../shared/http-error";
 import {
   listMaterials,
   libraryBooks,
@@ -152,12 +152,13 @@ router.put("/admin/materials/:materialId/page-offset", asAdmin, async (req, res,
   }
 });
 
-// Any signed-in account may read an approved book. Which lesson points at it
-// is what differs per student, not the book itself.
-router.get("/content/materials/:materialId/file", async (req, res, next) => {
+// Students and staff may read any approved book. Which lesson points at it
+// is what differs per student, not the book itself. Guardians may not (FR21):
+// no guardian screen opens a book, and the ids are sequential, so an open
+// route let a parent account page through the whole library the Library
+// screen already refuses them.
+router.get("/content/materials/:materialId/file", requireRole("STUDENT", "TEACHER", "ADMIN"), async (req, res, next) => {
   try {
-    if (!req.user) throw unauthorized("Нэвтэрнэ үү.", "NOT_AUTHENTICATED");
-
     const materialId = Number(req.params.materialId);
     if (!Number.isInteger(materialId) || materialId <= 0) {
       throw badRequest("Материалын дугаар буруу байна.", "INVALID_MATERIAL_ID");

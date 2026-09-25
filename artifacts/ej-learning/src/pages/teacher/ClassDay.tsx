@@ -23,7 +23,7 @@ import { ReplanPrompt } from '@/components/schedule/ReplanPrompt'
 import { Skeleton } from '@/components/ui/skeleton'
 import { subjectParam } from '@/lib/teacher-class'
 import { hasRole, useSession } from '@/lib/session'
-import { schoolToday } from '@/lib/schedule-window'
+import { calendarDate, schoolToday } from '@/lib/schedule-window'
 import { cn } from '@/lib/utils'
 
 const TIME = new Intl.DateTimeFormat('mn-MN', {
@@ -897,7 +897,7 @@ export default function TeacherClassDay() {
   const [, params] = useRoute('/teacher/class/:classId')
   const search = new URLSearchParams(useSearch())
   const classId = Number(params?.classId ?? 0)
-  const on = search.get('on')
+  const on = calendarDate(search.get('on'))
   const rawSubject = search.get('subject')
   const subjectId = rawSubject === null || rawSubject === '' ? null : Number(rawSubject)
   const [, navigate] = useLocation()
