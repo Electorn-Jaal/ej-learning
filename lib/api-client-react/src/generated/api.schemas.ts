@@ -153,6 +153,139 @@ export interface PublishedDiagnosticPlan {
   entries: PublishedDiagnosticPlanEntriesItem[];
 }
 
+export interface EnrollmentClass {
+  classId: number;
+  name: string;
+  gradeLevel: number;
+  schoolYear: string;
+  classTeacherId: number | null;
+  classTeacherName: string | null;
+  students: number;
+}
+
+export type EnrollmentOverviewTeachersItem = {
+  teacherId: number;
+  name: string;
+};
+
+export interface EnrollmentOverview {
+  classes: EnrollmentClass[];
+  teachers: EnrollmentOverviewTeachersItem[];
+  schoolYears: string[];
+}
+
+export interface EnrollmentStudent {
+  studentId: number;
+  studentCode: string;
+  name: string;
+  classId: number | null;
+  className: string | null;
+}
+
+export interface TransferInput {
+  /** @minimum 1 */
+  studentId: number;
+  /** @minimum 1 */
+  toClassId: number;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  effectiveOn: string;
+  /** @maxLength 1000 */
+  reason: string;
+}
+
+export interface ClassTeacherInput {
+  /** @minimum 1 */
+  classId: number;
+  /** @minimum 1 */
+  teacherId: number | null;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  effectiveOn: string;
+}
+
+export type EnrollmentChangeKind = typeof EnrollmentChangeKind[keyof typeof EnrollmentChangeKind];
+
+
+export const EnrollmentChangeKind = {
+  TRANSFER: 'TRANSFER',
+  PROMOTE: 'PROMOTE',
+  REPEAT: 'REPEAT',
+  GRADUATE: 'GRADUATE',
+} as const;
+
+export interface EnrollmentChange {
+  id: number;
+  kind: EnrollmentChangeKind;
+  studentId: number;
+  studentName: string;
+  fromClass: string | null;
+  toClass: string | null;
+  effectiveOn: string;
+  reason: string;
+  changedBy: string | null;
+  changedAt: string;
+}
+
+export type PromotionRowProposed = typeof PromotionRowProposed[keyof typeof PromotionRowProposed];
+
+
+export const PromotionRowProposed = {
+  PROMOTE: 'PROMOTE',
+  GRADUATE: 'GRADUATE',
+  MANUAL: 'MANUAL',
+} as const;
+
+export interface PromotionRow {
+  studentId: number;
+  name: string;
+  fromClass: string;
+  gradeLevel: number;
+  proposed: PromotionRowProposed;
+  /** The next year's class name for PROMOTE */
+  toClass: string | null;
+}
+
+export interface PromotionPreview {
+  fromYear: string;
+  toYear: string;
+  rows: PromotionRow[];
+  /** Next-year classes that do not exist yet and would be created */
+  newClasses: string[];
+}
+
+export type PromotionInputDecisionsItemAction = typeof PromotionInputDecisionsItemAction[keyof typeof PromotionInputDecisionsItemAction];
+
+
+export const PromotionInputDecisionsItemAction = {
+  PROMOTE: 'PROMOTE',
+  REPEAT: 'REPEAT',
+  GRADUATE: 'GRADUATE',
+  SKIP: 'SKIP',
+} as const;
+
+export type PromotionInputDecisionsItem = {
+  /** @minimum 1 */
+  studentId: number;
+  action: PromotionInputDecisionsItemAction;
+};
+
+export interface PromotionInput {
+  /** @pattern ^\d{4}-\d{4}$ */
+  fromYear: string;
+  /** @pattern ^\d{4}-\d{2}-\d{2}$ */
+  effectiveOn: string;
+  /** @maxItems 5000 */
+  decisions: PromotionInputDecisionsItem[];
+}
+
+export interface PromotionResult {
+  toYear: string;
+  promoted: number;
+  repeated: number;
+  graduated: number;
+  skipped: number;
+  createdClasses: string[];
+}
+
 export interface LibraryBook {
   id: number;
   title: string;
@@ -3122,6 +3255,28 @@ export type GetChildDiagnosticPlansParams = {
  * @minimum 1
  */
 studentId: number;
+};
+
+export type SearchEnrollmentStudentsParams = {
+/**
+ * @minLength 1
+ * @maxLength 100
+ */
+q: string;
+};
+
+export type GetEnrollmentHistoryParams = {
+/**
+ * @minimum 1
+ */
+studentId?: number;
+};
+
+export type GetPromotionPreviewParams = {
+/**
+ * @pattern ^\d{4}-\d{4}$
+ */
+fromYear: string;
 };
 
 export type GetStudentScheduleParams = {

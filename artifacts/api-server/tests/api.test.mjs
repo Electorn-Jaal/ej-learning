@@ -4092,6 +4092,152 @@ ${run.output}`);
     });
   });
 
+  describe("children move between classes and up a year, and keep their history", () => {
+    let admin, teacher;
+    const made = { students: [], classes: [] };
+    const student = async (code, classId) => {
+      const [{ id }] = await harness.sql(
+        `INSERT INTO core.students (student_code, display_name, data_origin) VALUES ($1, $1, 'MOCK') RETURNING id::int`, [code]);
+      await harness.sql("INSERT INTO core.student_enrollments (student_id, class_id) VALUES ($1, $2)", [id, classId]);
+      made.students.push(id);
+      return id;
+    };
+    const klass = async (name, grade, year) => {
+      const [{ id }] = await harness.sql(
+        `INSERT INTO core.classes (class_code, grade_level_id, name_mn, school_year, data_origin)
+         SELECT $1, id, $2, $3, 'MOCK' FROM core.grade_levels WHERE grade_number = $4 RETURNING id::int`,
+        [`TEST-MOVE-${year}-${name}`, name, year, grade]);
+      made.classes.push(id);
+      return id;
+    };
+    before(async () => {
+      admin = createClient(harness.baseUrl);
+      teacher = createClient(harness.baseUrl);
+      await admin.signIn(accountsByRole.ADMIN);
+      await teacher.signIn(byName["demo-teacher"]);
+    });
+    after(async () => {
+      const years = ["2090-2091", "2091-2092"];
+      await harness.sql("DELETE FROM core.enrollment_changes WHERE student_id = ANY($1::bigint[])", [made.students]);
+      await harness.sql(`DELETE FROM core.class_teacher_changes WHERE class_id IN
+        (SELECT id FROM core.classes WHERE id = ANY($1::bigint[]) OR school_year = ANY($2::text[]))`, [made.classes, years]);
+      await harness.sql("DELETE FROM learning.quiz_attempts WHERE student_id = ANY($1::bigint[])", [made.students]);
+      await harness.sql("DELETE FROM core.student_enrollments WHERE student_id = ANY($1::bigint[])", [made.students]);
+      await harness.sql("DELETE FROM core.students WHERE id = ANY($1::bigint[])", [made.students]);
+      await harness.sql("DELETE FROM core.classes WHERE id = ANY($1::bigint[]) OR school_year = ANY($2::text[])", [made.classes, years]);
+    });
+
+    it("is the administrator's alone", async () => {
+      assert.equal((await teacher.request("/admin/enrollment")).status, 403);
+      assert.equal((await teacher.request("/admin/promotion/preview?fromYear=2090-2091")).status, 403);
+    });
+
+    it("moves a child, records why and when, and leaves their answers where they were (FR28)", async () => {
+      const [{ id: from, school_year: year }] = await harness.sql(
+        "SELECT id::int, school_year FROM core.classes WHERE class_code = 'MOCK-LOCAL-9A'");
+      const to = await klass("9Ю", 9, year);
+      const child = await student("TEST-MOVE-A", from);
+      const [lesson] = await harness.sql("SELECT id, lesson_code FROM learning.daily_lessons LIMIT 1");
+      await harness.sql(`INSERT INTO learning.quiz_attempts (student_id, daily_lesson_id, lesson_code, answers, score, max_score, submitted_at)
+        VALUES ($1, $2, $3, '[]'::jsonb, 1, 1, now())`, [child, lesson.id, lesson.lesson_code]);
+
+      const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ulaanbaatar" }).format(new Date());
+      const future = await admin.request("/admin/enrollment/transfer", { method: "POST",
+        body: { studentId: child, toClassId: to, effectiveOn: "2999-01-01", reason: "" } });
+      assert.equal(future.status, 400, "a move is recorded when it happens");
+
+      const moved = await admin.request("/admin/enrollment/transfer", { method: "POST",
+        body: { studentId: child, toClassId: to, effectiveOn: today, reason: "Эцэг эхийн хүсэлтээр" } });
+      assert.equal(moved.status, 201, JSON.stringify(moved.payload));
+      assert.equal(moved.payload.kind, "TRANSFER");
+      assert.equal(moved.payload.reason, "Эцэг эхийн хүсэлтээр");
+      assert.ok(moved.payload.fromClass && moved.payload.toClass.startsWith("9Ю"));
+
+      const rows = await harness.sql(
+        "SELECT class_id::int, is_active, to_char(left_on,'YYYY-MM-DD') AS left_on FROM core.student_enrollments WHERE student_id = $1 ORDER BY is_active",
+        [child]);
+      assert.deepEqual(rows.map((r) => [r.class_id, r.is_active, r.left_on]), [[from, false, today], [to, true, null]]);
+      const [{ n }] = await harness.sql("SELECT count(*)::int AS n FROM learning.quiz_attempts WHERE student_id = $1", [child]);
+      assert.equal(n, 1, "the answers stay the child's");
+
+      const again = await admin.request("/admin/enrollment/transfer", { method: "POST",
+        body: { studentId: child, toClassId: to, effectiveOn: today, reason: "" } });
+      assert.equal(again.status, 409);
+
+      const history = await admin.request(`/admin/enrollment/history?studentId=${child}`);
+      assert.equal(history.status, 200);
+      assert.equal(history.payload.length, 1);
+      assert.equal(history.payload[0].changedBy !== null, true);
+    });
+
+    it("changes a class teacher and keeps who it was before", async () => {
+      const cls = await klass("9Я", 9, "2090-2091");
+      const [{ id: teacherB }] = await harness.sql(
+        "SELECT t.id::int FROM core.teachers t JOIN core.users u ON u.id = t.user_id WHERE u.username = 'demo-teacher-b'");
+      const set = await admin.request("/admin/enrollment/class-teacher", { method: "PUT",
+        body: { classId: cls, teacherId: teacherB, effectiveOn: "2090-09-01" } });
+      assert.equal(set.status, 200, JSON.stringify(set.payload));
+      assert.equal(set.payload.classTeacherId, teacherB);
+      const cleared = await admin.request("/admin/enrollment/class-teacher", { method: "PUT",
+        body: { classId: cls, teacherId: null, effectiveOn: "2091-01-10" } });
+      assert.equal(cleared.payload.classTeacherId, null);
+      const log = await harness.sql(
+        "SELECT from_teacher_id::int AS f, to_teacher_id::int AS t FROM core.class_teacher_changes WHERE class_id = $1 ORDER BY id", [cls]);
+      assert.deepEqual(log.map((r) => [r.f, r.t]), [[null, teacherB], [teacherB, null]]);
+    });
+
+    it("previews a year, applies it with exceptions in one go, and does not move anyone twice (FR29)", async () => {
+      const nine = await klass("9в", 9, "2090-2091");
+      const twelve = await klass("12в", 12, "2090-2091");
+      const elective = await klass("10-12 сонгон", 10, "2090-2091");
+      const b = await student("TEST-MOVE-B", nine);
+      const r = await student("TEST-MOVE-R", nine);
+      const c = await student("TEST-MOVE-C", twelve);
+      const d = await student("TEST-MOVE-D", elective);
+
+      const preview = await admin.request("/admin/promotion/preview?fromYear=2090-2091");
+      assert.equal(preview.status, 200, JSON.stringify(preview.payload));
+      assert.equal(preview.payload.toYear, "2091-2092");
+      const row = (id) => preview.payload.rows.find((x) => x.studentId === id);
+      assert.deepEqual([row(b).proposed, row(b).toClass], ["PROMOTE", "10в"]);
+      assert.equal(row(c).proposed, "GRADUATE");
+      assert.equal(row(d).proposed, "MANUAL", "a name without its grade is left to the administrator");
+      assert.ok(preview.payload.newClasses.includes("10в"));
+
+      const bad = await admin.request("/admin/promotion", { method: "POST", body: { fromYear: "2090-2091", effectiveOn: "2091-09-01",
+        decisions: [{ studentId: d, action: "PROMOTE" }] } });
+      assert.equal(bad.status, 400);
+      const early = await admin.request("/admin/promotion", { method: "POST", body: { fromYear: "2090-2091", effectiveOn: "2091-09-01",
+        decisions: [{ studentId: b, action: "GRADUATE" }] } });
+      assert.equal(early.status, 400, "only year 12 graduates");
+      const [{ n: untouched }] = await harness.sql(
+        "SELECT count(*)::int AS n FROM core.enrollment_changes WHERE student_id = ANY($1::bigint[])", [[b, r, c, d]]);
+      assert.equal(untouched, 0, "a refused run changes nothing");
+
+      const done = await admin.request("/admin/promotion", { method: "POST", body: { fromYear: "2090-2091", effectiveOn: "2091-09-01",
+        decisions: [{ studentId: b, action: "PROMOTE" }, { studentId: r, action: "REPEAT" },
+          { studentId: c, action: "GRADUATE" }, { studentId: d, action: "SKIP" }] } });
+      assert.equal(done.status, 200, JSON.stringify(done.payload));
+      assert.deepEqual([done.payload.promoted, done.payload.repeated, done.payload.graduated, done.payload.skipped], [1, 1, 1, 1]);
+      assert.deepEqual(done.payload.createdClasses.sort(), ["10в", "9в"]);
+
+      const where = async (id) => (await harness.sql(
+        `SELECT c.name_mn || ' ' || c.school_year AS at FROM core.student_enrollments e JOIN core.classes c ON c.id = e.class_id
+          WHERE e.student_id = $1 AND e.is_active`, [id])).map((x) => x.at);
+      assert.deepEqual(await where(b), ["10в 2091-2092"]);
+      assert.deepEqual(await where(r), ["9в 2091-2092"], "a repeating child stays in the grade");
+      assert.deepEqual(await where(c), [], "a graduate leaves the register");
+      assert.deepEqual(await where(d), ["10-12 сонгон 2090-2091"], "skipped means untouched");
+
+      const twice = await admin.request("/admin/promotion", { method: "POST", body: { fromYear: "2090-2091", effectiveOn: "2091-09-01",
+        decisions: [{ studentId: d, action: "SKIP" }] } });
+      assert.equal(twice.status, 200);
+      const [{ n }] = await harness.sql(
+        "SELECT count(*)::int AS n FROM core.enrollment_changes WHERE student_id = ANY($1::bigint[])", [[b, r, c, d]]);
+      assert.equal(n, 3, "three moves, each written once");
+    });
+  });
+
   // Last on purpose: it wipes this student's quiz history to measure a clean
   // sitting, which would pull the ground out from under any test that counted
   // attempts.
