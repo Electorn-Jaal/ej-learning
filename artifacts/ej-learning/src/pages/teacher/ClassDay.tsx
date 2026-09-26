@@ -24,6 +24,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { subjectParam } from '@/lib/teacher-class'
 import { hasRole, useSession } from '@/lib/session'
 import { calendarDate, schoolToday } from '@/lib/schedule-window'
+import { QuizPreviewPanel } from '@/components/teacher/QuizPreviewPanel'
 import { cn } from '@/lib/utils'
 
 const TIME = new Intl.DateTimeFormat('mn-MN', {
@@ -400,6 +401,10 @@ function LessonCard({ classId, date, lesson, editable, onSaved }: {
             Нээх хүртэл сурагч зөвхөн зөв бурууг нь мэдэнэ, аль нь зөв болохыг мэдэхгүй.
           </p>
         </div>
+      ) : null}
+
+      {editable && lesson.lessonId !== null && date === schoolToday() ? (
+        <QuizPreviewPanel classId={classId} lessonId={lesson.lessonId} />
       ) : null}
 
       <div className="max-w-3xl space-y-0.5">

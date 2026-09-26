@@ -5,6 +5,10 @@ import {
   GetTeacherQuizPaperResponse,
   SubmitQuizAttemptBody,
   SubmitQuizAttemptResponse,
+  GetQuizPreviewQueryParams,
+  GetQuizPreviewResponse,
+  SetQuizQuestionsBody,
+  SetQuizQuestionsResponse,
 } from "@workspace/api-zod";
 import { requireRole } from "../../middlewares/auth";
 import { badRequest } from "../../shared/http-error";
@@ -13,6 +17,8 @@ import {
   quizPaper,
   quizPaperForTeacher,
   recordQuizAttemptScored,
+  quizPreview,
+  setQuizQuestions,
 } from "./service";
 
 const router: IRouter = Router();
@@ -94,5 +100,25 @@ router.get(
     }
   },
 );
+
+router.get("/teacher/quiz-preview", requireRole("TEACHER", "ADMIN"), async (req, res, next) => {
+  try {
+    const query = GetQuizPreviewQueryParams.safeParse(req.query);
+    if (!query.success) throw badRequest("Анги, хичээл сонгоно уу.", "INVALID_QUERY");
+    res.json(GetQuizPreviewResponse.parse(await quizPreview(req.user!, query.data.classId, query.data.lessonId)));
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.put("/teacher/quiz-preview", requireRole("TEACHER", "ADMIN"), async (req, res, next) => {
+  try {
+    const input = SetQuizQuestionsBody.safeParse(req.body);
+    if (!input.success) throw badRequest("Асуултын сонголт буруу байна.", "INVALID_INPUT");
+    res.json(SetQuizQuestionsResponse.parse(await setQuizQuestions(req.user!, input.data)));
+  } catch (error) {
+    next(error);
+  }
+});
 
 export default router;

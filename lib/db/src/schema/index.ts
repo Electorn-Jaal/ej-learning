@@ -18,3 +18,4 @@ export * from "./scheduling";
 export * from "./quiz";
 export * from "./diagnostic-plans";
 export * from "./enrollment-changes";
+export * from "./quiz-overrides";

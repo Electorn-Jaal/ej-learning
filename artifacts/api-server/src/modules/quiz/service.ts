@@ -1,6 +1,6 @@
 import { badRequest, conflict, forbidden } from "../../shared/http-error";
 import { isIsoDate, todayInUlaanbaatar } from "../../shared/school-date";
-import { authorisedClass, viewableSubjects } from "../class-access/service";
+import { authorisedClass, editableSubjects, viewableSubjects } from "../class-access/service";
 import type { AuthenticatedUser } from "../identity/service";
 import * as repository from "./repository";
 
@@ -109,21 +109,44 @@ function chooseQuestions(all: QuizQuestion[], seen: Set<number>, count: number) 
   return [...fresh, ...rest].slice(0, count);
 }
 
+/**
+ * The questions this child gets on their next go today: the teacher's choice
+ * when one was made for exactly this attempt, the ordinary rule otherwise.
+ * A chosen question that has since left the lesson's pool is dropped rather
+ * than shown broken.
+ */
+async function nextPaper(studentId: number, lessonId: number, pool: QuizQuestion[]) {
+  const today = todayInUlaanbaatar();
+  const [attempts, settings, [override]] = await Promise.all([
+    repository.attemptsOnDate(studentId, lessonId, today),
+    quizSettings(studentId, lessonId),
+    repository.questionOverride(studentId, lessonId, today),
+  ]);
+  const seen = new Set<number>();
+  for (const attempt of attempts) {
+    for (const answer of attempt.answers ?? []) seen.add(Number(answer.questionId));
+  }
+  const byId = new Map(pool.map((q) => [q.itemId, q]));
+  const chosen = override && override.attemptNo === attempts.length + 1
+    ? override.itemIds.flatMap((id) => byId.get(id) ?? [])
+    : null;
+  return {
+    attempts,
+    settings,
+    overridden: chosen !== null && chosen.length > 0,
+    questions: chosen && chosen.length ? chosen : chooseQuestions(pool, seen, settings.questionCount),
+  };
+}
+
 export async function quizPaper(user: AuthenticatedUser, lessonId: number) {
   const studentId = requireStudentId(user);
   await requireReachableLesson(studentId, lessonId);
 
   const [header] = await repository.lessonHeader(lessonId);
   const rows = await repository.quizItemsForLesson(lessonId);
-  const attempts = await repository.attemptsOnDate(studentId, lessonId, todayInUlaanbaatar());
-
-  const seen = new Set<number>();
-  for (const attempt of attempts) {
-    for (const answer of attempt.answers ?? []) seen.add(Number(answer.questionId));
-  }
+  const { attempts, settings, questions } = await nextPaper(studentId, lessonId, groupQuestions(rows));
 
   const [latest] = attempts;
-  const settings = await quizSettings(studentId, lessonId);
   // Held back rather than hidden: the child is told the check exists and when
   // it opens, because a page that simply has nothing on it reads as broken.
   const isOpen = settings.opensAt === null || clockInUlaanbaatar() >= settings.opensAt;
@@ -131,9 +154,7 @@ export async function quizPaper(user: AuthenticatedUser, lessonId: number) {
     lessonId,
     lessonCode: header?.lessonCode ?? "",
     skillName: header?.skillName ?? "",
-    questions: isOpen
-      ? chooseQuestions(groupQuestions(rows), seen, settings.questionCount)
-      : [],
+    questions: isOpen ? questions : [],
     kind: header?.assessmentKind ?? "LESSON",
     attemptsUsed: attempts.length,
     attemptsAllowed: settings.attemptsAllowed,
@@ -325,4 +346,90 @@ export async function quizAttemptsForTeacher(
     truncated: attempts.length === query.limit,
     attempts,
   };
+}
+
+/**
+ * The teacher's look ahead at each child's next paper (UC08, FR13).
+ *
+ * Marking rights, not just viewing ones: choosing what a child is asked is
+ * teaching the subject, so a class teacher who does not take it can read the
+ * results elsewhere but not set the questions here.
+ */
+async function previewScope(user: AuthenticatedUser, classId: number, lessonId: number) {
+  const klass = await authorisedClass(user, classId);
+  const [header] = await repository.lessonHeader(lessonId);
+  if (!header) throw badRequest("Ийм хичээл алга байна.", "NO_SUCH_LESSON");
+  await editableSubjects(user, klass.classId, header.subjectId);
+  const pool = groupQuestions(await repository.quizItemsForLesson(lessonId));
+  const students = [];
+  for (const s of await repository.classStudents(klass.classId)) {
+    if (await repository.lessonReachableByStudent(lessonId, s.studentId)) students.push(s);
+  }
+  return { pool, students };
+}
+
+async function previewRow(studentId: number, name: string, lessonId: number, pool: QuizQuestion[]) {
+  const { attempts, settings, overridden, questions } = await nextPaper(studentId, lessonId, pool);
+  const left = attempts.length < settings.attemptsAllowed;
+  return {
+    studentId, name,
+    attemptsUsed: attempts.length,
+    attemptsAllowed: settings.attemptsAllowed,
+    overridden: left && overridden,
+    itemIds: left ? questions.map((q) => q.itemId) : [],
+  };
+}
+
+export async function quizPreview(user: AuthenticatedUser, classId: number, lessonId: number) {
+  const { pool, students } = await previewScope(user, classId, lessonId);
+  const rows = [];
+  for (const s of students) rows.push(await previewRow(s.studentId, s.name, lessonId, pool));
+  const counts = rows.length ? rows[0]!.itemIds.length : QUESTIONS_PER_QUIZ;
+  return {
+    lessonId,
+    onDate: todayInUlaanbaatar(),
+    questionCount: counts || QUESTIONS_PER_QUIZ,
+    pool: pool.map((q) => ({ itemId: q.itemId, prompt: q.prompt })),
+    students: rows,
+  };
+}
+
+export async function setQuizQuestions(
+  user: AuthenticatedUser,
+  input: { classId: number; lessonId: number; studentId: number; mode: "SET" | "RESHUFFLE" | "CLEAR"; itemIds?: number[] },
+) {
+  const { pool, students } = await previewScope(user, input.classId, input.lessonId);
+  const child = students.find((s) => s.studentId === input.studentId);
+  if (!child) throw forbidden("Энэ сурагчид энэ хичээл оногдоогүй байна.", "STUDENT_NOT_IN_LESSON");
+  const today = todayInUlaanbaatar();
+  if (input.mode === "CLEAR") {
+    await repository.clearQuestionOverride(child.studentId, input.lessonId, today);
+    return previewRow(child.studentId, child.name, input.lessonId, pool);
+  }
+  const [attempts, settings] = await Promise.all([
+    repository.attemptsOnDate(child.studentId, input.lessonId, today),
+    quizSettings(child.studentId, input.lessonId),
+  ]);
+  if (attempts.length >= settings.attemptsAllowed) {
+    throw conflict("Энэ сурагч өнөөдрийн оролдлогоо дуусгасан.", "QUIZ_ATTEMPTS_SPENT");
+  }
+  let itemIds: number[];
+  if (input.mode === "SET") {
+    itemIds = [...new Set(input.itemIds ?? [])];
+    const inPool = new Set(pool.map((q) => q.itemId));
+    if (!itemIds.length || itemIds.some((id) => !inPool.has(id))) {
+      throw badRequest("Энэ хичээлийн сангаас асуулт сонгоно уу.", "ITEM_NOT_IN_LESSON");
+    }
+  } else {
+    // A fresh random draw, still preferring what this child has not seen today.
+    const seen = new Set(attempts.flatMap((a) => (a.answers ?? []).map((x) => Number(x.questionId))));
+    const shuffled = [...pool].sort(() => Math.random() - 0.5);
+    itemIds = chooseQuestions(shuffled, seen, settings.questionCount).map((q) => q.itemId);
+    if (!itemIds.length) throw badRequest("Энэ хичээлд шалгах асуулт алга.", "NO_QUESTIONS");
+  }
+  await repository.saveQuestionOverride({
+    studentId: child.studentId, lessonId: input.lessonId, onDate: today,
+    attemptNo: attempts.length + 1, itemIds, setBy: user.id,
+  });
+  return previewRow(child.studentId, child.name, input.lessonId, pool);
 }

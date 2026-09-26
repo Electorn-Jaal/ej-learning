@@ -351,6 +351,13 @@
       "when": 1790326961117,
       "tag": "0049_enrollment_changes",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1790430926413,
+      "tag": "0050_quiz_question_overrides",
+      "breakpoints": true
     }
   ]
 }
