@@ -4315,6 +4315,110 @@ ${run.output}`);
     });
   });
 
+  describe("a parent asks for an account with the school's code, and an administrator approves it (FR27)", () => {
+    let admin, teacher, studentId;
+    const names = ["test-reg-one", "test-reg-two", "test-reg-three"];
+    before(async () => {
+      admin = createClient(harness.baseUrl);
+      teacher = createClient(harness.baseUrl);
+      await admin.signIn(accountsByRole.ADMIN);
+      await teacher.signIn(byName["demo-teacher"]);
+      [{ id: studentId }] = await harness.sql(
+        `INSERT INTO core.students (student_code, display_name, data_origin) VALUES ('TEST-REG-S', 'TEST-REG child', 'MOCK') RETURNING id::int`);
+      await harness.sql(`INSERT INTO core.student_enrollments (student_id, class_id)
+        SELECT $1, id FROM core.classes WHERE class_code = 'MOCK-LOCAL-9A'`, [studentId]);
+    });
+    after(async () => {
+      const users = (await harness.sql("SELECT id FROM core.users WHERE username = ANY($1::text[])", [names])).map((r) => r.id);
+      await harness.sql("DELETE FROM core.guardian_requests WHERE student_id = $1", [studentId]);
+      await harness.sql("DELETE FROM core.guardian_invites WHERE student_id = $1", [studentId]);
+      await harness.sql("DELETE FROM core.guardian_students WHERE student_id = $1", [studentId]);
+      await harness.sql("DELETE FROM core.sessions WHERE user_id = ANY($1::bigint[])", [users]);
+      await harness.sql("DELETE FROM core.user_roles WHERE user_id = ANY($1::bigint[])", [users]);
+      await harness.sql("DELETE FROM core.users WHERE id = ANY($1::bigint[])", [users]);
+      await harness.sql("DELETE FROM core.student_enrollments WHERE student_id = $1", [studentId]);
+      await harness.sql("DELETE FROM core.students WHERE id = $1", [studentId]);
+    });
+
+    const invite = async () => {
+      const made = await admin.request("/admin/guardian-invites", { method: "POST", body: { studentId } });
+      assert.equal(made.status, 201, JSON.stringify(made.payload));
+      assert.match(made.payload.code, /^[a-z2-9]{4}-[a-z2-9]{4}-[a-z2-9]{4}$/);
+      return made.payload.code;
+    };
+    const register = (code, username, extra = {}) => createClient(harness.baseUrl).request("/guardian-register", {
+      method: "POST", body: { code, username, displayName: username, password: "Parent-2026-Ej!", relation: "Ээж", ...extra } });
+    const pendingFor = async (username) =>
+      (await admin.request("/admin/guardian-requests")).payload.find((r) => r.username === username);
+    const decide = (id, body) => admin.request(`/admin/guardian-requests/${id}/decision`, { method: "POST", body });
+
+    it("only an administrator makes codes and decides", async () => {
+      assert.equal((await teacher.request("/admin/guardian-invites", { method: "POST", body: { studentId } })).status, 403);
+      assert.equal((await teacher.request("/admin/guardian-requests")).status, 403);
+    });
+
+    it("files a request with a good code, once, and approving makes a working account linked to the child", async () => {
+      assert.equal((await register("aaaa-bbbb-cccc", names[0])).status, 400, "a made-up code");
+      const code = await invite();
+      const sent = await register(code.toUpperCase(), names[0]);
+      assert.equal(sent.status, 201, JSON.stringify(sent.payload));
+      assert.equal(sent.payload.status, "PENDING");
+      assert.equal((await register(code, "test-reg-again")).status, 400, "a code works once");
+
+      const row = await pendingFor(names[0]);
+      assert.ok(row);
+      assert.equal(row.studentId, studentId);
+      assert.equal(row.currentGuardian, null);
+      const [{ hash }] = await harness.sql("SELECT password_hash AS hash FROM core.guardian_requests WHERE id = $1", [row.id]);
+      assert.ok(hash && !hash.includes("Parent-2026"), "the password is stored hashed");
+
+      const approved = await decide(row.id, { approve: true });
+      assert.equal(approved.status, 200, JSON.stringify(approved.payload));
+      assert.equal(approved.payload.status, "APPROVED");
+      assert.equal((await decide(row.id, { approve: true })).status, 409, "decided once");
+
+      const parent = createClient(harness.baseUrl);
+      await parent.signIn({ username: names[0], password: "Parent-2026-Ej!" });
+      const kids = await parent.request("/guardian/children");
+      assert.equal(kids.status, 200);
+      assert.deepEqual(kids.payload.map((k) => k.studentId), [studentId]);
+    });
+
+    it("keeps one active guardian per child unless the administrator chooses to replace", async () => {
+      const code = await invite();
+      assert.equal((await register(code, names[1])).status, 201);
+      const row = await pendingFor(names[1]);
+      assert.ok(row.currentGuardian && row.currentGuardian.includes(names[0]), "the screen says who is linked now");
+      const refused = await decide(row.id, { approve: true });
+      assert.equal(refused.status, 409);
+      assert.equal(refused.payload.code, "HAS_GUARDIAN");
+      const replaced = await decide(row.id, { approve: true, replaceExisting: true });
+      assert.equal(replaced.status, 200, JSON.stringify(replaced.payload));
+      const live = await harness.sql(
+        `SELECT u.username FROM core.guardian_students g JOIN core.users u ON u.id = g.user_id
+          WHERE g.student_id = $1 AND g.is_active`, [studentId]);
+      assert.deepEqual(live.map((r) => r.username), [names[1]]);
+    });
+
+    it("rejects, and a newer code retires an older unused one", async () => {
+      const old = await invite();
+      const fresh = await invite();
+      assert.equal((await register(old, names[2])).status, 400, "the older code stopped working");
+      assert.equal((await register(fresh, names[2])).status, 201);
+      const row = await pendingFor(names[2]);
+      const rejected = await decide(row.id, { approve: false, note: "Хүүхэдтэй холбоогүй" });
+      assert.equal(rejected.payload.status, "REJECTED");
+      const [{ n }] = await harness.sql("SELECT count(*)::int AS n FROM core.users WHERE username = $1", [names[2]]);
+      assert.equal(n, 0, "no account for a rejected request");
+    });
+
+    it("slows down someone guessing codes", async () => {
+      let last;
+      for (let i = 0; i < 11; i++) last = await register(`zzzz-zzzz-zz${String(i).padStart(2, "2")}`, "test-reg-guess");
+      assert.equal(last.status, 429);
+    });
+  });
+
   // Last on purpose: it wipes this student's quiz history to measure a clean
   // sitting, which would pull the ground out from under any test that counted
   // attempts.
