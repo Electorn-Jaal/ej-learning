@@ -91,8 +91,14 @@ import type {
   GuardianAccountCreated,
   GuardianAccountInput,
   GuardianChild,
+  GuardianInvite,
+  GuardianInviteInput,
   GuardianLinkInput,
   GuardianLinkResult,
+  GuardianRegisterInput,
+  GuardianRegisterResult,
+  GuardianRequest,
+  GuardianRequestDecision,
   HealthStatus,
   HomeworkActiveInput,
   HomeworkActiveResult,
@@ -1513,6 +1519,331 @@ export const useSetQuizQuestions = <TError = ErrorType<ApiError>,
         TContext
       > => {
       return useMutation(getSetQuizQuestionsMutationOptions(options));
+    }
+
+export const getRegisterGuardianUrl = () => {
+
+
+
+
+  return `/api/guardian-register`
+}
+
+/**
+ * No sign-in. A wrong, used or expired code gets one answer, and repeated wrong codes from one address are slowed down.
+ * @summary A parent asks for an account with the one-time code the school gave them (UC18, FR27)
+ */
+export const registerGuardian = async (guardianRegisterInput: GuardianRegisterInput, options?: Parameters<typeof customFetch>[1]): Promise<GuardianRegisterResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<GuardianRegisterResult>(getRegisterGuardianUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(guardianRegisterInput)
+  }
+);}
+
+
+
+
+
+export const getRegisterGuardianMutationKey = () => ['registerGuardian'] as const;
+
+export const getRegisterGuardianMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerGuardian>>, TError,RegisterGuardianMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof registerGuardian>>, TError,RegisterGuardianMutationVariables, TContext> => {
+
+const mutationKey = getRegisterGuardianMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof registerGuardian>>, RegisterGuardianMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  registerGuardian(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RegisterGuardianMutationResult = NonNullable<Awaited<ReturnType<typeof registerGuardian>>>
+    export type RegisterGuardianMutationBody = BodyType<GuardianRegisterInput>
+    export type RegisterGuardianMutationError = ErrorType<ApiError>
+    export type RegisterGuardianMutationVariables = {data: BodyType<GuardianRegisterInput>}
+
+    /**
+ * @summary A parent asks for an account with the one-time code the school gave them (UC18, FR27)
+ */
+export const useRegisterGuardian = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof registerGuardian>>, TError,RegisterGuardianMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof registerGuardian>>,
+        TError,
+        RegisterGuardianMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRegisterGuardianMutationOptions(options));
+    }
+
+export const getCreateGuardianInviteUrl = () => {
+
+
+
+
+  return `/api/admin/guardian-invites`
+}
+
+export const createGuardianInvite = async (guardianInviteInput: GuardianInviteInput, options?: Parameters<typeof customFetch>[1]): Promise<GuardianInvite> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<GuardianInvite>(getCreateGuardianInviteUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(guardianInviteInput)
+  }
+);}
+
+
+
+
+
+export const getCreateGuardianInviteMutationKey = () => ['createGuardianInvite'] as const;
+
+export const getCreateGuardianInviteMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createGuardianInvite>>, TError,CreateGuardianInviteMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createGuardianInvite>>, TError,CreateGuardianInviteMutationVariables, TContext> => {
+
+const mutationKey = getCreateGuardianInviteMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createGuardianInvite>>, CreateGuardianInviteMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createGuardianInvite(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateGuardianInviteMutationResult = NonNullable<Awaited<ReturnType<typeof createGuardianInvite>>>
+    export type CreateGuardianInviteMutationBody = BodyType<GuardianInviteInput>
+    export type CreateGuardianInviteMutationError = ErrorType<ApiError>
+    export type CreateGuardianInviteMutationVariables = {data: BodyType<GuardianInviteInput>}
+
+    export const useCreateGuardianInvite = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createGuardianInvite>>, TError,CreateGuardianInviteMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createGuardianInvite>>,
+        TError,
+        CreateGuardianInviteMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateGuardianInviteMutationOptions(options));
+    }
+
+export const getGetGuardianRequestsUrl = () => {
+
+
+
+
+  return `/api/admin/guardian-requests`
+}
+
+export const getGuardianRequests = async ( options?: Parameters<typeof customFetch>[1]): Promise<GuardianRequest[]> => {
+
+  return customFetch<GuardianRequest[]>(getGetGuardianRequestsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetGuardianRequestsQueryKey = () => {
+    return [
+    `/api/admin/guardian-requests`
+    ] as const;
+    }
+
+
+export const getGetGuardianRequestsQueryOptions = <TData = Awaited<ReturnType<typeof getGuardianRequests>>, TError = ErrorType<ApiError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGuardianRequests>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetGuardianRequestsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getGuardianRequests>>> = ({ signal }) => getGuardianRequests({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getGuardianRequests>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetGuardianRequestsQueryResult = NonNullable<Awaited<ReturnType<typeof getGuardianRequests>>>
+export type GetGuardianRequestsQueryError = ErrorType<ApiError>
+
+
+
+export function useGetGuardianRequests<TData = Awaited<ReturnType<typeof getGuardianRequests>>, TError = ErrorType<ApiError>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getGuardianRequests>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetGuardianRequestsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getDecideGuardianRequestUrl = (requestId: number,) => {
+
+
+
+
+  return `/api/admin/guardian-requests/${requestId}/decision`
+}
+
+export const decideGuardianRequest = async (requestId: number,
+    guardianRequestDecision: GuardianRequestDecision, options?: Parameters<typeof customFetch>[1]): Promise<GuardianRequest> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<GuardianRequest>(getDecideGuardianRequestUrl(requestId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(guardianRequestDecision)
+  }
+);}
+
+
+
+
+
+export const getDecideGuardianRequestMutationKey = () => ['decideGuardianRequest'] as const;
+
+export const getDecideGuardianRequestMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideGuardianRequest>>, TError,DecideGuardianRequestMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof decideGuardianRequest>>, TError,DecideGuardianRequestMutationVariables, TContext> => {
+
+const mutationKey = getDecideGuardianRequestMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof decideGuardianRequest>>, DecideGuardianRequestMutationVariables> = (props) => {
+          const {requestId,data} = props ?? {};
+
+          return  decideGuardianRequest(requestId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DecideGuardianRequestMutationResult = NonNullable<Awaited<ReturnType<typeof decideGuardianRequest>>>
+    export type DecideGuardianRequestMutationBody = BodyType<GuardianRequestDecision>
+    export type DecideGuardianRequestMutationError = ErrorType<ApiError>
+    export type DecideGuardianRequestMutationVariables = {requestId: number;data: BodyType<GuardianRequestDecision>}
+
+    export const useDecideGuardianRequest = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof decideGuardianRequest>>, TError,DecideGuardianRequestMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof decideGuardianRequest>>,
+        TError,
+        DecideGuardianRequestMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDecideGuardianRequestMutationOptions(options));
     }
 
 export const getGetLibraryBooksUrl = () => {

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Eye, EyeOff, Lock, User } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useLogin } from '@workspace/api-client-react'
+import { Link } from 'wouter'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -184,6 +185,9 @@ export default function Login() {
               {isPending ? 'Нэвтэрч байна…' : 'Нэвтрэх'}
             </Button>
           </form>
+          <p className="mt-6 text-center text-sm text-muted-foreground">
+            Эцэг эх үү? <Link href="/register" className="font-medium text-primary underline-offset-4 hover:underline">Урилгын кодоор бүртгүүлэх</Link>
+          </p>
         </div>
       </div>
     </div>

@@ -335,6 +335,85 @@ export interface QuizQuestionsInput {
   itemIds?: number[];
 }
 
+export interface GuardianRegisterInput {
+  /**
+     * @minLength 1
+     * @maxLength 40
+     */
+  code: string;
+  /**
+     * @minLength 3
+     * @maxLength 50
+     */
+  username: string;
+  /**
+     * @minLength 1
+     * @maxLength 300
+     */
+  displayName: string;
+  /** @maxLength 40 */
+  relation?: string | null;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  password: string;
+}
+
+export type GuardianRegisterResultStatus = typeof GuardianRegisterResultStatus[keyof typeof GuardianRegisterResultStatus];
+
+
+export const GuardianRegisterResultStatus = {
+  PENDING: 'PENDING',
+} as const;
+
+export interface GuardianRegisterResult {
+  status: GuardianRegisterResultStatus;
+}
+
+export interface GuardianInviteInput {
+  /** @minimum 1 */
+  studentId: number;
+}
+
+export interface GuardianInvite {
+  studentId: number;
+  code: string;
+  expiresAt: string;
+}
+
+export type GuardianRequestStatus = typeof GuardianRequestStatus[keyof typeof GuardianRequestStatus];
+
+
+export const GuardianRequestStatus = {
+  PENDING: 'PENDING',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+} as const;
+
+export interface GuardianRequest {
+  id: number;
+  studentId: number;
+  studentName: string;
+  className: string | null;
+  username: string;
+  displayName: string;
+  relation: string | null;
+  status: GuardianRequestStatus;
+  createdAt: string;
+  /** The child's active guardian account today */
+  currentGuardian: string | null;
+  decisionNote: string;
+}
+
+export interface GuardianRequestDecision {
+  approve: boolean;
+  /** Required to approve when the child already has an active guardian */
+  replaceExisting?: boolean;
+  /** @maxLength 1000 */
+  note?: string;
+}
+
 export interface LibraryBook {
   id: number;
   title: string;

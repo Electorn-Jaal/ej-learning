@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { NATIVE_INPUT, NATIVE_SELECT } from '@/components/ui/native-select'
 import { cn } from '@/lib/utils'
+import { GuardianInvites, GuardianRequests } from '@/components/admin/GuardianRequests'
 
 /**
  * Making a parent an account, with the child attached in the same breath.
@@ -193,6 +194,9 @@ export default function AdminGuardians() {
       </div>
 
       {adding ? <NewGuardian onDone={() => { setAdding(false); refresh() }} /> : null}
+
+      <GuardianRequests onDecided={refresh} />
+      <GuardianInvites />
 
       {!data?.length ? (
         <p className="rounded-[2px] border border-border bg-card p-6 text-sm text-muted-foreground">

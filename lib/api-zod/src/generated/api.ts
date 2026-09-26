@@ -549,6 +549,98 @@ export const SetQuizQuestionsResponse = zod.object({
 
 
 /**
+ * No sign-in. A wrong, used or expired code gets one answer, and repeated wrong codes from one address are slowed down.
+ * @summary A parent asks for an account with the one-time code the school gave them (UC18, FR27)
+ */
+export const registerGuardianBodyCodeMax = 40;
+
+export const registerGuardianBodyUsernameMin = 3;
+export const registerGuardianBodyUsernameMax = 50;
+
+export const registerGuardianBodyDisplayNameMax = 300;
+
+export const registerGuardianBodyRelationMax = 40;
+
+export const registerGuardianBodyPasswordMax = 200;
+
+
+
+export const RegisterGuardianBody = zod.object({
+  "code": zod.string().min(1).max(registerGuardianBodyCodeMax),
+  "username": zod.string().min(registerGuardianBodyUsernameMin).max(registerGuardianBodyUsernameMax),
+  "displayName": zod.string().min(1).max(registerGuardianBodyDisplayNameMax),
+  "relation": zod.string().max(registerGuardianBodyRelationMax).nullish(),
+  "password": zod.string().min(1).max(registerGuardianBodyPasswordMax)
+})
+
+export const RegisterGuardianResponse = zod.object({
+  "status": zod.enum(['PENDING'])
+})
+
+
+
+
+
+export const CreateGuardianInviteBody = zod.object({
+  "studentId": zod.number().int().min(1)
+})
+
+export const CreateGuardianInviteResponse = zod.object({
+  "studentId": zod.number().int(),
+  "code": zod.string(),
+  "expiresAt": zod.string()
+})
+
+
+export const GetGuardianRequestsResponseItem = zod.object({
+  "id": zod.number().int(),
+  "studentId": zod.number().int(),
+  "studentName": zod.string(),
+  "className": zod.string().nullable(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "relation": zod.string().nullable(),
+  "status": zod.enum(['PENDING', 'APPROVED', 'REJECTED']),
+  "createdAt": zod.string(),
+  "currentGuardian": zod.string().nullable().describe('The child\'s active guardian account today'),
+  "decisionNote": zod.string()
+})
+export const GetGuardianRequestsResponse = zod.array(GetGuardianRequestsResponseItem)
+
+
+
+
+
+export const DecideGuardianRequestParams = zod.object({
+  "requestId": zod.coerce.number().int().min(1)
+})
+
+export const decideGuardianRequestBodyNoteMax = 1000;
+
+
+
+export const DecideGuardianRequestBody = zod.object({
+  "approve": zod.boolean(),
+  "replaceExisting": zod.boolean().optional().describe('Required to approve when the child already has an active guardian'),
+  "note": zod.string().max(decideGuardianRequestBodyNoteMax).optional()
+})
+
+export const DecideGuardianRequestResponse = zod.object({
+  "id": zod.number().int(),
+  "studentId": zod.number().int(),
+  "studentName": zod.string(),
+  "className": zod.string().nullable(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "relation": zod.string().nullable(),
+  "status": zod.enum(['PENDING', 'APPROVED', 'REJECTED']),
+  "createdAt": zod.string(),
+  "currentGuardian": zod.string().nullable().describe('The child\'s active guardian account today'),
+  "decisionNote": zod.string()
+})
+
+
+/**
  * @summary Approved textbooks for independent reading across all grades
  */
 export const GetLibraryBooksResponseItem = zod.object({

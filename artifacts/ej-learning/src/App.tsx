@@ -77,6 +77,7 @@ const TeacherClassDay = page(() => import('@/pages/teacher/ClassDay'));
 const TeacherProfile = page(() => import('@/pages/teacher/Profile'));
 const AdminStaff = page(() => import('@/pages/admin/Staff'));
 const AdminGuardians = page(() => import('@/pages/admin/Guardians'));
+const GuardianRegister = lazy(() => import('@/pages/GuardianRegister'));
 const AdminEnrollment = page(() => import('@/pages/admin/Enrollment'));
 const TeacherProductive = page(() => import('@/pages/teacher/Productive'));
 const GuardianChild = page(() => import('@/pages/guardian/Child'));
@@ -227,9 +228,12 @@ function PageLoading() {
  */
 function Gate() {
   const { data, isLoading } = useSessionQuery();
+  const [location] = useLocation();
 
   if (isLoading) return <LoadingScreen />;
-  if (!data) return <Login />;
+  // The one screen a signed-out visitor can reach besides signing in: a
+  // parent asking for an account with the school's code (FR27).
+  if (!data) return location === '/register' ? <Suspense fallback={<LoadingScreen />}><GuardianRegister /></Suspense> : <Login />;
 
   return (
     <SessionProvider user={data.user}>

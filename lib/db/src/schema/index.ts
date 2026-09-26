@@ -19,3 +19,4 @@ export * from "./quiz";
 export * from "./diagnostic-plans";
 export * from "./enrollment-changes";
 export * from "./quiz-overrides";
+export * from "./guardian-registration";

@@ -332,6 +332,88 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/QuizPreviewStudent'}
+  /guardian-register:
+    post:
+      operationId: registerGuardian
+      tags: [guardian]
+      summary: A parent asks for an account with the one-time code the school gave them (UC18, FR27)
+      description: No sign-in. A wrong, used or expired code gets one answer, and repeated wrong codes from one address are slowed down.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/GuardianRegisterInput'}
+      responses:
+        default:
+          description: Validation, access or a missing record
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        "201":
+          description: The request is waiting for an administrator
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GuardianRegisterResult'}
+  /admin/guardian-invites:
+    post:
+      operationId: createGuardianInvite
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/GuardianInviteInput'}
+      responses:
+        default:
+          description: Validation, access or a missing record
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        "201":
+          description: The code, shown this once; an earlier unused code for the child stops working
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GuardianInvite'}
+  /admin/guardian-requests:
+    get:
+      operationId: getGuardianRequests
+      tags: [admin]
+      responses:
+        default:
+          description: Validation, access or a missing record
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        "200":
+          description: Requests waiting for a decision, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {$ref: '#/components/schemas/GuardianRequest'}
+  /admin/guardian-requests/{requestId}/decision:
+    post:
+      operationId: decideGuardianRequest
+      tags: [admin]
+      parameters:
+        - {name: requestId, in: path, required: true, schema: {type: integer, minimum: 1}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/GuardianRequestDecision'}
+      responses:
+        default:
+          description: Validation, access or a missing record
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        "200":
+          description: The request as decided
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/GuardianRequest'}
   /content/library:
     get:
       operationId: getLibraryBooks
@@ -3408,6 +3490,54 @@ components:
         studentId: {type: integer, minimum: 1}
         mode: {type: string, enum: [SET, RESHUFFLE, CLEAR]}
         itemIds: {type: array, maxItems: 50, items: {type: integer, minimum: 1}, description: Required for SET}
+    GuardianRegisterInput:
+      type: object
+      required: [code, username, displayName, password]
+      properties:
+        code: {type: string, minLength: 1, maxLength: 40}
+        username: {type: string, minLength: 3, maxLength: 50}
+        displayName: {type: string, minLength: 1, maxLength: 300}
+        relation: {type: string, maxLength: 40, nullable: true}
+        password: {type: string, minLength: 1, maxLength: 200}
+    GuardianRegisterResult:
+      type: object
+      required: [status]
+      properties:
+        status: {type: string, enum: [PENDING]}
+    GuardianInviteInput:
+      type: object
+      required: [studentId]
+      properties:
+        studentId: {type: integer, minimum: 1}
+    GuardianInvite:
+      type: object
+      required: [studentId, code, expiresAt]
+      properties:
+        studentId: {type: integer}
+        code: {type: string}
+        expiresAt: {type: string}
+    GuardianRequest:
+      type: object
+      required: [id, studentId, studentName, className, username, displayName, relation, status, createdAt, currentGuardian, decisionNote]
+      properties:
+        id: {type: integer}
+        studentId: {type: integer}
+        studentName: {type: string}
+        className: {type: string, nullable: true}
+        username: {type: string}
+        displayName: {type: string}
+        relation: {type: string, nullable: true}
+        status: {type: string, enum: [PENDING, APPROVED, REJECTED]}
+        createdAt: {type: string}
+        currentGuardian: {type: string, nullable: true, description: The child's active guardian account today, if any}
+        decisionNote: {type: string}
+    GuardianRequestDecision:
+      type: object
+      required: [approve]
+      properties:
+        approve: {type: boolean}
+        replaceExisting: {type: boolean, description: Required to approve when the child already has an active guardian}
+        note: {type: string, maxLength: 1000}
     LibraryBook:
       type: object
       required: [id, title, subjectName, grades, hasFile, hasCover, filePages]
