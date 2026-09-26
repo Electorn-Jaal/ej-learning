@@ -3369,21 +3369,27 @@ ${run.output}`);
       const client = createClient(harness.baseUrl);
       await client.signIn(byName["demo-teacher"]);
 
-      const [{ scheduled_on: day }] = await harness.sql(
-        `SELECT scheduled_on::text AS scheduled_on FROM learning.class_schedule
-         WHERE class_id = $1 LIMIT 1`,
-        [classA],
+      // The next school day from today, made here rather than read from the
+      // seed: a teacher may not change the past or a weekend, and a seeded day
+      // stays ahead only until the calendar reaches it. Picking "any scheduled
+      // day" passed for a year and failed on the first Saturday after it.
+      const [{ day }] = await harness.sql(
+        `SELECT d::date::text AS day FROM generate_series(
+           (now() AT TIME ZONE 'Asia/Ulaanbaatar')::date + 1,
+           (now() AT TIME ZONE 'Asia/Ulaanbaatar')::date + 7, interval '1 day') AS d
+         WHERE extract(isodow FROM d) < 6 ORDER BY d LIMIT 1`,
       );
 
-      // Put a second subject on the same day, straight into the table: the
-      // point is what clearing does, not how the row got there.
+      // Two subjects on that day, straight into the table: the point is what
+      // clearing does, not how the rows got there.
       await harness.sql(
         `INSERT INTO learning.class_schedule
            (class_id, term_id, daily_lesson_id, scheduled_on, subject_id, created_by)
-         SELECT $1, cs.term_id, cs.daily_lesson_id, $2::date, $3, cs.created_by
-           FROM learning.class_schedule cs WHERE cs.class_id = $1 LIMIT 1
+         SELECT $1, cs.term_id, cs.daily_lesson_id, $2::date, s.id, cs.created_by
+           FROM (SELECT * FROM learning.class_schedule WHERE class_id = $1 LIMIT 1) cs
+           CROSS JOIN (VALUES ($3::bigint), ($4::bigint)) AS s(id)
          ON CONFLICT DO NOTHING`,
-        [classA, day, physicsId],
+        [classA, day, mathsId, physicsId],
       );
 
       const before = await harness.sql(
@@ -3396,7 +3402,7 @@ ${run.output}`);
         method: "PUT",
         body: { classId: Number(classA), subjectId: Number(mathsId), scheduledOn: day, lessonId: null },
       });
-      assert.ok(cleared.status < 400, `clearing answered ${cleared.status}`);
+      assert.ok(cleared.status < 400, `clearing ${day} answered ${cleared.status} ${JSON.stringify(cleared.payload)}`);
 
       const after = await harness.sql(
         "SELECT subject_id::int AS subject FROM learning.class_schedule WHERE class_id = $1 AND scheduled_on = $2::date",
