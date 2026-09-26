@@ -78,6 +78,7 @@ import type {
   GetEnrollmentHistoryParams,
   GetItemAnalysisParams,
   GetPromotionPreviewParams,
+  GetQuizPreviewParams,
   GetStudentPlanParams,
   GetStudentScheduleParams,
   GetStudentSubjectOutlineParams,
@@ -123,6 +124,9 @@ import type {
   QuizAttempt,
   QuizAttemptInput,
   QuizPaper,
+  QuizPreview,
+  QuizPreviewStudent,
+  QuizQuestionsInput,
   ReleaseAnswersInput,
   ReleaseAnswersResult,
   ReopenExamInput,
@@ -1337,6 +1341,178 @@ export const useApplyPromotion = <TError = ErrorType<ApiError>,
         TContext
       > => {
       return useMutation(getApplyPromotionMutationOptions(options));
+    }
+
+export const getGetQuizPreviewUrl = (params: GetQuizPreviewParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/teacher/quiz-preview?${stringifiedParams}` : `/api/teacher/quiz-preview`
+}
+
+/**
+ * @summary Each child's questions for their next go at today's check, before they open it (UC08, FR13)
+ */
+export const getQuizPreview = async (params: GetQuizPreviewParams, options?: Parameters<typeof customFetch>[1]): Promise<QuizPreview> => {
+
+  return customFetch<QuizPreview>(getGetQuizPreviewUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetQuizPreviewQueryKey = (params?: GetQuizPreviewParams,) => {
+    return [
+    `/api/teacher/quiz-preview`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetQuizPreviewQueryOptions = <TData = Awaited<ReturnType<typeof getQuizPreview>>, TError = ErrorType<ApiError>>(params: GetQuizPreviewParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getQuizPreview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetQuizPreviewQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getQuizPreview>>> = ({ signal }) => getQuizPreview(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getQuizPreview>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetQuizPreviewQueryResult = NonNullable<Awaited<ReturnType<typeof getQuizPreview>>>
+export type GetQuizPreviewQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Each child's questions for their next go at today's check, before they open it (UC08, FR13)
+ */
+
+export function useGetQuizPreview<TData = Awaited<ReturnType<typeof getQuizPreview>>, TError = ErrorType<ApiError>>(
+ params: GetQuizPreviewParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getQuizPreview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetQuizPreviewQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSetQuizQuestionsUrl = () => {
+
+
+
+
+  return `/api/teacher/quiz-preview`
+}
+
+/**
+ * @summary Choose one child's questions for their next attempt, reshuffle them, or go back to the ordinary rule
+ */
+export const setQuizQuestions = async (quizQuestionsInput: QuizQuestionsInput, options?: Parameters<typeof customFetch>[1]): Promise<QuizPreviewStudent> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<QuizPreviewStudent>(getSetQuizQuestionsUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(quizQuestionsInput)
+  }
+);}
+
+
+
+
+
+export const getSetQuizQuestionsMutationKey = () => ['setQuizQuestions'] as const;
+
+export const getSetQuizQuestionsMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setQuizQuestions>>, TError,SetQuizQuestionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof setQuizQuestions>>, TError,SetQuizQuestionsMutationVariables, TContext> => {
+
+const mutationKey = getSetQuizQuestionsMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setQuizQuestions>>, SetQuizQuestionsMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  setQuizQuestions(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetQuizQuestionsMutationResult = NonNullable<Awaited<ReturnType<typeof setQuizQuestions>>>
+    export type SetQuizQuestionsMutationBody = BodyType<QuizQuestionsInput>
+    export type SetQuizQuestionsMutationError = ErrorType<ApiError>
+    export type SetQuizQuestionsMutationVariables = {data: BodyType<QuizQuestionsInput>}
+
+    /**
+ * @summary Choose one child's questions for their next attempt, reshuffle them, or go back to the ordinary rule
+ */
+export const useSetQuizQuestions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setQuizQuestions>>, TError,SetQuizQuestionsMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof setQuizQuestions>>,
+        TError,
+        SetQuizQuestionsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSetQuizQuestionsMutationOptions(options));
     }
 
 export const getGetLibraryBooksUrl = () => {

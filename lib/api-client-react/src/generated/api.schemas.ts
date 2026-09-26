@@ -286,6 +286,55 @@ export interface PromotionResult {
   createdClasses: string[];
 }
 
+export interface QuizPreviewStudent {
+  studentId: number;
+  name: string;
+  attemptsUsed: number;
+  attemptsAllowed: number;
+  /** The teacher chose these questions for the next attempt */
+  overridden: boolean;
+  /** Empty when no attempts are left */
+  itemIds: number[];
+}
+
+export type QuizPreviewPoolItem = {
+  itemId: number;
+  prompt: string;
+};
+
+export interface QuizPreview {
+  lessonId: number;
+  onDate: string;
+  questionCount: number;
+  pool: QuizPreviewPoolItem[];
+  students: QuizPreviewStudent[];
+}
+
+export type QuizQuestionsInputMode = typeof QuizQuestionsInputMode[keyof typeof QuizQuestionsInputMode];
+
+
+export const QuizQuestionsInputMode = {
+  SET: 'SET',
+  RESHUFFLE: 'RESHUFFLE',
+  CLEAR: 'CLEAR',
+} as const;
+
+export interface QuizQuestionsInput {
+  /** @minimum 1 */
+  classId: number;
+  /** @minimum 1 */
+  lessonId: number;
+  /** @minimum 1 */
+  studentId: number;
+  mode: QuizQuestionsInputMode;
+  /**
+     * Required for SET
+     * @maxItems 50
+     * @items.minimum 1
+     */
+  itemIds?: number[];
+}
+
 export interface LibraryBook {
   id: number;
   title: string;
@@ -3277,6 +3326,17 @@ export type GetPromotionPreviewParams = {
  * @pattern ^\d{4}-\d{4}$
  */
 fromYear: string;
+};
+
+export type GetQuizPreviewParams = {
+/**
+ * @minimum 1
+ */
+classId: number;
+/**
+ * @minimum 1
+ */
+lessonId: number;
 };
 
 export type GetStudentScheduleParams = {

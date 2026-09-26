@@ -1,4 +1,4 @@
-import { db, quizAttemptsInLearning, readRows } from "@workspace/db";
+import { db, pool, quizAttemptsInLearning, readRows } from "@workspace/db";
 
 export type QuizAnswer = {
   questionId: string;
@@ -192,4 +192,42 @@ export const quizSettingsForStudent = (studentId: number, lessonId: number, onDa
      ORDER BY cs.answers_open_at NULLS LAST, cs.period_no
      LIMIT 1`,
     [studentId, lessonId, onDate],
+  );
+
+/** A child's teacher-chosen questions for today, if any, and which attempt they are for. */
+export const questionOverride = (studentId: number, lessonId: number, onDate: string) =>
+  readRows<{ attemptNo: number; itemIds: number[] }>(
+    `SELECT attempt_no::int AS "attemptNo", item_ids::int[] AS "itemIds"
+     FROM learning.quiz_question_overrides
+     WHERE student_id = $1::bigint AND daily_lesson_id = $2::bigint AND on_date = $3::date`,
+    [studentId, lessonId, onDate],
+  );
+
+export const saveQuestionOverride = (row: {
+  studentId: number; lessonId: number; onDate: string; attemptNo: number; itemIds: number[]; setBy: number;
+}) =>
+  pool.query(
+    `INSERT INTO learning.quiz_question_overrides
+       (daily_lesson_id, student_id, on_date, attempt_no, item_ids, set_by)
+     VALUES ($1, $2, $3::date, $4, $5::bigint[], $6)
+     ON CONFLICT (daily_lesson_id, student_id, on_date) DO UPDATE
+       SET attempt_no = EXCLUDED.attempt_no, item_ids = EXCLUDED.item_ids,
+           set_by = EXCLUDED.set_by, set_at = now()`,
+    [row.lessonId, row.studentId, row.onDate, row.attemptNo, row.itemIds, row.setBy],
+  );
+
+export const clearQuestionOverride = (studentId: number, lessonId: number, onDate: string) =>
+  pool.query(
+    `DELETE FROM learning.quiz_question_overrides
+     WHERE student_id = $1::bigint AND daily_lesson_id = $2::bigint AND on_date = $3::date`,
+    [studentId, lessonId, onDate],
+  );
+
+/** The active children of a class, by name. */
+export const classStudents = (classId: number) =>
+  readRows<{ studentId: number; name: string }>(
+    `SELECT s.id::int AS "studentId", s.display_name AS name
+     FROM core.student_enrollments e JOIN core.students s ON s.id = e.student_id AND s.is_active
+     WHERE e.class_id = $1::bigint AND e.is_active ORDER BY s.display_name`,
+    [classId],
   );

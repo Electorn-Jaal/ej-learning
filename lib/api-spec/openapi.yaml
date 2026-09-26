@@ -293,6 +293,45 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/PromotionResult'}
+  /teacher/quiz-preview:
+    get:
+      operationId: getQuizPreview
+      tags: [teacher]
+      summary: Each child's questions for their next go at today's check, before they open it (UC08, FR13)
+      parameters:
+        - {name: classId, in: query, required: true, schema: {type: integer, minimum: 1}}
+        - {name: lessonId, in: query, required: true, schema: {type: integer, minimum: 1}}
+      responses:
+        default:
+          description: Validation, access or a missing record
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        "200":
+          description: The lesson's question pool and one row per child
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/QuizPreview'}
+    put:
+      operationId: setQuizQuestions
+      tags: [teacher]
+      summary: Choose one child's questions for their next attempt, reshuffle them, or go back to the ordinary rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/QuizQuestionsInput'}
+      responses:
+        default:
+          description: Validation, access or a missing record
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ApiError'}
+        "200":
+          description: The child's row as it now stands
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/QuizPreviewStudent'}
   /content/library:
     get:
       operationId: getLibraryBooks
@@ -3334,6 +3373,41 @@ components:
         graduated: {type: integer}
         skipped: {type: integer}
         createdClasses: {type: array, items: {type: string}}
+    QuizPreviewStudent:
+      type: object
+      required: [studentId, name, attemptsUsed, attemptsAllowed, overridden, itemIds]
+      properties:
+        studentId: {type: integer}
+        name: {type: string}
+        attemptsUsed: {type: integer}
+        attemptsAllowed: {type: integer}
+        overridden: {type: boolean, description: The teacher chose these questions for the next attempt}
+        itemIds: {type: array, items: {type: integer}, description: Empty when no attempts are left}
+    QuizPreview:
+      type: object
+      required: [lessonId, onDate, questionCount, pool, students]
+      properties:
+        lessonId: {type: integer}
+        onDate: {type: string}
+        questionCount: {type: integer}
+        pool:
+          type: array
+          items:
+            type: object
+            required: [itemId, prompt]
+            properties:
+              itemId: {type: integer}
+              prompt: {type: string}
+        students: {type: array, items: {$ref: '#/components/schemas/QuizPreviewStudent'}}
+    QuizQuestionsInput:
+      type: object
+      required: [classId, lessonId, studentId, mode]
+      properties:
+        classId: {type: integer, minimum: 1}
+        lessonId: {type: integer, minimum: 1}
+        studentId: {type: integer, minimum: 1}
+        mode: {type: string, enum: [SET, RESHUFFLE, CLEAR]}
+        itemIds: {type: array, maxItems: 50, items: {type: integer, minimum: 1}, description: Required for SET}
     LibraryBook:
       type: object
       required: [id, title, subjectName, grades, hasFile, hasCover, filePages]

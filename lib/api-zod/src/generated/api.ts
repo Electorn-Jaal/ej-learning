@@ -489,6 +489,66 @@ export const ApplyPromotionResponse = zod.object({
 
 
 /**
+ * @summary Each child's questions for their next go at today's check, before they open it (UC08, FR13)
+ */
+
+
+
+
+export const GetQuizPreviewQueryParams = zod.object({
+  "classId": zod.coerce.number().int().min(1),
+  "lessonId": zod.coerce.number().int().min(1)
+})
+
+export const GetQuizPreviewResponse = zod.object({
+  "lessonId": zod.number().int(),
+  "onDate": zod.string(),
+  "questionCount": zod.number().int(),
+  "pool": zod.array(zod.object({
+  "itemId": zod.number().int(),
+  "prompt": zod.string()
+})),
+  "students": zod.array(zod.object({
+  "studentId": zod.number().int(),
+  "name": zod.string(),
+  "attemptsUsed": zod.number().int(),
+  "attemptsAllowed": zod.number().int(),
+  "overridden": zod.boolean().describe('The teacher chose these questions for the next attempt'),
+  "itemIds": zod.array(zod.number().int()).describe('Empty when no attempts are left')
+}))
+})
+
+
+/**
+ * @summary Choose one child's questions for their next attempt, reshuffle them, or go back to the ordinary rule
+ */
+
+
+
+
+export const setQuizQuestionsBodyItemIdsMax = 50;
+
+
+
+export const SetQuizQuestionsBody = zod.object({
+  "classId": zod.number().int().min(1),
+  "lessonId": zod.number().int().min(1),
+  "studentId": zod.number().int().min(1),
+  "mode": zod.enum(['SET', 'RESHUFFLE', 'CLEAR']),
+  "itemIds": zod.array(zod.number().int().min(1)).max(setQuizQuestionsBodyItemIdsMax).optional().describe('Required for SET')
+})
+
+export const SetQuizQuestionsResponse = zod.object({
+  "studentId": zod.number().int(),
+  "name": zod.string(),
+  "attemptsUsed": zod.number().int(),
+  "attemptsAllowed": zod.number().int(),
+  "overridden": zod.boolean().describe('The teacher chose these questions for the next attempt'),
+  "itemIds": zod.array(zod.number().int()).describe('Empty when no attempts are left')
+})
+
+
+/**
  * @summary Approved textbooks for independent reading across all grades
  */
 export const GetLibraryBooksResponseItem = zod.object({

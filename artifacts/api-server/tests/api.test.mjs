@@ -4238,6 +4238,77 @@ ${run.output}`);
     });
   });
 
+  describe("a teacher sees and sets each child's next daily check (FR13)", () => {
+    it("previews, swaps, reshuffles and clears one child's questions, for one attempt only", async () => {
+      const teacher = createClient(harness.baseUrl), other = createClient(harness.baseUrl), child = createClient(harness.baseUrl);
+      await teacher.signIn(byName["demo-teacher"]);
+      await other.signIn(byName["demo-teacher-b"]);
+      await child.signIn(accountsByRole.STUDENT);
+      const [{ id: classId }] = await harness.sql("SELECT id::int FROM core.classes WHERE class_code = 'MOCK-LOCAL-9A'");
+      const [{ id: studentId }] = await harness.sql("SELECT student_id::int AS id FROM core.users WHERE username = 'demo-student'");
+      const today = await child.request("/student/today");
+      const lesson = today.payload.slots.map((x) => x.lesson).find(Boolean);
+      assert.ok(lesson, "expected a lesson today");
+      const lessonId = lesson.id;
+
+      // Two more questions on the lesson's skill, so there is something to swap to.
+      const extra = await harness.sql(
+        `INSERT INTO assessment.diagnostic_items (item_code, subject_id, grade_level_id, skill_id, item_order, title_mn, max_score, status)
+         SELECT v.code, sk.subject_id, sk.grade_level_id, sk.id, v.ord, v.code, 1, 'APPROVED'
+           FROM learning.daily_lessons dl JOIN content.skills sk ON sk.id = dl.core_skill_id
+           CROSS JOIN (VALUES ('TEST-FR13-A', 90), ('TEST-FR13-B', 91)) AS v(code, ord)
+          WHERE dl.id = $1 RETURNING id::int, item_code`, [lessonId]);
+      const itemA = extra.find((r) => r.item_code === "TEST-FR13-A").id;
+      const itemB = extra.find((r) => r.item_code === "TEST-FR13-B").id;
+      await harness.sql(`INSERT INTO assessment.diagnostic_item_options (diagnostic_item_id, sequence_no, option_text, is_correct)
+        SELECT id, n, CASE n WHEN 1 THEN 'yes' ELSE 'no' END, n = 1 FROM unnest($1::bigint[]) AS id CROSS JOIN generate_series(1, 2) AS n`,
+        [[itemA, itemB]]);
+      await harness.sql("DELETE FROM learning.quiz_attempts WHERE student_id = $1 AND daily_lesson_id = $2", [studentId, lessonId]);
+      try {
+        const path = `/teacher/quiz-preview?classId=${classId}&lessonId=${lessonId}`;
+        assert.equal((await child.request(path)).status, 403);
+        assert.equal((await other.request(path)).status, 403, "only a teacher of the subject sets its questions");
+        const row = async () => {
+          const res = await teacher.request(path);
+          assert.equal(res.status, 200, JSON.stringify(res.payload));
+          return { pool: res.payload.pool, me: res.payload.students.find((x) => x.studentId === studentId) };
+        };
+        const first = await row();
+        assert.ok(first.pool.some((q) => q.itemId === itemB));
+        assert.ok(first.me && first.me.itemIds.length > 0 && !first.me.overridden);
+
+        const put = (body) => teacher.request("/teacher/quiz-preview", { method: "PUT", body: { classId, lessonId, studentId, ...body } });
+        assert.equal((await put({ mode: "SET", itemIds: [999999] })).status, 400, "only this lesson's questions");
+        const set = await put({ mode: "SET", itemIds: [itemB] });
+        assert.equal(set.status, 200, JSON.stringify(set.payload));
+        assert.deepEqual([set.payload.overridden, set.payload.itemIds], [true, [itemB]]);
+
+        const paper = await child.request(`/student/quiz/${lessonId}`);
+        assert.deepEqual(paper.payload.questions.map((q) => q.itemId), [itemB], "the child gets what the teacher chose");
+
+        // Taking it uses the choice up; the next go is back to the ordinary rule.
+        const option = paper.payload.questions[0].options[0].optionId;
+        const sat = await child.request("/student/quiz-attempts", { method: "POST", body: { lessonId, answers: [{ itemId: itemB, optionId: option }] } });
+        assert.equal(sat.status, 201, JSON.stringify(sat.payload));
+        assert.equal((await row()).me.overridden, false, "a choice holds for one attempt");
+
+        const shuffled = await put({ mode: "RESHUFFLE" });
+        assert.equal(shuffled.status, 200);
+        assert.equal(shuffled.payload.overridden, true);
+        const poolIds = new Set(first.pool.map((q) => q.itemId));
+        assert.ok(shuffled.payload.itemIds.every((id) => poolIds.has(id)));
+
+        const cleared = await put({ mode: "CLEAR" });
+        assert.equal(cleared.payload.overridden, false);
+      } finally {
+        await harness.sql("DELETE FROM learning.quiz_question_overrides WHERE student_id = $1", [studentId]);
+        await harness.sql("DELETE FROM learning.quiz_attempts WHERE student_id = $1 AND daily_lesson_id = $2", [studentId, lessonId]);
+        await harness.sql("DELETE FROM assessment.diagnostic_item_options WHERE diagnostic_item_id = ANY($1::bigint[])", [[itemA, itemB]]);
+        await harness.sql("DELETE FROM assessment.diagnostic_items WHERE id = ANY($1::bigint[])", [[itemA, itemB]]);
+      }
+    });
+  });
+
   // Last on purpose: it wipes this student's quiz history to measure a clean
   // sitting, which would pull the ground out from under any test that counted
   // attempts.
